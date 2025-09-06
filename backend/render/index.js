@@ -31,7 +31,7 @@ const outputBucketName = 'oneminute-movie-out';
  * }
  */
 app.post('/render', async (req, res) => {
-    const { projectId, scenes, gsAudioPath, srtPath } = req.body;
+    const { projectId, scenes, gsAudioPath, srtPath, gsMusicPath } = req.body;
 
     if (!projectId || !scenes || !gsAudioPath || !srtPath) {
         return res.status(400).json({ error: 'Missing required fields for rendering.' });
@@ -49,11 +49,18 @@ app.post('/render', async (req, res) => {
         const inputBucket = storage.bucket(inputBucketName);
         const imageFiles = (await inputBucket.getFiles({ prefix: `${projectId}/scene-` }))[0];
         
-        await Promise.all([
+        const downloadPromises = [
             ...imageFiles.map(file => file.download({ destination: path.join(tempDir, path.basename(file.name)) })),
             inputBucket.file(`${projectId}/narration.mp3`).download({ destination: path.join(tempDir, 'narration.mp3') }),
             inputBucket.file(`${projectId}/captions.srt`).download({ destination: path.join(tempDir, 'captions.srt') }),
-        ]);
+        ];
+        
+        // Download music file if provided
+        if (gsMusicPath) {
+            downloadPromises.push(inputBucket.file(`${projectId}/music.mp3`).download({ destination: path.join(tempDir, 'music.mp3') }));
+        }
+        
+        await Promise.all(downloadPromises);
         console.log('Asset download complete.');
 
         // 3. FFmpeg processing
@@ -127,14 +134,30 @@ app.post('/render', async (req, res) => {
         const finalVideoOutput = '[final_video]';
         complexFilter.push(`${currentStream}subtitles=${path.join(tempDir, 'captions.srt')}:force_style='Fontsize=18,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,BorderStyle=3,Outline=1,Shadow=1,MarginV=25'${finalVideoOutput}`);
         
+        // Add audio mixing if music is available
+        if (gsMusicPath) {
+            // Mix narration and music with narration at higher volume
+            complexFilter.push('[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=2,volume=0.8[final_audio]');
+        } else {
+            // Just use narration audio
+            complexFilter.push('[0:a]volume=0.8[final_audio]');
+        }
+        
         const outputVideoPath = path.join(tempDir, 'final_movie.mp4');
 
         await new Promise((resolve, reject) => {
             command
-                .input(path.join(tempDir, 'narration.mp3')) // Add audio track
+                .input(path.join(tempDir, 'narration.mp3')) // Add narration audio track
+            
+            // Add music track if available
+            if (gsMusicPath) {
+                command.input(path.join(tempDir, 'music.mp3')); // Add music track
+            }
+            
+            command
                 .complexFilter(complexFilter)
                 .map(finalVideoOutput) // Map the final video stream
-                .map('a') // Map the audio stream from the last input (narration.mp3)
+                .map('[final_audio]') // Map the mixed audio stream
                 .outputOptions([
                     '-c:v libx264',
                     '-preset slow',

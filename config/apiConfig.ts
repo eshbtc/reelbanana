@@ -7,6 +7,7 @@ export interface ApiConfig {
     narrate: string;
     align: string;
     render: string;
+    compose: string;
   };
   firebase: {
     projectId: string;
@@ -25,6 +26,7 @@ const PRODUCTION_CONFIG: ApiConfig = {
     narrate: 'https://reel-banana-narrate-423229273041.us-central1.run.app',
     align: 'https://reel-banana-align-captions-423229273041.us-central1.run.app',
     render: 'https://reel-banana-render-423229273041.us-central1.run.app',
+    compose: 'https://reel-banana-compose-music-423229273041.us-central1.run.app',
   },
   firebase: {
     projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
@@ -43,6 +45,7 @@ const DEVELOPMENT_CONFIG: ApiConfig = {
     narrate: 'http://localhost:8080',
     align: 'http://localhost:8081',
     render: 'http://localhost:8082',
+    compose: 'http://localhost:8084',
   },
   firebase: {
     projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
@@ -61,6 +64,7 @@ const AI_STUDIO_CONFIG: ApiConfig = {
     narrate: 'https://reel-banana-narrate-423229273041.us-central1.run.app',
     align: 'https://reel-banana-align-captions-423229273041.us-central1.run.app',
     render: 'https://reel-banana-render-423229273041.us-central1.run.app',
+    compose: 'https://reel-banana-compose-music-423229273041.us-central1.run.app',
   },
   firebase: {
     projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
@@ -94,6 +98,7 @@ export const API_ENDPOINTS = {
   narrate: `${apiConfig.baseUrls.narrate}/narrate`,
   align: `${apiConfig.baseUrls.align}/align`,
   render: `${apiConfig.baseUrls.render}/render`,
+  compose: `${apiConfig.baseUrls.compose}/compose-music`,
 };
 
 // Helper function for making API calls
