@@ -535,18 +535,10 @@ export const generateImageSequence = async (
             throw new Error("Please sign in to generate images.");
         }
 
-        // Determine which AI service to use
+        // Determine which AI service to use (text vs custom key path)
         const aiService = await getAIService();
         if (!aiService) {
             throw new Error("No credits remaining and no API key configured. Please add your Gemini API key or contact support for more credits.");
-        }
-
-        // For Firebase AI Logic, check credits before making the API call
-        if (aiService === 'firebase') {
-            const hasCredits = await checkUserCredits(currentUser.uid, 5); // 5 images = 5 credits
-            if (!hasCredits) {
-                throw new Error("Insufficient credits. Please add your Gemini API key or contact support for more credits.");
-            }
         }
 
         // 1. Check cache first for cost control
@@ -610,60 +602,75 @@ Return ONLY a JSON object with this exact format:
         for (const prompt of prompts) {
             const finalPrompt = `${characterAndStyle}. Maintain this character and style consistently. A cinematic, high quality, professional photograph of: ${prompt}` + (opts?.backgroundImage ? ' Compose the subject naturally into the provided background image with matching lighting and perspective.' : '');
 
-            // Create a GenerativeModel instance using nano-bana (gemini-2.5-flash-image-preview) for contest
-            const imagenModel = getGenerativeModel(ai, { 
-                model: 'gemini-2.5-flash-image-preview',
-                generationConfig: {
-                    responseModalities: [ResponseModality.TEXT, ResponseModality.IMAGE],
-                }
-            });
-
-            // Build parts: optional character refs and background image, then prompt text
-            const parts: any[] = [];
-            if (opts?.characterRefs && opts.characterRefs.length > 0) {
-                for (const ref of opts.characterRefs) {
-                    try { parts.push(fileToGenerativePart(ref)); } catch (e) { console.warn('Invalid character ref image skipped'); }
-                }
-            }
-            if (opts?.backgroundImage) {
-                try { parts.push(fileToGenerativePart(opts.backgroundImage)); } catch (e) { console.warn('Invalid background image skipped'); }
-            }
-            parts.push({ text: finalPrompt });
-
-            const response = await imagenModel.generateContent(parts);
-
-            // Extract token usage from response (may be unavailable for image preview)
-            const tokenUsage = extractTokenUsage(response, 'gemini-2.5-flash-image-preview');
-            if (tokenUsage) {
-                perImageTokenUsages.push(tokenUsage);
-                console.log('Image generation token usage:', tokenUsage);
-            }
-
-            // Handle the generated image using Firebase AI Logic nano-bana API
-            try {
-                const inlineDataParts = response.response.inlineDataParts();
-                if (inlineDataParts?.[0]) {
-                    const image = inlineDataParts[0].inlineData;
-                    base64Images.push(`data:${image.mimeType};base64,${image.data}`);
-            } else {
-                    // Fallback: check candidates for interleaved content
-                    const candidates = response.response.candidates;
-                    if (candidates?.[0]?.content?.parts) {
-                        for (const part of candidates[0].content.parts) {
-                            if (part.inlineData) {
-                                const image = part.inlineData;
-                                base64Images.push(`data:${image.mimeType};base64,${image.data}`);
-                                break;
-                            }
+            if (aiService === 'custom') {
+                // Use user API key via secure proxy
+                const imageInputs: string[] = [];
+                if (opts?.characterRefs && opts.characterRefs.length) imageInputs.push(...opts.characterRefs);
+                if (opts?.backgroundImage) imageInputs.push(opts.backgroundImage);
+                const resp = await authFetch(API_ENDPOINTS.apiKey.use, {
+                    method: 'POST',
+                    body: { model: 'gemini-2.5-flash-image-preview', prompt: finalPrompt, imageInputs }
+                });
+                if (!resp.ok) throw new Error(`Custom image gen failed: HTTP ${resp.status}`);
+                const json = await resp.json();
+                const candidates = json?.candidates || [];
+                let pushed = false;
+                for (const c of candidates) {
+                    const parts = c?.content?.parts || [];
+                    for (const part of parts) {
+                        if (part?.inline_data?.data && part?.inline_data?.mime_type) {
+                            base64Images.push(`data:${part.inline_data.mime_type};base64,${part.inline_data.data}`);
+                            pushed = true;
+                            break;
                         }
                     }
-                    if (base64Images.length === 0) {
-                        throw new Error(`No image generated for prompt: "${prompt}"`);
+                    if (pushed) break;
+                }
+                if (!pushed) throw new Error(`No image generated for prompt: "${prompt}"`);
+            } else {
+                // Firebase AI Logic path
+                const imagenModel = getGenerativeModel(ai, { 
+                    model: 'gemini-2.5-flash-image-preview',
+                    generationConfig: { responseModalities: [ResponseModality.TEXT, ResponseModality.IMAGE] }
+                });
+                // Build parts: optional character refs and background image, then prompt text
+                const parts: any[] = [];
+                if (opts?.characterRefs && opts.characterRefs.length > 0) {
+                    for (const ref of opts.characterRefs) {
+                        try { parts.push(fileToGenerativePart(ref)); } catch (e) { console.warn('Invalid character ref image skipped'); }
                     }
                 }
-            } catch (err) {
-                console.error('Image generation failed:', err);
-                throw new Error(`An image in the sequence failed to generate for prompt: "${prompt}"`);
+                if (opts?.backgroundImage) {
+                    try { parts.push(fileToGenerativePart(opts.backgroundImage)); } catch (e) { console.warn('Invalid background image skipped'); }
+                }
+                parts.push({ text: finalPrompt });
+                const response = await imagenModel.generateContent(parts);
+                const tokenUsage = extractTokenUsage(response, 'gemini-2.5-flash-image-preview');
+                if (tokenUsage) perImageTokenUsages.push(tokenUsage);
+                try {
+                    const inlineDataParts = response.response.inlineDataParts();
+                    if (inlineDataParts?.[0]) {
+                        const image = inlineDataParts[0].inlineData;
+                        base64Images.push(`data:${image.mimeType};base64,${image.data}`);
+                    } else {
+                        const candidates = response.response.candidates;
+                        if (candidates?.[0]?.content?.parts) {
+                            for (const part of candidates[0].content.parts) {
+                                if (part.inlineData) {
+                                    const image = part.inlineData;
+                                    base64Images.push(`data:${image.mimeType};base64,${image.data}`);
+                                    break;
+                                }
+                            }
+                        }
+                        if (base64Images.length === 0) {
+                            throw new Error(`No image generated for prompt: "${prompt}"`);
+                        }
+                    }
+                } catch (err) {
+                    console.error('Image generation failed:', err);
+                    throw new Error(`An image in the sequence failed to generate for prompt: "${prompt}"`);
+                }
             }
         }
         
@@ -693,7 +700,7 @@ Return ONLY a JSON object with this exact format:
         // Persist frames to Storage and return HTTPS URLs for durability
         const httpsUrls: string[] = [];
         try {
-            const projectId = `gen-${Date.now()}`;
+            const projectId = opts?.projectId || `gen-${Date.now()}`;
             for (let idx = 0; idx < base64Images.length; idx++) {
                 const base64Image = base64Images[idx];
                 const fileName = `scene-0-${idx}.jpeg`;
@@ -743,7 +750,7 @@ Return ONLY a JSON object with this exact format:
                 desired, // credits equal to frames generated
                 true, 
                 totalTokenUsage,
-                'firebase'
+                aiService
             );
         }
         
@@ -761,7 +768,7 @@ Return ONLY a JSON object with this exact format:
                 Math.min(Math.max(opts?.frames || 5, 1), 5),
                 false, 
                 undefined, // No token usage for failed calls
-                'firebase'
+                aiService
             );
         }
         
@@ -1010,3 +1017,14 @@ export const clearCharacterOptionsCache = async (topic: string, count: number, s
     // non-fatal
     }
 };
+        // For Firebase AI Logic, check credits after cache miss
+        if (aiService === 'firebase') {
+            const requestedFrames = Math.min(Math.max(opts?.frames || 5, 1), 5);
+            const hasCredits = await checkUserCredits(currentUser.uid, requestedFrames);
+            if (!hasCredits) {
+                // Fetch profile to show a helpful message
+                const profile = await getUserProfile(currentUser.uid);
+                const available = profile?.freeCredits ?? 0;
+                throw new Error(`Insufficient credits. This request needs ${requestedFrames} image credits, you have ${available}. Switch to Draft (3 frames) or add your Gemini API key.`);
+            }
+        }

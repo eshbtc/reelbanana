@@ -15,9 +15,10 @@ interface SceneCardProps {
   onGenerateVariant: (id: string, prompt: string) => void;
   onUpdateScene: (id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration' | 'backgroundImage' | 'stylePreset' | 'variantImageUrls'>>) => void;
   onUpdateSequence: (id: string, newImageUrls: string[]) => void;
+  framesPerScene?: number;
 }
 
-const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerateImage, onGenerateVariant, onUpdateScene, onUpdateSequence }) => {
+const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerateImage, onGenerateVariant, onUpdateScene, onUpdateSequence, framesPerScene = 5 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedPrompt, setEditedPrompt] = useState(scene.prompt);
   const [editedNarration, setEditedNarration] = useState(scene.narration);
@@ -26,8 +27,11 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
   const [isCompareOpen, setIsCompareOpen] = useState(false);
 
   // Calculate scene cost
-  const sceneCost = calculateSceneCost(scene);
-  const costTier = getCostTier(sceneCost.total);
+  const frames = scene.imageUrls?.length || framesPerScene;
+  const sceneCost = calculateSceneCost(scene, frames);
+  const creditPrice = getImageCreditPriceUSD();
+  const estUsdFromCredits = frames * creditPrice;
+  const costTier = getCostTier(estUsdFromCredits);
 
   useEffect(() => {
     if (scene.status === 'success' && scene.imageUrls && scene.imageUrls.length > 1) {
@@ -98,6 +102,7 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
               <SparklesIcon />
               Generate Sequence
             </button>
+            <div className="mt-2 text-[10px] text-gray-400">Est. image credits: {framesPerScene}</div>
             {scene.variantImageUrls && scene.variantImageUrls.length > 0 && (
               <button
                 onClick={() => setIsCompareOpen(true)}
@@ -130,9 +135,9 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
           <div className="absolute top-2 left-2 bg-black/60 text-white text-sm font-bold px-3 py-1 rounded-full">
             Scene {index + 1}
           </div>
-          {/* Cost Badge */}
+          {/* Cost Badge (credits-based) */}
           <div className={`absolute bottom-2 right-2 bg-black/80 text-white text-xs font-bold px-2 py-1 rounded ${costTier.color}`}>
-            {formatCost(sceneCost.total)}
+            {formatUSD(estUsdFromCredits)}
           </div>
         </div>
         <div className="p-4 flex-grow flex flex-col">

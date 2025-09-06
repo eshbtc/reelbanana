@@ -211,23 +211,56 @@ app.post('/store-api-key', appCheckVerification, verifyToken, async (req, res) =
   }
 });
 
+// Securely return user's API key to trusted backends (server-to-server only)
+// NOTE: This endpoint is intended for backend services (e.g., polish) and must be protected by App Check + Auth.
+// Body: { keyType: 'fal' | 'google' }
+app.post('/get-api-key', appCheckVerification, verifyToken, async (req, res) => {
+  try {
+    const { keyType = 'fal' } = req.body || {};
+    const userId = req.user.uid;
+
+    if (!['fal', 'google'].includes(keyType)) {
+      return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Invalid key type. Must be "fal" or "google"');
+    }
+
+    const db = admin.firestore();
+    const docSnap = await db.collection('user_api_keys').doc(userId).get();
+    if (!docSnap.exists) {
+      return sendError(req, res, 404, 'NOT_FOUND', 'No API key stored for this user');
+    }
+    const data = docSnap.data() || {};
+    const encrypted = data[`encryptedApiKey_${keyType}`];
+    const has = data[`hasApiKey_${keyType}`];
+    if (!has || !encrypted) {
+      return sendError(req, res, 404, 'NOT_FOUND', `No ${keyType.toUpperCase()} API key stored for this user`);
+    }
+
+    const apiKey = await decryptApiKey(encrypted, userId);
+    // Do not log or echo beyond response body
+    res.json({ apiKey, provider: keyType, requestId: req.requestId });
+  } catch (error) {
+    console.error('Error getting API key:', error);
+    return sendError(req, res, 500, 'INTERNAL', 'Failed to retrieve API key');
+  }
+});
+
 // Use API key for AI requests (proxy)
 app.post('/use-api-key', appCheckVerification, verifyToken, async (req, res) => {
   try {
-    const { prompt, model = 'gemini-2.5-flash' } = req.body;
+    const { prompt, model = 'gemini-2.5-flash', imageInputs } = req.body;
     const userId = req.user.uid;
 
     console.log(`🔑 API Key Service: Processing request for user ${userId} with model ${model}`);
 
-    if (!prompt) {
-      return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Prompt is required');
-    }
+    if (!prompt) return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Prompt is required');
 
     // Get encrypted API key from Firestore
     const db = admin.firestore();
     const keyDoc = await db.collection('user_api_keys').doc(userId).get();
     
-    if (!keyDoc.exists || !keyDoc.data().encryptedApiKey) {
+    // Use provider-specific field name for Google key
+    const encryptedField = 'encryptedApiKey_google';
+    if (!keyDoc.exists || !keyDoc.data()[encryptedField]) {
       console.log(`❌ API Key Service: No API key found for user ${userId}`);
       return sendError(req, res, 404, 'NOT_FOUND', 'No API key found');
     }
@@ -235,18 +268,26 @@ app.post('/use-api-key', appCheckVerification, verifyToken, async (req, res) => 
     console.log(`✅ API Key Service: Found encrypted API key for user ${userId}, decrypting...`);
 
     // Decrypt the API key
-    const decryptedKey = await decryptApiKey(keyDoc.data().encryptedApiKey, userId);
+    const decryptedKey = await decryptApiKey(keyDoc.data()[encryptedField], userId);
     
     console.log(`🔓 API Key Service: Successfully decrypted API key for user ${userId}, making request to Gemini API`);
 
     // Make request to Gemini API using the decrypted key
+    // Build content parts (optional image inputs + text prompt)
+    const parts = [];
+    if (Array.isArray(imageInputs)) {
+      for (const uri of imageInputs) {
+        const m = String(uri).match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+        if (!m) continue;
+        parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
+      }
+    }
+    parts.push({ text: prompt });
+
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${decryptedKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        generationConfig: { responseMimeType: 'application/json' },
-        contents: [{ parts: [{ text: prompt }] }]
-      })
+      body: JSON.stringify({ contents: [{ parts }] })
     });
 
     if (!response.ok) {

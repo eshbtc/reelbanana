@@ -2,13 +2,13 @@
 import { Scene } from '../types';
 
 // Token pricing rates (per 1M tokens)
-const PRICING_RATES = {
+export const PRICING_RATES = {
   'gemini-2.5-flash': 0.000075, // $0.075 per 1M tokens
   'gemini-2.5-flash-image-preview': 0.000075, // Same rate for image generation
 };
 
 // Helper function to calculate estimated cost based on tokens and model
-const calculateCost = (totalTokens: number, model: string): number => {
+export const calculateCost = (totalTokens: number, model: string): number => {
   const rate = PRICING_RATES[model as keyof typeof PRICING_RATES] || 0.000075;
   return (totalTokens / 1000000) * rate;
 };
@@ -20,13 +20,14 @@ const estimateTextTokens = (text: string): number => {
 };
 
 // Estimate tokens for image generation
-const estimateImageTokens = (imageCount: number): number => {
+export const ESTIMATED_TOKENS_PER_IMAGE = 1000;
+export const estimateImageTokens = (imageCount: number): number => {
   // Rough estimate: 1000 tokens per image for generation
-  return imageCount * 1000;
+  return imageCount * ESTIMATED_TOKENS_PER_IMAGE;
 };
 
 // Calculate cost for a single scene
-export const calculateSceneCost = (scene: Scene): {
+export const calculateSceneCost = (scene: Scene, frames: number = 5): {
   imageGeneration: number;
   narration: number;
   total: number;
@@ -36,7 +37,7 @@ export const calculateSceneCost = (scene: Scene): {
   };
 } => {
   // Estimate image generation cost
-  const imageTokens = estimateImageTokens(5); // Default 5 frames per scene
+  const imageTokens = estimateImageTokens(frames);
   const imageCost = calculateCost(imageTokens, 'gemini-2.5-flash-image-preview');
   
   // Estimate narration cost (if narration exists)
