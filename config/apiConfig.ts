@@ -34,11 +34,11 @@ const PRODUCTION_CONFIG: ApiConfig = {
   },
   firebase: {
     projectId: 'reel-banana-35a54', // Can be hardcoded - not sensitive
-    apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || 'AIzaSyDummyKeyForAppCheck', // Placeholder for App Check
+    apiKey: 'AIzaSyCeZNdwsaZ_sBmOt8WY0FcUziq22-OVJjg',
     authDomain: 'reel-banana-35a54.firebaseapp.com',
-    storageBucket: 'reel-banana-35a54.appspot.com',
-    messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '123456789',
-    appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '1:123456789:web:abcdef123456',
+    storageBucket: 'reel-banana-35a54.firebasestorage.app',
+    messagingSenderId: '223097908182',
+    appId: '1:223097908182:web:982c634d6aaeb3c805d277',
   },
 };
 
@@ -54,11 +54,11 @@ const DEVELOPMENT_CONFIG: ApiConfig = {
   },
   firebase: {
     projectId: 'reel-banana-35a54', // Can be hardcoded - not sensitive
-    apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || 'AIzaSyDummyKeyForAppCheck', // Placeholder for App Check
+    apiKey: 'AIzaSyCeZNdwsaZ_sBmOt8WY0FcUziq22-OVJjg',
     authDomain: 'reel-banana-35a54.firebaseapp.com',
-    storageBucket: 'reel-banana-35a54.appspot.com',
-    messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '123456789',
-    appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '1:123456789:web:abcdef123456',
+    storageBucket: 'reel-banana-35a54.firebasestorage.app',
+    messagingSenderId: '223097908182',
+    appId: '1:223097908182:web:982c634d6aaeb3c805d277',
   },
 };
 
@@ -74,11 +74,11 @@ const AI_STUDIO_CONFIG: ApiConfig = {
   },
   firebase: {
     projectId: 'reel-banana-35a54', // Can be hardcoded - not sensitive
-    apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || 'AIzaSyDummyKeyForAppCheck', // Placeholder for App Check
+    apiKey: 'AIzaSyCeZNdwsaZ_sBmOt8WY0FcUziq22-OVJjg',
     authDomain: 'reel-banana-35a54.firebaseapp.com',
-    storageBucket: 'reel-banana-35a54.appspot.com',
-    messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '123456789',
-    appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '1:123456789:web:abcdef123456',
+    storageBucket: 'reel-banana-35a54.firebasestorage.app',
+    messagingSenderId: '223097908182',
+    appId: '1:223097908182:web:982c634d6aaeb3c805d277',
   },
 };
 
