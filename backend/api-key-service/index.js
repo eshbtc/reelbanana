@@ -8,6 +8,9 @@ const { KeyManagementServiceClient } = require('@google-cloud/kms');
 const app = express();
 const PORT = process.env.PORT || 8085;
 
+// Trust proxy for Cloud Run (fixes X-Forwarded-For header issue)
+app.set('trust proxy', true);
+
 // Security middleware
 app.use(helmet());
 app.use(cors({
