@@ -1,17 +1,13 @@
-import React, { useState } from 'react';
+import React from 'react';
 import Logo from './Logo';
 import AuthButton from './AuthButton';
-import PricingModal from './PricingModal';
-import MyProjectsModal from './MyProjectsModal';
 
 interface HeaderProps {
-  onNavigate?: (view: 'editor' | 'gallery' | 'dashboard') => void;
-  currentView?: 'editor' | 'gallery' | 'dashboard';
+  onNavigate?: (view: 'editor' | 'gallery' | 'dashboard' | 'projects' | 'pricing') => void;
+  currentView?: 'editor' | 'gallery' | 'dashboard' | 'projects' | 'pricing';
 }
 
 const Header: React.FC<HeaderProps> = ({ onNavigate, currentView = 'editor' }) => {
-  const [showPricing, setShowPricing] = useState(false);
-  const [showProjects, setShowProjects] = useState(false);
   return (
     <header className="bg-gray-900/50 backdrop-blur-sm border-b border-gray-700 sticky top-0 z-10">
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
@@ -57,14 +53,22 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentView = 'editor' }) =
                 Dashboard
               </button>
               <button
-                onClick={() => setShowProjects(true)}
-                className={`px-4 py-2 rounded-lg transition-colors text-gray-300 hover:text-white hover:bg-gray-800`}
+                onClick={() => onNavigate('projects')}
+                className={`px-4 py-2 rounded-lg transition-colors ${
+                  currentView === 'projects'
+                    ? 'bg-amber-500 text-white'
+                    : 'text-gray-300 hover:text-white hover:bg-gray-800'
+                }`}
               >
                 My Projects
               </button>
               <button
-                onClick={() => setShowPricing(true)}
-                className={`px-4 py-2 rounded-lg transition-colors text-gray-300 hover:text-white hover:bg-gray-800`}
+                onClick={() => onNavigate('pricing')}
+                className={`px-4 py-2 rounded-lg transition-colors ${
+                  currentView === 'pricing'
+                    ? 'bg-amber-500 text-white'
+                    : 'text-gray-300 hover:text-white hover:bg-gray-800'
+                }`}
               >
                 Pricing
               </button>
@@ -74,8 +78,6 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentView = 'editor' }) =
           <AuthButton />
         </div>
       </div>
-      <PricingModal open={showPricing} onClose={() => setShowPricing(false)} />
-      {showProjects && <MyProjectsModal isOpen={showProjects} onClose={() => setShowProjects(false)} />}
     </header>
   );
 };

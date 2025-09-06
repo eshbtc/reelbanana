@@ -20,11 +20,11 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, panelClassName
 
   return (
     <div 
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 transition-opacity overflow-y-auto"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] transition-opacity p-4"
       onClick={onClose}
     >
       <div 
-        className={`${panelClassName || 'bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6 border border-gray-700'} my-8`}
+        className={`${panelClassName || 'bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6 border border-gray-700'} max-h-[90vh] overflow-y-auto`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

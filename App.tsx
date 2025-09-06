@@ -6,16 +6,28 @@ import RenderingScreen from './RenderingScreen';
 import MoviePlayer from './components/MoviePlayer';
 import PublicGallery from './components/PublicGallery';
 import UserDashboard from './components/UserDashboard';
+import MyProjectsPage from './components/MyProjectsPage';
+import PricingPage from './components/PricingPage';
 import { Scene } from './types';
 import { getCurrentUser } from './services/authService';
 import { API_ENDPOINTS } from './config/apiConfig';
 import { authFetch } from './lib/authFetch';
 // Removed auto-publish; handled in MoviePlayer for one-click publish UX
 
-type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard';
+type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects' | 'pricing';
 
 const App: React.FC = () => {
-  const [view, setView] = useState<View>('editor');
+  // Initialize view based on URL path
+  const getInitialView = (): View => {
+    const path = window.location.pathname;
+    if (path === '/projects') return 'projects';
+    if (path === '/pricing') return 'pricing';
+    if (path === '/gallery') return 'gallery';
+    if (path === '/dashboard') return 'dashboard';
+    return 'editor';
+  };
+
+  const [view, setView] = useState<View>(getInitialView());
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoUrlOriginal, setVideoUrlOriginal] = useState<string | null>(null);
@@ -83,8 +95,19 @@ const App: React.FC = () => {
     setProjectId(null);
   }, []);
 
-  const handleNavigate = useCallback((newView: 'editor' | 'gallery' | 'dashboard') => {
+  const handleNavigate = useCallback((newView: 'editor' | 'gallery' | 'dashboard' | 'projects' | 'pricing') => {
     setView(newView);
+    
+    // Update URL
+    const path = newView === 'editor' ? '/' : `/${newView}`;
+    window.history.pushState({}, '', path);
+    
+    if (newView === 'editor') {
+      setVideoUrl(null);
+      setVideoUrlOriginal(null);
+      setVideoUrlPolished(null);
+      setProjectId(null);
+    }
   }, []);
 
   const renderContent = () => {
@@ -97,6 +120,10 @@ const App: React.FC = () => {
         return <PublicGallery />;
       case 'dashboard':
         return <UserDashboard onClose={() => setView('editor')} />;
+      case 'projects':
+        return <MyProjectsPage />;
+      case 'pricing':
+        return <PricingPage />;
       case 'editor':
       default:
         return (
@@ -134,7 +161,7 @@ const App: React.FC = () => {
 
   return (
     <div className="bg-gray-900 text-white min-h-screen font-sans">
-      <Header onNavigate={handleNavigate} currentView={view === 'gallery' ? 'gallery' : view === 'dashboard' ? 'dashboard' : 'editor'} />
+      <Header onNavigate={handleNavigate} currentView={view} />
       <main className="container mx-auto p-4 md:p-8">
         {renderContent()}
       </main>
