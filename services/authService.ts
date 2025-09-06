@@ -150,6 +150,12 @@ export const getUserProfile = async (userId: string): Promise<UserProfile | null
     return null;
   } catch (error) {
     console.error('Error getting user profile:', error);
+    
+    // Check if it's a network blocking issue
+    if (error instanceof Error && error.message.includes('ERR_BLOCKED_BY_CLIENT')) {
+      throw new Error('Firestore requests are being blocked. Please disable your ad blocker for this site or add reelbanana.ai to your whitelist.');
+    }
+    
     return null;
   }
 };
@@ -241,6 +247,12 @@ export const checkUserCredits = async (userId: string, requiredCredits: number):
     return userProfile.freeCredits >= requiredCredits;
   } catch (error) {
     console.error('Error checking credits:', error);
+    
+    // Check if it's a network blocking issue
+    if (error instanceof Error && error.message.includes('ERR_BLOCKED_BY_CLIENT')) {
+      throw new Error('Firestore requests are being blocked. Please disable your ad blocker for this site or add reelbanana.ai to your whitelist.');
+    }
+    
     return false;
   }
 };
