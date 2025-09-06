@@ -72,7 +72,7 @@ const elevenlabs = new ElevenLabsClient({
   apiKey: process.env.ELEVENLABS_API_KEY,
 });
 const storage = new Storage();
-const bucketName = process.env.INPUT_BUCKET_NAME || 'oneminute-movie-in';
+const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 
 /**
  * POST /narrate

@@ -66,7 +66,7 @@ const appCheckVerification = async (req, res, next) => {
 };
 
 const storage = new Storage();
-const bucketName = process.env.INPUT_BUCKET_NAME || 'oneminute-movie-in';
+const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 
 // IMPORTANT: Set GEMINI_API_KEY as environment variable
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);

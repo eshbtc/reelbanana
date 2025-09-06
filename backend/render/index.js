@@ -66,8 +66,8 @@ const appCheckVerification = async (req, res, next) => {
 };
 
 const storage = new Storage();
-const inputBucketName = process.env.INPUT_BUCKET_NAME || 'oneminute-movie-in';
-const outputBucketName = process.env.OUTPUT_BUCKET_NAME || 'oneminute-movie-out';
+const inputBucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
+const outputBucketName = process.env.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 
 /**
  * POST /render

@@ -65,8 +65,8 @@ const appCheckVerification = async (req, res, next) => {
 };
 
 const storage = new Storage();
-// Use the same default input bucket as other services to ensure the render pipeline works out of the box
-const bucketName = process.env.INPUT_BUCKET_NAME || 'oneminute-movie-in';
+// Use the Firebase Storage bucket for the project
+const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 
 // Validate bucket exists and is accessible
 const validateBucket = async () => {

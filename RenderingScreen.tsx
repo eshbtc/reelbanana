@@ -58,15 +58,31 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
           }))
         );
 
+        console.log('🎬 Upload debug - Total images to upload:', allImageUrls.length);
+        if (allImageUrls.length > 0) {
+          console.log('🎬 Upload debug - First image sample:', {
+            fileName: allImageUrls[0].fileName,
+            base64Preview: allImageUrls[0].base64Image.substring(0, 100) + '...',
+            isValidDataUri: allImageUrls[0].base64Image.startsWith('data:image/')
+          });
+        }
+
         let uploadedCount = 0;
         await Promise.all(
-          allImageUrls.map(async (image) => {
+          allImageUrls.map(async (image, index) => {
+            console.log(`🎬 Upload debug - Uploading image ${index + 1}:`, {
+              fileName: image.fileName,
+              isValidDataUri: image.base64Image.startsWith('data:image/'),
+              dataUriPrefix: image.base64Image.substring(0, 50)
+            });
+            
             await apiCall(API_ENDPOINTS.upload, 
               { projectId, ...image }, 
               'Failed to upload image'
             );
             uploadedCount++;
             setProgress(Math.round((uploadedCount / allImageUrls.length) * 100));
+            console.log(`🎬 Upload debug - Successfully uploaded image ${index + 1}`);
           })
         );
         

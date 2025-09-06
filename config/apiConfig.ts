@@ -185,6 +185,20 @@ export const API_ENDPOINTS = {
 // Helper function for making API calls with improved error handling
 export const apiCall = async (url: string, body: object, errorMessage: string) => {
   try {
+    // Debug logging for upload requests
+    if (url.includes('/upload-image')) {
+      const bodyData = body as any;
+      console.log('🔍 apiCall debug for upload:', {
+        url,
+        projectId: bodyData.projectId,
+        fileName: bodyData.fileName,
+        hasBase64Image: !!bodyData.base64Image,
+        isValidDataUri: bodyData.base64Image?.startsWith('data:image/'),
+        base64Preview: bodyData.base64Image?.substring(0, 50),
+        expectedBucket: 'oneminute-movie-in (default bucket for upload service)'
+      });
+    }
+
     // Get App Check token
     const appCheckToken = await getAppCheckToken();
     
