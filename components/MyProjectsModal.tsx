@@ -188,7 +188,7 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} panelClassName="bg-gray-850 bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl m-4 p-0 border border-gray-700">
+    <Modal isOpen={isOpen} onClose={onClose} panelClassName="bg-gray-850 bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl p-0 border border-gray-700">
       <div className="text-white">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
