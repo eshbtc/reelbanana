@@ -88,6 +88,14 @@ const CharacterPicker: React.FC<CharacterPickerProps> = ({ topic, open, onClose,
                 {[2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}
               </select>
             </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-gray-400">Presets:</span>
+              {['Ghibli watercolor','Wes Anderson symmetry','Film noir','Pixel art','Claymation'].map(p => (
+                <button key={p} type="button" onClick={() => setStyleHint(p)} className="px-2 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-gray-300">
+                  {p}
+                </button>
+              ))}
+            </div>
             <div className="flex-1"></div>
             <button onClick={clearCacheAndRegenerate} disabled={loading} className="bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 text-white font-semibold px-4 py-2 rounded">
               {loading ? 'Please wait…' : 'Clear cache'}

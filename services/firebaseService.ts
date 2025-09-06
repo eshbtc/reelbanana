@@ -97,8 +97,8 @@ export const updateProject = async (projectId: string, data: ProjectData): Promi
         
         // Clean the data to remove undefined values and limit size
         const cleanData: any = {
-            topic: data.topic,
-            characterAndStyle: data.characterAndStyle,
+            topic: data.topic || 'Untitled',
+            characterAndStyle: data.characterAndStyle || '',
             updatedAt: serverTimestamp()
         };
         
@@ -109,27 +109,36 @@ export const updateProject = async (projectId: string, data: ProjectData): Promi
         
         // Only include characterOption if it exists
         if (data.characterOption) {
-            cleanData.characterOption = data.characterOption;
+            const co: any = {};
+            if (data.characterOption.id) co.id = data.characterOption.id;
+            if (data.characterOption.name) co.name = data.characterOption.name;
+            if (data.characterOption.description) co.description = data.characterOption.description;
+            if (Array.isArray(data.characterOption.images)) co.images = data.characterOption.images;
+            cleanData.characterOption = co;
         }
         
         // For scenes, we'll store a lightweight version to avoid size limits
         // Store only essential scene data, not full image URLs
         if (data.scenes && data.scenes.length > 0) {
-            cleanData.scenes = data.scenes.map(scene => ({
-                id: scene.id,
-                prompt: scene.prompt,
-                narration: scene.narration,
-                imageUrls: scene.imageUrls ? scene.imageUrls.slice(0, 1) : [], // Only keep first image URL
-                status: scene.status,
-                duration: scene.duration,
-                backgroundImage: scene.backgroundImage,
-                stylePreset: scene.stylePreset,
-                camera: scene.camera,
-                transition: scene.transition
-            }));
+            cleanData.scenes = data.scenes.map(scene => {
+                const s: any = {};
+                if (scene.id) s.id = scene.id;
+                if (typeof scene.prompt === 'string') s.prompt = scene.prompt;
+                if (typeof scene.narration === 'string') s.narration = scene.narration;
+                // Keep a single thumbnail to avoid exceeding Firestore limits
+                if (scene.imageUrls && Array.isArray(scene.imageUrls) && scene.imageUrls[0]) s.imageUrls = [scene.imageUrls[0]];
+                if (scene.status) s.status = scene.status;
+                if (typeof scene.duration === 'number') s.duration = scene.duration;
+                if (scene.backgroundImage) s.backgroundImage = scene.backgroundImage;
+                if (scene.stylePreset) s.stylePreset = scene.stylePreset;
+                if (scene.camera) s.camera = scene.camera;
+                if (scene.transition) s.transition = scene.transition;
+                return s;
+            });
             cleanData.sceneCount = data.scenes.length;
+            cleanData.thumbnailUrl = cleanData.scenes[0]?.imageUrls?.[0] || null;
         }
-        
+
         await setDoc(docRef, cleanData, { merge: true });
     } catch (error) {
         console.error("Error updating project in Firestore:", error);
