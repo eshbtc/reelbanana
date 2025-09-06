@@ -1,0 +1,246 @@
+// Authentication service with Google Sign-In and user management
+import { 
+  getAuth, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signOut, 
+  onAuthStateChanged,
+  User
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  doc, 
+  getDoc, 
+  setDoc, 
+  updateDoc,
+  serverTimestamp 
+} from 'firebase/firestore';
+import { initializeApp } from 'firebase/app';
+import { apiConfig } from '../config/apiConfig';
+
+// Initialize Firebase
+const firebaseApp = initializeApp(apiConfig.firebase);
+const auth = getAuth(firebaseApp);
+const db = getFirestore(firebaseApp);
+
+// Google Auth Provider
+const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('email');
+googleProvider.addScope('profile');
+
+// User interface
+export interface UserProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL?: string;
+  apiKey?: string; // User's custom Gemini API key
+  freeCredits: number; // Free API calls remaining
+  totalUsage: number; // Total API calls made
+  createdAt: string;
+  lastLoginAt: string;
+}
+
+// Usage tracking interface
+export interface UsageRecord {
+  userId: string;
+  operation: 'story_generation' | 'image_generation' | 'music_composition' | 'video_rendering';
+  timestamp: string;
+  cost: number; // API cost in credits
+  success: boolean;
+}
+
+/**
+ * Sign in with Google
+ */
+export const signInWithGoogle = async (): Promise<UserProfile> => {
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    const user = result.user;
+    
+    // Create or update user profile
+    const userProfile = await createOrUpdateUserProfile(user);
+    
+    return userProfile;
+  } catch (error) {
+    console.error('Google Sign-In Error:', error);
+    throw new Error('Failed to sign in with Google');
+  }
+};
+
+/**
+ * Sign out user
+ */
+export const signOutUser = async (): Promise<void> => {
+  try {
+    await signOut(auth);
+  } catch (error) {
+    console.error('Sign out error:', error);
+    throw new Error('Failed to sign out');
+  }
+};
+
+/**
+ * Get current user
+ */
+export const getCurrentUser = (): User | null => {
+  return auth.currentUser;
+};
+
+/**
+ * Listen to auth state changes
+ */
+export const onAuthStateChange = (callback: (user: User | null) => void) => {
+  return onAuthStateChanged(auth, callback);
+};
+
+/**
+ * Create or update user profile in Firestore
+ */
+const createOrUpdateUserProfile = async (user: User): Promise<UserProfile> => {
+  const userRef = doc(db, 'users', user.uid);
+  const userSnap = await getDoc(userRef);
+  
+  const now = new Date().toISOString();
+  
+  if (userSnap.exists()) {
+    // Update existing user
+    const userData = userSnap.data() as UserProfile;
+    const updatedProfile: Partial<UserProfile> = {
+      lastLoginAt: now,
+      displayName: user.displayName || userData.displayName,
+      photoURL: user.photoURL || userData.photoURL,
+    };
+    
+    await updateDoc(userRef, updatedProfile);
+    
+    return { ...userData, ...updatedProfile };
+  } else {
+    // Create new user
+    const newProfile: UserProfile = {
+      uid: user.uid,
+      email: user.email || '',
+      displayName: user.displayName || 'Anonymous User',
+      photoURL: user.photoURL || undefined,
+      freeCredits: 10, // Start with 10 free API calls
+      totalUsage: 0,
+      createdAt: now,
+      lastLoginAt: now,
+    };
+    
+    await setDoc(userRef, newProfile);
+    
+    return newProfile;
+  }
+};
+
+/**
+ * Get user profile from Firestore
+ */
+export const getUserProfile = async (userId: string): Promise<UserProfile | null> => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+    
+    if (userSnap.exists()) {
+      return userSnap.data() as UserProfile;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error getting user profile:', error);
+    return null;
+  }
+};
+
+/**
+ * Update user's custom API key
+ */
+export const updateUserApiKey = async (userId: string, apiKey: string): Promise<void> => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+      apiKey: apiKey,
+    });
+  } catch (error) {
+    console.error('Error updating API key:', error);
+    throw new Error('Failed to update API key');
+  }
+};
+
+/**
+ * Record API usage
+ */
+export const recordUsage = async (userId: string, operation: UsageRecord['operation'], cost: number, success: boolean): Promise<void> => {
+  try {
+    // Record usage in usage collection
+    const usageRef = doc(db, 'usage', `${userId}_${Date.now()}`);
+    const usageRecord: UsageRecord = {
+      userId,
+      operation,
+      timestamp: new Date().toISOString(),
+      cost,
+      success,
+    };
+    
+    await setDoc(usageRef, usageRecord);
+    
+    // Update user's total usage and free credits
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+    
+    if (userSnap.exists()) {
+      const userData = userSnap.data() as UserProfile;
+      const newTotalUsage = userData.totalUsage + (success ? cost : 0);
+      const newFreeCredits = Math.max(0, userData.freeCredits - (success ? cost : 0));
+      
+      await updateDoc(userRef, {
+        totalUsage: newTotalUsage,
+        freeCredits: newFreeCredits,
+      });
+    }
+  } catch (error) {
+    console.error('Error recording usage:', error);
+    // Don't throw error to avoid breaking the main flow
+  }
+};
+
+/**
+ * Check if user has sufficient credits
+ */
+export const checkUserCredits = async (userId: string, requiredCredits: number): Promise<boolean> => {
+  try {
+    const userProfile = await getUserProfile(userId);
+    if (!userProfile) return false;
+    
+    return userProfile.freeCredits >= requiredCredits;
+  } catch (error) {
+    console.error('Error checking credits:', error);
+    return false;
+  }
+};
+
+/**
+ * Get user's usage statistics
+ */
+export const getUserUsageStats = async (userId: string): Promise<{
+  freeCredits: number;
+  totalUsage: number;
+  hasCustomApiKey: boolean;
+}> => {
+  try {
+    const userProfile = await getUserProfile(userId);
+    if (!userProfile) {
+      return { freeCredits: 0, totalUsage: 0, hasCustomApiKey: false };
+    }
+    
+    return {
+      freeCredits: userProfile.freeCredits,
+      totalUsage: userProfile.totalUsage,
+      hasCustomApiKey: !!userProfile.apiKey,
+    };
+  } catch (error) {
+    console.error('Error getting usage stats:', error);
+    return { freeCredits: 0, totalUsage: 0, hasCustomApiKey: false };
+  }
+};

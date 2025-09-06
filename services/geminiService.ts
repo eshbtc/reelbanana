@@ -1,20 +1,33 @@
-// Gemini API service with hybrid security approach and caching
+// Gemini API service with hybrid security approach, caching, and user authentication
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
 import { apiConfig } from '../config/apiConfig';
+import { getCurrentUser, getUserProfile, recordUsage, checkUserCredits } from './authService';
 
-// Hybrid approach: Use environment variable with fallback
-// In production, this should be set via Google Cloud Secret Manager
-// In development, it can be set via .env file
-const geminiApiKey = process.env.REEL_BANANA_GEMINI_API_KEY || process.env.API_KEY;
-
-if (!geminiApiKey) {
-    console.error("CRITICAL: No Gemini API Key found. Please set either REEL_BANANA_GEMINI_API_KEY or ensure the standard API_KEY is available in your environment.");
-    throw new Error("Gemini API Key is not configured. Please set REEL_BANANA_GEMINI_API_KEY or API_KEY in your environment.");
-}
-
-const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+// Hybrid approach: Use user's API key, fallback to environment variable
+const getApiKey = async (): Promise<string> => {
+  const currentUser = getCurrentUser();
+  
+  if (currentUser) {
+    try {
+      const userProfile = await getUserProfile(currentUser.uid);
+      if (userProfile?.apiKey) {
+        return userProfile.apiKey;
+      }
+    } catch (error) {
+      console.warn('Failed to get user API key, falling back to environment key:', error);
+    }
+  }
+  
+  // Fallback to environment variable
+  const envApiKey = process.env.REEL_BANANA_GEMINI_API_KEY || process.env.API_KEY;
+  if (!envApiKey) {
+    throw new Error("No API key available. Please sign in and add your Gemini API key, or contact support.");
+  }
+  
+  return envApiKey;
+};
 
 // Initialize Firebase for caching
 const firebaseApp = initializeApp(apiConfig.firebase);
@@ -72,6 +85,18 @@ type StoryScene = {
  */
 export const generateStory = async (topic: string): Promise<StoryScene[]> => {
     try {
+        // Check user credits if authenticated
+        const currentUser = getCurrentUser();
+        if (currentUser) {
+            const hasCredits = await checkUserCredits(currentUser.uid, 1);
+            if (!hasCredits) {
+                throw new Error("Insufficient credits. Please add your own API key or contact support.");
+            }
+        }
+
+        const apiKey = await getApiKey();
+        const ai = new GoogleGenAI({ apiKey });
+        
         const result = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: `Create a short, creative, and kid-friendly storyboard script about "${topic}". The story should have a clear beginning, middle, and end.`,
@@ -85,15 +110,29 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
         const response = JSON.parse(jsonStr);
 
         if (response && response.scenes && Array.isArray(response.scenes)) {
-            return response.scenes.filter(
+            const scenes = response.scenes.filter(
                 (scene: any): scene is StoryScene =>
                     typeof scene.prompt === 'string' && typeof scene.narration === 'string'
             );
+            
+            // Record successful usage
+            if (currentUser) {
+                await recordUsage(currentUser.uid, 'story_generation', 1, true);
+            }
+            
+            return scenes;
         } else {
             throw new Error("Invalid story format received from API.");
         }
     } catch (error) {
         console.error("Error generating story:", error);
+        
+        // Record failed usage
+        const currentUser = getCurrentUser();
+        if (currentUser) {
+            await recordUsage(currentUser.uid, 'story_generation', 1, false);
+        }
+        
         if (error instanceof Error) {
             // Provide more specific error messages
             if (error.message.includes('API key')) {
@@ -102,6 +141,8 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
                 throw new Error("API quota exceeded. Please try again later.");
             } else if (error.message.includes('safety')) {
                 throw new Error("Content was blocked by safety filters. Please try a different topic.");
+            } else if (error.message.includes('Insufficient credits')) {
+                throw error; // Re-throw credit errors as-is
             }
         }
         throw new Error("Failed to generate story. The AI may be experiencing issues or the topic is too sensitive.");
@@ -129,6 +170,15 @@ const sequentialPromptsSchema = {
  */
 export const generateImageSequence = async (mainPrompt: string, characterAndStyle: string): Promise<string[]> => {
     try {
+        // Check user credits if authenticated
+        const currentUser = getCurrentUser();
+        if (currentUser) {
+            const hasCredits = await checkUserCredits(currentUser.uid, 5); // 5 images = 5 credits
+            if (!hasCredits) {
+                throw new Error("Insufficient credits. Please add your own API key or contact support.");
+            }
+        }
+
         // 1. Check cache first for cost control
         const cacheKey = generateCacheKey(mainPrompt, characterAndStyle);
         const cacheDoc = doc(db, CACHE_COLLECTION, cacheKey);
@@ -152,6 +202,9 @@ Example Output:
 4. The knight pushes with all his might, muscles straining, the door beginning to grind open with a low rumble.
 5. A sliver of brilliant golden light spills from the opening, illuminating the knight's astonished eyes.`
 
+        const apiKey = await getApiKey();
+        const ai = new GoogleGenAI({ apiKey });
+        
         const shotDirectorResult = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: `Scene Description: "${characterAndStyle}. ${mainPrompt}"`,
@@ -208,10 +261,22 @@ Example Output:
             // Don't fail the whole operation if caching fails
         }
         
+        // Record successful usage
+        if (currentUser) {
+            await recordUsage(currentUser.uid, 'image_generation', 5, true);
+        }
+        
         return base64Images;
 
     } catch (error) {
         console.error("Error generating image sequence:", error);
+        
+        // Record failed usage
+        const currentUser = getCurrentUser();
+        if (currentUser) {
+            await recordUsage(currentUser.uid, 'image_generation', 5, false);
+        }
+        
         if (error instanceof Error) {
             if (error.message.includes('API key')) {
                 throw new Error("Authentication failed. Please check your API key configuration.");
@@ -219,6 +284,8 @@ Example Output:
                 throw new Error("API quota exceeded. Please try again later.");
             } else if (error.message.includes('safety')) {
                 throw new Error("Content was blocked by safety filters. Please try a different prompt.");
+            } else if (error.message.includes('Insufficient credits')) {
+                throw error; // Re-throw credit errors as-is
             }
         }
         throw new Error("Failed to generate images. The prompt might be too sensitive or the service is unavailable.");
@@ -251,6 +318,9 @@ const fileToGenerativePart = (base64Data: string) => {
  */
 export const editImageSequence = async (base64Images: string[], editPrompt: string): Promise<string[]> => {
     try {
+        const apiKey = await getApiKey();
+        const ai = new GoogleGenAI({ apiKey });
+        
         const editedImages: string[] = [];
         for (const image of base64Images) {
             const imagePart = fileToGenerativePart(image);

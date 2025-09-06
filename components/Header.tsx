@@ -1,5 +1,6 @@
 import React from 'react';
 import Logo from './Logo';
+import AuthButton from './AuthButton';
 
 interface HeaderProps {
   onNavigate?: (view: 'editor' | 'gallery') => void;
@@ -18,30 +19,34 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentView = 'editor' }) =
           </div>
         </div>
         
-        {onNavigate && (
-          <nav className="flex items-center gap-6">
-            <button
-              onClick={() => onNavigate('editor')}
-              className={`px-4 py-2 rounded-lg transition-colors ${
-                currentView === 'editor'
-                  ? 'bg-amber-500 text-white'
-                  : 'text-gray-300 hover:text-white hover:bg-gray-800'
-              }`}
-            >
-              Create Movie
-            </button>
-            <button
-              onClick={() => onNavigate('gallery')}
-              className={`px-4 py-2 rounded-lg transition-colors ${
-                currentView === 'gallery'
-                  ? 'bg-amber-500 text-white'
-                  : 'text-gray-300 hover:text-white hover:bg-gray-800'
-              }`}
-            >
-              Gallery
-            </button>
-          </nav>
-        )}
+        <div className="flex items-center gap-6">
+          {onNavigate && (
+            <nav className="flex items-center gap-4">
+              <button
+                onClick={() => onNavigate('editor')}
+                className={`px-4 py-2 rounded-lg transition-colors ${
+                  currentView === 'editor'
+                    ? 'bg-amber-500 text-white'
+                    : 'text-gray-300 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                Create Movie
+              </button>
+              <button
+                onClick={() => onNavigate('gallery')}
+                className={`px-4 py-2 rounded-lg transition-colors ${
+                  currentView === 'gallery'
+                    ? 'bg-amber-500 text-white'
+                    : 'text-gray-300 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                Gallery
+              </button>
+            </nav>
+          )}
+          
+          <AuthButton />
+        </div>
       </div>
     </header>
   );
