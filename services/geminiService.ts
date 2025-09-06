@@ -948,54 +948,115 @@ export const editImageSequence = async (base64Images: string[], editPrompt: stri
         const editedImages: string[] = [];
         const allTokenUsage: TokenUsage[] = [];
         
+        // Decide service: prefer BYO when user toggled in other flows or when Firebase AI is not configured
+        let aiService: 'firebase' | 'custom' | null = await getAIService();
+        if (!aiService) aiService = 'firebase'; // try firebase first; will fallback per-image if it fails
+
         for (const image of base64Images) {
             const imagePart = fileToGenerativePart(image);
-            
-            // Create a GenerativeModel instance for image editing using Gemini (Imagen doesn't support image input yet)
-            const editModel = getGenerativeModel(ai, { 
-                model: 'gemini-2.5-flash-image-preview',
-                generationConfig: {
-                    responseModalities: [ResponseModality.IMAGE, ResponseModality.TEXT],
-                }
-            });
-            
-            const response = await editModel.generateContent([
-                imagePart,
-                { text: editPrompt }
-            ]);
-            
-            // Extract token usage from response
-            const tokenUsage = extractTokenUsage(response, 'gemini-2.5-flash-image-preview');
-            if (tokenUsage) {
-                console.log('Image editing token usage:', tokenUsage);
-                allTokenUsage.push(tokenUsage);
-            }
 
-            // Handle the edited image using Firebase AI Logic API
-            try {
-                const inlineDataParts = response.response.inlineDataParts();
-                if (inlineDataParts?.[0]) {
-                    const editedImage = inlineDataParts[0].inlineData;
-                    editedImages.push(`data:${editedImage.mimeType};base64,${editedImage.data}`);
-            } else {
-                    // Fallback: check candidates for interleaved content
-                    const candidates = response.response.candidates;
-                    if (candidates?.[0]?.content?.parts) {
-                        for (const part of candidates[0].content.parts) {
-                            if (part.inlineData) {
-                                const editedImage = part.inlineData;
-                                editedImages.push(`data:${editedImage.mimeType};base64,${editedImage.data}`);
-                                break;
-                            }
+            if (aiService === 'custom') {
+                // BYO path via secure proxy
+                const resp = await authFetch(API_ENDPOINTS.apiKey.use, {
+                    method: 'POST',
+                    body: {
+                        model: 'gemini-2.5-flash-image-preview',
+                        prompt: editPrompt,
+                        imageInputs: [image]
+                    }
+                });
+                if (!resp.ok) throw new Error(`Custom edit failed: HTTP ${resp.status}`);
+                const json = await resp.json();
+                const candidates = json?.candidates || [];
+                let pushed = false;
+                for (const c of candidates) {
+                    const parts = c?.content?.parts || [];
+                    for (const part of parts) {
+                        if ((part as any)?.inline_data?.data && (part as any)?.inline_data?.mime_type) {
+                            editedImages.push(`data:${(part as any).inline_data.mime_type};base64,${(part as any).inline_data.data}`);
+                            pushed = true;
+                            break;
                         }
                     }
-                    if (editedImages.length === 0) {
-                        throw new Error("The AI could not edit one of the images. Please try a different prompt.");
-                    }
+                    if (pushed) break;
                 }
-            } catch (err) {
-                console.error('Image editing failed:', err);
-                throw new Error("The AI could not edit one of the images. Please try a different prompt.");
+                if (!pushed) throw new Error('The AI could not edit one of the images with your API key.');
+                // Token usage not available from public API; skip or estimate if needed
+                continue;
+            }
+
+            // Firebase AI Logic path
+            try {
+                const editModel = getGenerativeModel(ai, { 
+                    model: 'gemini-2.5-flash-image-preview',
+                    generationConfig: {
+                        responseModalities: [ResponseModality.IMAGE, ResponseModality.TEXT],
+                    }
+                });
+                const response = await editModel.generateContent([
+                    imagePart,
+                    { text: editPrompt }
+                ]);
+                const tokenUsage = extractTokenUsage(response, 'gemini-2.5-flash-image-preview');
+                if (tokenUsage) allTokenUsage.push(tokenUsage);
+
+                try {
+                    const inlineDataParts = response.response.inlineDataParts();
+                    if (inlineDataParts?.[0]) {
+                        const editedImage = inlineDataParts[0].inlineData;
+                        editedImages.push(`data:${editedImage.mimeType};base64,${editedImage.data}`);
+                    } else {
+                        const candidates = response.response.candidates;
+                        if (candidates?.[0]?.content?.parts) {
+                            for (const part of candidates[0].content.parts) {
+                                if (part.inlineData) {
+                                    const editedImage = part.inlineData;
+                                    editedImages.push(`data:${editedImage.mimeType};base64,${editedImage.data}`);
+                                    break;
+                                }
+                            }
+                        }
+                        if (editedImages.length === 0) {
+                            throw new Error('No edited image was produced');
+                        }
+                    }
+                } catch (err) {
+                    console.error('Image editing failed (Firebase path):', err);
+                    throw new Error('The AI could not edit one of the images. Please try a different prompt.');
+                }
+            } catch (firebaseError: any) {
+                // On Firebase AI error, auto-fallback to BYO if available
+                console.log('❌ Firebase AI Logic edit failed:', firebaseError?.message || firebaseError);
+                const user = getCurrentUser();
+                let hasApiKey = false;
+                if (user) {
+                    try {
+                        const hasGoogle = await hasUserApiKey(user.uid, 'google');
+                        const hasFal = await hasUserApiKey(user.uid, 'fal');
+                        hasApiKey = hasGoogle || hasFal;
+                    } catch (_) {}
+                }
+                if (!hasApiKey) throw new Error('AI editing is not configured. Add your Gemini API key in Dashboard or configure Firebase AI Logic.');
+                aiService = 'custom';
+                // re-run this image on BYO path
+                const resp = await authFetch(API_ENDPOINTS.apiKey.use, {
+                    method: 'POST',
+                    body: { model: 'gemini-2.5-flash-image-preview', prompt: editPrompt, imageInputs: [image] }
+                });
+                if (!resp.ok) throw new Error(`Custom edit failed: HTTP ${resp.status}`);
+                const json = await resp.json();
+                let pushed = false;
+                for (const c of json?.candidates || []) {
+                    for (const part of (c?.content?.parts || [])) {
+                        if ((part as any)?.inline_data?.data && (part as any)?.inline_data?.mime_type) {
+                            editedImages.push(`data:${(part as any).inline_data.mime_type};base64,${(part as any).inline_data.data}`);
+                            pushed = true;
+                            break;
+                        }
+                    }
+                    if (pushed) break;
+                }
+                if (!pushed) throw new Error('The AI could not edit one of the images with your API key.');
             }
         }
         
@@ -1081,54 +1142,106 @@ export const generateCharacterOptions = async (
     }
   } catch (_) {}
 
-  // 1) Generate character descriptors
-  const model = getGenerativeModel(ai, {
-    model: 'gemini-2.5-flash',
-    generationConfig: { responseMimeType: 'application/json' },
-  });
+  // 1) Generate character descriptors (Firebase AI Logic with fallback to custom API key)
+  let list: any[] = [];
   const prompt = `Return ONLY JSON as {"characters":[{"name":"...","description":"..."}]}.
 Create ${count} distinct, kid-friendly characters that could star in a short story about "${topic}".
 Each description must combine appearance + personality + visual art style (1-2 sentences).
 ${styleHint ? `Bias styles toward: ${styleHint}.` : ''}
 Example description: "A brave banana with a tiny red cape and bright eyes, painted in warm watercolor with soft edges."`;
-  const result = await model.generateContent(prompt);
-  let list: any[] = [];
+
+  let usedCustom = false;
   try {
+    const model = getGenerativeModel(ai, {
+      model: 'gemini-2.5-flash',
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+    const result = await model.generateContent(prompt);
     const raw = result.response.text().trim();
     const json = JSON.parse(raw);
     list = Array.isArray(json.characters) ? json.characters.slice(0, count) : [];
-  } catch (e) {
-    throw new Error('Failed to generate character list. Please try again.');
+  } catch (firebaseError: any) {
+    console.log('❌ Firebase AI Logic failed for character options:', firebaseError?.message || firebaseError);
+    // fallback to custom key if user has one
+    let hasApiKey = false;
+    if (currentUser) {
+      try {
+        const hasGoogleApiKey = await hasUserApiKey(currentUser.uid, 'google');
+        const hasFalApiKey = await hasUserApiKey(currentUser.uid, 'fal');
+        hasApiKey = hasGoogleApiKey || hasFalApiKey;
+      } catch (_) {}
+    }
+    if (!hasApiKey) {
+      throw new Error('AI is not configured for this project. Add your Gemini API key in Dashboard or configure Firebase AI Logic.');
+    }
+    usedCustom = true;
+    const resp = await authFetch(API_ENDPOINTS.apiKey.use, {
+      method: 'POST',
+      body: { prompt, model: 'gemini-2.5-flash' }
+    });
+    if (!resp.ok) throw new Error('Failed to generate character list via API key');
+    const apiResult = await resp.json();
+    const parts = apiResult?.candidates?.[0]?.content?.parts || [];
+    const textPart = parts.find((p: any) => typeof p?.text === 'string')?.text || '';
+    const raw = (textPart || '').trim();
+    const json = JSON.parse(raw);
+    list = Array.isArray(json.characters) ? json.characters.slice(0, count) : [];
   }
 
   // 2) For each character, generate one image
   for (const ch of list) {
     const name = typeof ch.name === 'string' ? ch.name : 'Character';
     const desc = typeof ch.description === 'string' ? ch.description : 'A friendly character.';
-    const imagenModel = getGenerativeModel(ai, {
-      model: 'gemini-2.5-flash-image-preview',
-      generationConfig: { responseModalities: [ResponseModality.TEXT, ResponseModality.IMAGE] },
-    });
-    const imgResp = await imagenModel.generateContent(`Portrait of ${desc}. ${styleHint ? `Style: ${styleHint}. `: ''}Centered, well-lit, plain background.`);
     let dataUri: string | null = null;
     try {
-      const inlineDataParts = imgResp.response.inlineDataParts();
-      if (inlineDataParts?.[0]) {
-        const image = inlineDataParts[0].inlineData;
-        dataUri = `data:${image.mimeType};base64,${image.data}`;
-      } else {
-        const candidates = imgResp.response.candidates;
-        if (candidates?.[0]?.content?.parts) {
-          for (const part of candidates[0].content.parts) {
-            if ((part as any).inlineData) {
-              const image = (part as any).inlineData;
-              dataUri = `data:${image.mimeType};base64,${image.data}`;
-              break;
+      const imagenModel = getGenerativeModel(ai, {
+        model: 'gemini-2.5-flash-image-preview',
+        generationConfig: { responseModalities: [ResponseModality.TEXT, ResponseModality.IMAGE] },
+      });
+      const imgResp = await imagenModel.generateContent(`Portrait of ${desc}. ${styleHint ? `Style: ${styleHint}. `: ''}Centered, well-lit, plain background.`);
+      try {
+        const inlineDataParts = imgResp.response.inlineDataParts();
+        if (inlineDataParts?.[0]) {
+          const image = inlineDataParts[0].inlineData;
+          dataUri = `data:${image.mimeType};base64,${image.data}`;
+        } else {
+          const candidates = imgResp.response.candidates;
+          if (candidates?.[0]?.content?.parts) {
+            for (const part of candidates[0].content.parts) {
+              if ((part as any).inlineData) {
+                const image = (part as any).inlineData;
+                dataUri = `data:${image.mimeType};base64,${image.data}`;
+                break;
+              }
+            }
+          }
+        }
+      } catch {}
+    } catch (firebaseError: any) {
+      // Fallback to custom API key if available
+      if (currentUser && usedCustom) {
+        const resp = await authFetch(API_ENDPOINTS.apiKey.use, {
+          method: 'POST',
+          body: {
+            model: 'gemini-2.5-flash-image-preview',
+            prompt: `Portrait of ${desc}. ${styleHint ? `Style: ${styleHint}. `: ''}Centered, well-lit, plain background.`
+          }
+        });
+        if (resp.ok) {
+          const json = await resp.json();
+          const candidates = json?.candidates || [];
+          outer: for (const c of candidates) {
+            const parts = c?.content?.parts || [];
+            for (const part of parts) {
+              if ((part as any)?.inline_data?.data && (part as any)?.inline_data?.mime_type) {
+                dataUri = `data:${(part as any).inline_data.mime_type};base64,${(part as any).inline_data.data}`;
+                break outer;
+              }
             }
           }
         }
       }
-    } catch {}
+    }
     if (!dataUri) throw new Error('Failed to generate a character image.');
     options.push({ id: `${Date.now()}-${options.length}`, name, description: desc, images: [dataUri] });
   }
