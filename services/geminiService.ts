@@ -1,5 +1,5 @@
 // Fix: Implement the Gemini API service. This file was previously missing.
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
 
 // Initialization according to guidelines. API_KEY is expected to be in the environment.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -132,5 +132,65 @@ Example Output:
     } catch (error) {
         console.error("Error generating image sequence:", error);
         throw new Error("Failed to generate image sequence. Please try again.");
+    }
+};
+
+
+/**
+ * Converts a data URI (base64 string) into a format suitable for the Gemini API.
+ * @param base64Data The base64 data URI (e.g., "data:image/jpeg;base64,...").
+ * @returns An object with mimeType and data.
+ */
+const fileToGenerativePart = (base64Data: string) => {
+    const match = base64Data.match(/^data:(image\/[a-zA-Z]+);base64,(.*)$/);
+    if (!match || match.length < 3) {
+        throw new Error("Invalid base64 image format");
+    }
+    return {
+        inlineData: {
+            mimeType: match[1],
+            data: match[2],
+        },
+    };
+};
+
+/**
+ * Edits a sequence of images based on a text prompt.
+ * @param base64Images An array of data URIs for the images to edit.
+ * @param editPrompt The text prompt describing the desired change.
+ * @returns A promise that resolves to an array of new data URIs for the edited images.
+ */
+export const editImageSequence = async (base64Images: string[], editPrompt: string): Promise<string[]> => {
+    try {
+        const editedImages: string[] = [];
+        for (const image of base64Images) {
+            const imagePart = fileToGenerativePart(image);
+            
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash-image-preview',
+                contents: {
+                    parts: [
+                        imagePart,
+                        { text: editPrompt },
+                    ],
+                },
+                config: {
+                    responseModalities: [Modality.IMAGE, Modality.TEXT],
+                },
+            });
+
+            const imageResponsePart = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
+            if (imageResponsePart?.inlineData) {
+                const mimeType = imageResponsePart.inlineData.mimeType;
+                const base64Data = imageResponsePart.inlineData.data;
+                editedImages.push(`data:${mimeType};base64,${base64Data}`);
+            } else {
+                throw new Error("The AI could not edit one of the images. Please try a different prompt.");
+            }
+        }
+        return editedImages;
+    } catch (error) {
+        console.error("Error editing image sequence:", error);
+        throw new Error(error instanceof Error ? error.message : "Failed to edit image sequence. Please try again.");
     }
 };

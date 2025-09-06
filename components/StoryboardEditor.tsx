@@ -104,6 +104,16 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
     );
   }, []);
 
+  const handleUpdateSequence = useCallback((id: string, newImageUrls: string[]) => {
+    setScenes(prevScenes =>
+        prevScenes.map(s =>
+            s.id === id
+                ? { ...s, status: 'success', imageUrls: newImageUrls, error: undefined }
+                : s
+        )
+    );
+  }, []);
+
   const handleDeleteScene = useCallback((id: string) => {
     setScenes(prevScenes => prevScenes.filter(s => s.id !== id));
   }, []);
@@ -197,6 +207,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                 onDelete={handleDeleteScene}
                 onGenerateImage={handleGenerateImageSequence}
                 onUpdateScene={handleUpdateScene}
+                onUpdateSequence={handleUpdateSequence}
               />
             ))}
           </div>
