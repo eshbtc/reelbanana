@@ -1,3 +1,4 @@
+
 // Fix: Implement the Gemini API service. This file was previously missing.
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 
@@ -106,7 +107,7 @@ Example Output:
         // Step 2: Generate an image for each of the 5 prompts sequentially to avoid rate limiting.
         const base64Images: string[] = [];
         for (const prompt of shotList.prompts) {
-            const finalPrompt = `${characterAndStyle}. A cinematic, high quality, professional photograph of: ${prompt}`;
+            const finalPrompt = `${characterAndStyle}. Maintain this character and style consistently. A cinematic, high quality, professional photograph of: ${prompt}`;
             
             const response = await ai.models.generateImages({
                 model: 'imagen-4.0-generate-001',

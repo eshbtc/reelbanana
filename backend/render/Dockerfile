@@ -1,13 +1,1 @@
-FROM node:18-slim
-
-WORKDIR /usr/src/app
-
-COPY package*.json ./
-
-RUN apt-get update && apt-get install -y ffmpeg
-
-RUN npm install --only=production
-
-COPY . .
-
-CMD ["node", "index.js"]
+~�er��z{l���rG�w�ޝ׫�:��ߊW
