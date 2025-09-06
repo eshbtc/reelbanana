@@ -1,13 +1,10 @@
-const functions = require('firebase-functions');
-const { Firestore } = require('@google-cloud/firestore');
-
-const firestore = new Firestore();
+const {onRequest} = require('firebase-functions/v2/https');
 
 /**
  * Cloud Function to handle share links
  * Generates HTML with proper meta tags for social media sharing
  */
-exports.shareHandler = functions.https.onRequest(async (req, res) => {
+exports.shareHandler = onRequest(async (req, res) => {
   const { shareId } = req.params;
   
   try {
