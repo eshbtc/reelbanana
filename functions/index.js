@@ -1,4 +1,8 @@
 const {onRequest, onCall} = require('firebase-functions/v2/https');
+const admin = require('firebase-admin');
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 
 /**
  * Cloud Function to handle share links
@@ -11,8 +15,25 @@ exports.shareHandler = onRequest(async (req, res) => {
   const shareId = req.path.split('/').pop();
   
   try {
-    // For now, we'll create a simple share page
-    // In a full implementation, you'd fetch project data from Firestore
+    // Try fetching public movie metadata by ID for dynamic OG tags
+    let title = 'Amazing Movie Created with ReelBanana';
+    let description = 'Check out this incredible AI-generated movie! Created with ReelBanana - the future of storytelling.';
+    let imageUrl = 'https://reel-banana-render-423229273041.us-central1.run.app/placeholder-thumbnail.jpg';
+    let videoUrl = undefined;
+    if (shareId) {
+      try {
+        const snap = await admin.firestore().doc(`public_movies/${shareId}`).get();
+        if (snap.exists) {
+          const data = snap.data() || {};
+          title = data.title || title;
+          description = data.description || description;
+          if (data.thumbnailUrl) imageUrl = data.thumbnailUrl;
+          videoUrl = data.videoUrl || undefined;
+        }
+      } catch (e) {
+        console.warn('Share handler: Firestore fetch failed', e);
+      }
+    }
     const html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -21,21 +42,21 @@ exports.shareHandler = onRequest(async (req, res) => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
     <!-- Open Graph Meta Tags for Social Media -->
-    <meta property="og:title" content="Amazing Movie Created with ReelBanana">
-    <meta property="og:description" content="Check out this incredible AI-generated movie! Created with ReelBanana - the future of storytelling.">
-    <meta property="og:image" content="https://reel-banana-render-423229273041.us-central1.run.app/placeholder-thumbnail.jpg">
+    <meta property="og:title" content="${title}">
+    <meta property="og:description" content="${description}">
+    <meta property="og:image" content="${imageUrl}">
     <meta property="og:url" content="${req.protocol}://${req.get('host')}/share/${shareId}">
     <meta property="og:type" content="video.other">
     
     <!-- Twitter Card Meta Tags -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Amazing Movie Created with ReelBanana">
-    <meta name="twitter:description" content="Check out this incredible AI-generated movie! Created with ReelBanana - the future of storytelling.">
-    <meta name="twitter:image" content="https://reel-banana-render-423229273041.us-central1.run.app/placeholder-thumbnail.jpg">
+    <meta name="twitter:title" content="${title}">
+    <meta name="twitter:description" content="${description}">
+    <meta name="twitter:image" content="${imageUrl}">
     
     <!-- Standard Meta Tags -->
-    <title>Amazing Movie - ReelBanana</title>
-    <meta name="description" content="Check out this incredible AI-generated movie! Created with ReelBanana - the future of storytelling.">
+    <title>${title} - ReelBanana</title>
+    <meta name="description" content="${description}">
     
     <style>
         body {
@@ -104,9 +125,10 @@ exports.shareHandler = onRequest(async (req, res) => {
             This movie was created using ReelBanana - the revolutionary AI-powered storytelling platform 
             that turns your ideas into professional movies in minutes.
         </p>
-        <a href="https://reel-banana-35a54.web.app" class="cta-button">
-            Create Your Own Movie
-        </a>
+        <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
+          <a href="https://reel-banana-35a54.web.app" class="cta-button">Create Your Own Movie</a>
+          ${videoUrl ? `<a href="${videoUrl}" class="cta-button" style="background:#10b981;">Watch Video</a>` : ''}
+        </div>
         
         <div class="features">
             <div class="feature">

@@ -1,12 +1,18 @@
 // Firebase service using centralized Firebase app
-import { 
-    getFirestore, 
-    doc, 
-    getDoc, 
-    setDoc, 
-    addDoc, 
-    collection, 
-    serverTimestamp 
+import {
+    getFirestore,
+    doc,
+    getDoc,
+    setDoc,
+    addDoc,
+    collection,
+    serverTimestamp,
+    query,
+    where,
+    orderBy,
+    limit as fsLimit,
+    getDocs,
+    deleteDoc
 } from 'firebase/firestore';
 import { Scene } from '../types';
 import { firebaseApp } from '../lib/firebase';
@@ -87,5 +93,86 @@ export const updateProject = async (projectId: string, data: ProjectData): Promi
     } catch (error) {
         console.error("Error updating project in Firestore:", error);
         throw new Error("Could not save the project.");
+    }
+};
+
+// --- Project Listing & Management ---
+
+export interface ProjectSummary {
+    id: string;
+    topic: string;
+    createdAt?: string;
+    updatedAt?: string;
+    sceneCount: number;
+}
+
+/**
+ * List the current user's projects, most recent first.
+ */
+export const listMyProjects = async (userId: string, limit: number = 20): Promise<ProjectSummary[]> => {
+    try {
+        const col = collection(db, PROJECTS_COLLECTION);
+        const q = query(
+            col,
+            where('userId', '==', userId),
+            orderBy('updatedAt', 'desc'),
+            fsLimit(limit)
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map(d => {
+            const data: any = d.data();
+            return {
+                id: d.id,
+                topic: data.topic || 'Untitled',
+                createdAt: data.createdAt?.toDate?.()?.toISOString?.() || undefined,
+                updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || undefined,
+                sceneCount: Array.isArray(data.scenes) ? data.scenes.length : 0,
+            } as ProjectSummary;
+        });
+    } catch (error) {
+        console.error('Error listing projects:', error);
+        throw new Error('Could not load your projects.');
+    }
+};
+
+/**
+ * Delete a project by id (owner-only in rules)
+ */
+export const deleteProject = async (projectId: string): Promise<void> => {
+    try {
+        await deleteDoc(doc(db, PROJECTS_COLLECTION, projectId));
+    } catch (error) {
+        console.error('Error deleting project:', error);
+        throw new Error('Could not delete the project.');
+    }
+};
+
+// --- Public Gallery ---
+
+interface PublicMovie {
+    title: string;
+    description?: string;
+    videoUrl: string;
+    thumbnailUrl?: string;
+    createdAt: any;
+    userId?: string;
+}
+
+export const publishMovie = async (movie: Omit<PublicMovie, 'createdAt'>): Promise<string> => {
+    try {
+        const currentUser = getCurrentUser();
+        const docRef = await addDoc(collection(db, 'public_movies'), {
+            ...movie,
+            userId: currentUser?.uid,
+            createdAt: serverTimestamp(),
+            views: 0,
+            likes: 0,
+        } as any);
+        console.log('Published movie with id', docRef.id);
+        return docRef.id;
+    } catch (error) {
+        console.error('Error publishing movie:', error);
+        // Non-fatal for user flow
+        throw error;
     }
 };

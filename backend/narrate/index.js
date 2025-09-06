@@ -90,7 +90,7 @@ const bucketName = process.env.INPUT_BUCKET_NAME || 'oneminute-movie-in';
  * }
  */
 app.post('/narrate', appCheckVerification, async (req, res) => {
-  const { projectId, narrationScript } = req.body;
+  const { projectId, narrationScript, emotion } = req.body;
 
   if (!projectId || !narrationScript) {
     return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required fields: projectId and narrationScript');
@@ -104,15 +104,22 @@ app.post('/narrate', appCheckVerification, async (req, res) => {
   console.log(`Received narration request for projectId: ${projectId}`);
 
   try {
+    // Map simple emotion tags to ElevenLabs settings
+    const settingsByEmotion = {
+      neutral: { stability: 0.5, similarity_boost: 0.75 },
+      warm: { stability: 0.6, similarity_boost: 0.8 },
+      excited: { stability: 0.35, similarity_boost: 0.7 },
+      mysterious: { stability: 0.45, similarity_boost: 0.7 },
+      dramatic: { stability: 0.4, similarity_boost: 0.65 },
+    };
+    const voice_settings = settingsByEmotion[(emotion || 'neutral')] || settingsByEmotion.neutral;
+
     // 1. Generate audio stream from ElevenLabs
     const audioStream = await elevenlabs.generate({
       voice: "Rachel", // You can parameterize this with voiceId if needed
       model_id: "eleven_multilingual_v2",
       text: narrationScript,
-      voice_settings: {
-        stability: 0.5,
-        similarity_boost: 0.75,
-      },
+      voice_settings,
     });
 
     // 2. Stream the audio directly to Google Cloud Storage

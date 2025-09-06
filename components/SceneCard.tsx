@@ -1,25 +1,28 @@
 // Fix: Implement the SceneCard component. This file was previously invalid.
 import React, { useState, useEffect } from 'react';
-import { Scene, CameraMovement, TransitionType } from '../types';
+import { Scene, CameraMovement, TransitionType, StylePreset } from '../types';
 import { TrashIcon, SparklesIcon, EditIcon } from './Icon';
 import Spinner from './Spinner';
 import EditSequenceModal from './EditSequenceModal';
+import CompareModal from './CompareModal';
 
 interface SceneCardProps {
   scene: Scene;
   index: number;
   onDelete: (id: string) => void;
   onGenerateImage: (id: string, prompt: string) => void;
-  onUpdateScene: (id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration'>>) => void;
+  onGenerateVariant: (id: string, prompt: string) => void;
+  onUpdateScene: (id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration' | 'backgroundImage' | 'stylePreset' | 'variantImageUrls'>>) => void;
   onUpdateSequence: (id: string, newImageUrls: string[]) => void;
 }
 
-const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerateImage, onUpdateScene, onUpdateSequence }) => {
+const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerateImage, onGenerateVariant, onUpdateScene, onUpdateSequence }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedPrompt, setEditedPrompt] = useState(scene.prompt);
   const [editedNarration, setEditedNarration] = useState(scene.narration);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
 
   useEffect(() => {
     if (scene.status === 'success' && scene.imageUrls && scene.imageUrls.length > 1) {
@@ -90,6 +93,14 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
               <SparklesIcon />
               Generate Sequence
             </button>
+            {scene.variantImageUrls && scene.variantImageUrls.length > 0 && (
+              <button
+                onClick={() => setIsCompareOpen(true)}
+                className="mt-2 bg-gray-700 hover:bg-gray-600 text-white font-bold py-1 px-3 rounded-md text-xs"
+              >
+                Compare
+              </button>
+            )}
           </div>
         );
     }
@@ -100,6 +111,17 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
       <div className="bg-gray-800 rounded-lg overflow-hidden shadow-lg border border-gray-700 flex flex-col">
         <div className="relative h-48 bg-gray-700">
           {renderImageContent()}
+          {/* On-screen badges */}
+          {scene.stylePreset && scene.stylePreset !== 'none' && (
+            <div className="absolute top-2 right-2 bg-black/60 text-white text-[10px] font-bold px-2 py-1 rounded">
+              Style: {scene.stylePreset.replace('-', ' ')}
+            </div>
+          )}
+          {scene.backgroundImage && (
+            <div className="absolute top-2 left-24 bg-black/60 text-white text-[10px] font-bold px-2 py-1 rounded">
+              Blend: ON
+            </div>
+          )}
           <div className="absolute top-2 left-2 bg-black/60 text-white text-sm font-bold px-3 py-1 rounded-full">
             Scene {index + 1}
           </div>
@@ -167,6 +189,21 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
                 </div>
               </div>
               <div className="mt-3">
+                <label className="text-xs font-semibold text-gray-400 block mb-1">Style Preset</label>
+                <select
+                  value={scene.stylePreset || 'none'}
+                  onChange={(e) => onUpdateScene(scene.id, { stylePreset: e.target.value as StylePreset })}
+                  className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-amber-500 focus:border-amber-500"
+                >
+                  <option value="none">None</option>
+                  <option value="ghibli">Ghibli watercolor</option>
+                  <option value="wes-anderson">Wes Anderson symmetry</option>
+                  <option value="film-noir">Film noir</option>
+                  <option value="pixel-art">Pixel art</option>
+                  <option value="claymation">Claymation</option>
+                </select>
+              </div>
+              <div className="mt-3">
                 <label className="text-xs font-semibold text-gray-400 block mb-1">Duration (seconds)</label>
                 <input
                   type="number"
@@ -177,6 +214,53 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
                   onChange={(e) => onUpdateScene(scene.id, { duration: parseFloat(e.target.value) })}
                   className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-amber-500 focus:border-amber-500"
                 />
+              </div>
+
+              {/* Reality Blend: Optional background photo */}
+              <div className="mt-3">
+                <label className="text-xs font-semibold text-gray-400 block mb-1">Background Photo (optional)</label>
+                {scene.backgroundImage ? (
+                  <div className="flex items-center gap-3">
+                    <img src={scene.backgroundImage} alt="background" className="w-24 h-16 object-cover rounded border border-gray-600" />
+                    <button
+                      onClick={() => onUpdateScene(scene.id, { backgroundImage: undefined })}
+                      className="text-xs bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded"
+                    >Remove</button>
+                  </div>
+                ) : (
+                  <label className="inline-flex items-center justify-center px-3 py-2 text-xs border-2 border-dashed border-gray-600 rounded-md text-gray-400 cursor-pointer hover:border-amber-500 hover:text-amber-400 w-full sm:w-auto">
+                    Upload Photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        const reader = new FileReader();
+                        reader.onload = () => onUpdateScene(scene.id, { backgroundImage: reader.result as string });
+                        reader.readAsDataURL(f);
+                      }}
+                    />
+                  </label>
+                )}
+                <p className="text-[10px] text-gray-500 mt-1">If provided, Gemini will compose the character into this real photo with matching lighting.</p>
+              </div>
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={() => onGenerateVariant(scene.id, scene.prompt)}
+                  className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-2 rounded"
+                >
+                  Generate Variant
+                </button>
+                {scene.variantImageUrls && scene.variantImageUrls.length > 0 && (
+                  <button
+                    onClick={() => setIsCompareOpen(true)}
+                    className="bg-gray-700 hover:bg-gray-600 text-white text-xs font-bold px-3 py-2 rounded"
+                  >
+                    Compare
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -225,6 +309,14 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
             imageUrls={scene.imageUrls}
             onEditComplete={handleEditComplete}
           />
+      )}
+      {scene.imageUrls && scene.variantImageUrls && scene.variantImageUrls.length > 0 && (
+        <CompareModal
+          isOpen={isCompareOpen}
+          onClose={() => setIsCompareOpen(false)}
+          leftImages={scene.imageUrls}
+          rightImages={scene.variantImageUrls}
+        />
       )}
     </>
   );

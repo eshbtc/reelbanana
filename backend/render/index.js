@@ -13,10 +13,7 @@ app.use(cors());
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-    projectId: 'reel-banana-35a54'
-  });
+  admin.initializeApp();
 }
 
 // Observability & Error helpers
@@ -99,6 +96,22 @@ app.post('/render', appCheckVerification, async (req, res) => {
     const tempDir = path.join('/tmp', projectId);
 
     try {
+        // Determine plan (optional gating)
+        let plan = 'free';
+        try {
+            const authHeader = req.headers.authorization || '';
+            if (authHeader.startsWith('Bearer ')) {
+                const idToken = authHeader.split('Bearer ')[1];
+                const decoded = await admin.auth().verifyIdToken(idToken);
+                const userDoc = await admin.firestore().collection('users').doc(decoded.uid).get();
+                if (userDoc.exists) plan = String(userDoc.data().plan || 'free').toLowerCase();
+            }
+        } catch (e) {
+            console.warn('Render plan lookup failed; defaulting to free');
+        }
+        const PLAN_RES = { free: { w: 854, h: 480 }, plus: { w: 1280, h: 720 }, pro: { w: 1920, h: 1080 }, studio: { w: 3840, h: 2160 } };
+        const { w: targetW, h: targetH } = PLAN_RES[plan] || PLAN_RES.free;
+
         // 1. Setup: Create a temporary local directory for processing
         await fs.mkdir(tempDir, { recursive: true });
 
@@ -142,19 +155,19 @@ app.post('/render', appCheckVerification, async (req, res) => {
             let zoomEffect;
             switch (scene.camera || 'static') {
                 case 'zoom-in':
-                    zoomEffect = "zoompan=z='min(zoom+0.001,1.3)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1280x720";
+                    zoomEffect = `zoompan=z='min(zoom+0.001,1.3)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH}`;
                     break;
                 case 'zoom-out':
-                    zoomEffect = "zoompan=z='if(lte(zoom,1.0),1.3,max(1.001,zoom-0.001))':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1280x720";
+                    zoomEffect = `zoompan=z='if(lte(zoom,1.0),1.3,max(1.001,zoom-0.001))':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH}`;
                     break;
                 case 'pan-left':
-                    zoomEffect = "zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)-50*sin(t)':y='ih/2-(ih/zoom/2)':s=1280x720";
+                    zoomEffect = `zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)-50*sin(t)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH}`;
                     break;
                 case 'pan-right':
-                    zoomEffect = "zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)+50*sin(t)':y='ih/2-(ih/zoom/2)':s=1280x720";
+                    zoomEffect = `zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)+50*sin(t)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH}`;
                     break;
                 default: // static
-                    zoomEffect = "scale=1280:720";
+                    zoomEffect = `scale=${targetW}:${targetH}`;
                     break;
             }
             
@@ -190,20 +203,28 @@ app.post('/render', appCheckVerification, async (req, res) => {
 
         // Add subtitles and define final output
         const finalVideoOutput = '[final_video]';
-        complexFilter.push(`${currentStream}subtitles=${path.join(tempDir, 'captions.srt')}:force_style='Fontsize=18,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,BorderStyle=3,Outline=1,Shadow=1,MarginV=25'${finalVideoOutput}`);
+        let subFilter = `${currentStream}subtitles=${path.join(tempDir, 'captions.srt')}:force_style='Fontsize=18,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,BorderStyle=3,Outline=1,Shadow=1,MarginV=25'`;
+        if (plan === 'free') {
+            subFilter += ",drawtext=text='ReelBanana':fontcolor=white@0.6:fontsize=24:box=1:boxcolor=black@0.4:boxborderw=5:x=w-tw-10:y=h-th-10";
+        }
+        subFilter += finalVideoOutput;
+        complexFilter.push(subFilter);
         
-        // Add audio mixing if music is available
+        // Add audio mixing with gentle ducking if music is available
         // Calculate correct audio input indices: images are added first, then audio
         const imageInputs = scenes.length;
         const narrationAudioIndex = imageInputs;
         const musicAudioIndex = imageInputs + 1;
-        
+
         if (gsMusicPath) {
-            // Mix narration and music with narration at higher volume
-            complexFilter.push(`[${narrationAudioIndex}:a][${musicAudioIndex}:a]amix=inputs=2:duration=first:dropout_transition=2,volume=0.8[final_audio]`);
+            // Sidechain compress music with narration as sidechain, then mix
+            // 1) Duck music when narration is present
+            complexFilter.push(`[${musicAudioIndex}:a][${narrationAudioIndex}:a]sidechaincompress=threshold=0.05:ratio=6:attack=5:release=300[ducked]`);
+            // 2) Mix ducked music with narration
+            complexFilter.push(`[ducked][${narrationAudioIndex}:a]amix=inputs=2:duration=first:dropout_transition=2,volume=1.0[final_audio]`);
         } else {
             // Just use narration audio
-            complexFilter.push(`[${narrationAudioIndex}:a]volume=0.8[final_audio]`);
+            complexFilter.push(`[${narrationAudioIndex}:a]volume=0.9[final_audio]`);
         }
         
         const outputVideoPath = path.join(tempDir, 'final_movie.mp4');

@@ -1,17 +1,34 @@
 // MoviePlayer component with social sharing capabilities
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Scene } from '../types';
+import { publishMovie } from '../services/firebaseService';
 
 interface MoviePlayerProps {
   scenes: Scene[];
   videoUrl: string | null;
+  originalUrl?: string;
+  polishedUrl?: string;
   onBack: () => void;
   projectId?: string; // For sharing functionality
+  emotion?: string;
 }
 
-const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, onBack, projectId }) => {
+const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl, polishedUrl, onBack, projectId, emotion = 'neutral' }) => {
   const [shareUrl, setShareUrl] = useState<string>('');
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [published, setPublished] = useState(false);
+  const [usePolished, setUsePolished] = useState<boolean>(true);
+
+  const styleBadges = useMemo(() => {
+    const styles = Array.from(new Set((scenes || [])
+      .map(s => s.stylePreset)
+      .filter((v): v is string => !!v && v !== 'none')));
+    return styles;
+  }, [scenes]);
 
   const handleShare = async () => {
     if (!projectId) {
@@ -32,6 +49,14 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, onBack, pro
     }
   };
 
+  const shareToX = () => {
+    const url = shareUrl || videoUrl || window.location.href;
+    const text = encodeURIComponent('Check out my AI-generated movie on ReelBanana! #AI #ReelBanana');
+    const u = encodeURIComponent(url || '');
+    const xUrl = `https://twitter.com/intent/tweet?text=${text}&url=${u}`;
+    window.open(xUrl, '_blank');
+  };
+  
   const copyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(shareUrl);
@@ -40,14 +65,40 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, onBack, pro
       console.error('Failed to copy to clipboard:', err);
     }
   };
+
+  const handleOpenPublish = () => {
+    setTitle(`ReelBanana Movie ${new Date().toLocaleString()}`);
+    setDescription('');
+    setShowPublishModal(true);
+  };
+
+  const handlePublish = async () => {
+    if (!videoUrl) return;
+    setPublishing(true);
+    try {
+      const thumb = scenes[0]?.imageUrls?.[0];
+      const id = await publishMovie({ title, description, videoUrl, thumbnailUrl: thumb });
+      setPublished(true);
+      // Build friendly share URL served by Cloud Function with OG tags
+      const origin = window?.location?.origin || '';
+      setShareUrl(`${origin}/share/${id}`);
+      setShowPublishModal(false);
+      setShowShareModal(true);
+    } catch (e) {
+      console.error('Publish failed:', e);
+      alert('Publish failed. Please try again.');
+    } finally {
+      setPublishing(false);
+    }
+  };
   return (
     <div className="flex flex-col items-center">
       <div className="w-full max-w-4xl">
         <div className="relative mb-6" style={{ paddingBottom: '56.25%' /* 16:9 aspect ratio */ }}>
-          {videoUrl ? (
+          {(videoUrl || originalUrl || polishedUrl) ? (
             <video
               className="absolute top-0 left-0 w-full h-full rounded-lg shadow-2xl bg-black"
-              src={videoUrl}
+              src={usePolished ? (polishedUrl || videoUrl || '') : (originalUrl || videoUrl || '')}
               controls
               autoPlay
               loop
@@ -59,6 +110,20 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, onBack, pro
               <p className="text-gray-400">No video to display.</p>
             </div>
           )}
+          {/* On-screen badges over player */}
+          <div className="absolute top-2 left-2 flex gap-2 flex-wrap">
+            <div className="bg-black/60 text-white text-xs font-bold px-2 py-1 rounded">Emotion: {emotion}</div>
+            {styleBadges.length > 0 && (
+              <div className="bg-black/60 text-white text-xs font-bold px-2 py-1 rounded">Styles: {styleBadges.join(', ').replace(/-/g,' ')}</div>
+            )}
+          </div>
+          {/* Original vs Polished toggle */}
+          {(polishedUrl || originalUrl) && (
+            <div className="absolute top-2 right-2 bg-black/60 text-white text-xs font-bold rounded flex overflow-hidden">
+              <button onClick={() => setUsePolished(false)} className={`px-2 py-1 ${!usePolished ? 'bg-amber-500' : ''}`}>Original</button>
+              <button onClick={() => setUsePolished(true)} className={`px-2 py-1 ${usePolished ? 'bg-amber-500' : ''}`}>Polished</button>
+            </div>
+          )}
         </div>
         <div className="text-center space-x-4">
           <button
@@ -67,7 +132,7 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, onBack, pro
           >
             Back to Editor
           </button>
-          {videoUrl && (
+          {(videoUrl || polishedUrl || originalUrl) && (
             <button
               onClick={handleShare}
               className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition-colors text-lg flex items-center gap-2"
@@ -76,6 +141,22 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, onBack, pro
                 <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z" />
               </svg>
               Share Movie
+            </button>
+          )}
+          {(videoUrl || polishedUrl || originalUrl) && (
+            <button
+              onClick={shareToX}
+              className="bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 px-8 rounded-lg transition-colors text-lg"
+            >
+              Share to X
+            </button>
+          )}
+          {videoUrl && !published && (
+            <button
+              onClick={handleOpenPublish}
+              className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg transition-colors text-lg"
+            >
+              Publish to Gallery
             </button>
           )}
         </div>
@@ -130,6 +211,47 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, onBack, pro
                 className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-2 rounded transition-colors"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Publish Modal */}
+      {showPublishModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold text-white mb-4">Publish to Gallery</h3>
+            <div className="space-y-3 mb-4">
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Enter a title"
+                className="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600"
+              />
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Add a brief description (optional)"
+                rows={3}
+                className="w-full bg-gray-700 text-white px-3 py-2 rounded border border-gray-600"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowPublishModal(false)}
+                className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-2 rounded transition-colors"
+                disabled={publishing}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePublish}
+                disabled={publishing || !title.trim()}
+                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white py-2 rounded transition-colors"
+              >
+                {publishing ? 'Publishing...' : 'Publish'}
               </button>
             </div>
           </div>

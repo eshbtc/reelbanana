@@ -10,6 +10,7 @@ export interface ApiConfig {
     align: string;
     render: string;
     compose: string;
+    polish: string;
     apiKey: string;
   };
   firebase: {
@@ -30,6 +31,7 @@ const PRODUCTION_CONFIG: ApiConfig = {
     align: 'https://reel-banana-align-captions-423229273041.us-central1.run.app',
     render: 'https://reel-banana-render-423229273041.us-central1.run.app',
     compose: 'https://reel-banana-compose-music-423229273041.us-central1.run.app',
+    polish: 'https://reel-banana-polish-423229273041.us-central1.run.app',
     apiKey: 'https://reel-banana-api-key-service-423229273041.us-central1.run.app',
   },
   firebase: {
@@ -50,6 +52,7 @@ const DEVELOPMENT_CONFIG: ApiConfig = {
     align: 'http://localhost:8081',
     render: 'http://localhost:8082',
     compose: 'http://localhost:8084',
+    polish: 'http://localhost:8086',
     apiKey: 'http://localhost:8085',
   },
   firebase: {
@@ -70,6 +73,7 @@ const AI_STUDIO_CONFIG: ApiConfig = {
     align: 'https://reel-banana-align-captions-423229273041.us-central1.run.app',
     render: 'https://reel-banana-render-423229273041.us-central1.run.app',
     compose: 'https://reel-banana-compose-music-423229273041.us-central1.run.app',
+    polish: 'https://reel-banana-polish-423229273041.us-central1.run.app',
     apiKey: 'https://reel-banana-api-key-service-423229273041.us-central1.run.app',
   },
   firebase: {
@@ -107,6 +111,7 @@ export const API_ENDPOINTS = {
   align: `${apiConfig.baseUrls.align}/align`,
   render: `${apiConfig.baseUrls.render}/render`,
   compose: `${apiConfig.baseUrls.compose}/compose-music`,
+  polish: `${apiConfig.baseUrls.polish}/polish`,
   apiKey: {
     store: `${apiConfig.baseUrls.apiKey}/store-api-key`,
     use: `${apiConfig.baseUrls.apiKey}/use-api-key`,
@@ -129,6 +134,19 @@ export const apiCall = async (url: string, body: object, errorMessage: string) =
     
     if (appCheckToken) {
       headers['X-Firebase-AppCheck'] = appCheckToken;
+    }
+    // Attach Firebase ID token if available (for BYO keys / plan gating)
+    try {
+      const { getAuth } = await import('firebase/auth');
+      const { firebaseApp } = await import('../lib/firebase');
+      const auth = getAuth(firebaseApp as any);
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        const idToken = await currentUser.getIdToken();
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+    } catch (_) {
+      // Non-fatal: proceed without Authorization header
     }
     
     const response = await fetch(url, {

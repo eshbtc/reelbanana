@@ -2,6 +2,7 @@
 import { initializeApp } from 'firebase/app';
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import { apiConfig } from '../config/apiConfig';
+import { initializeFirestore } from 'firebase/firestore';
 
 // Set debug token for development BEFORE initializing App Check
 if (import.meta.env.DEV) {
@@ -16,6 +17,12 @@ export const firebaseApp = initializeApp(apiConfig.firebase);
 export const appCheck = initializeAppCheck(firebaseApp, {
   provider: new ReCaptchaV3Provider('6LfSNMArAAAAALXUYNGFmOSJN7O7W9c4Chp4oP1e'), // Your reCAPTCHA v3 site key
   isTokenAutoRefreshEnabled: true
+});
+
+// Firestore networking fallback for restrictive networks/ad blockers
+// This helps when websockets/streaming are blocked; SDK will detect and use long polling
+initializeFirestore(firebaseApp, {
+  experimentalAutoDetectLongPolling: true,
 });
 
 // Export the app for use in other files

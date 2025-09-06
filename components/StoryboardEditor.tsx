@@ -1,11 +1,12 @@
 // Fix: Implement the StoryboardEditor component. This file was previously invalid.
 import React, { useState, useCallback, useEffect } from 'react';
-import { Scene } from '../types';
+import { Scene, StylePreset } from '../types';
 import { generateStory, generateCharacterAndStyle, generateImageSequence } from '../services/geminiService';
 import { createProject, getProject, updateProject } from '../services/firebaseService';
 import SceneCard from './SceneCard';
 import Spinner from './Spinner';
 import { PlusIcon, SparklesIcon, SaveIcon, DocumentAddIcon } from './Icon';
+import { TEMPLATES } from '../lib/templates';
 
 interface StoryboardEditorProps {
   onPlayMovie: (scenes: Scene[]) => void;
@@ -24,6 +25,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [topic, setTopic] = useState('');
   const [characterAndStyle, setCharacterAndStyle] = useState('');
+  const [characterRefs, setCharacterRefs] = useState<string[]>([]);
   const [scenes, setScenes] = useState<Scene[]>([]);
   
   const [isLoadingStory, setIsLoadingStory] = useState(false);
@@ -31,6 +33,8 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
   const [storyError, setStoryError] = useState<string | null>(null);
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [renderMode, setRenderMode] = useState<'draft' | 'final'>('draft');
 
   // Effect to load project from URL on initial mount
   useEffect(() => {
@@ -126,6 +130,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
         setProjectId(null);
         setTopic('');
         setCharacterAndStyle('');
+        setCharacterRefs([]);
         setScenes([]);
         setStoryError(null);
         window.history.pushState({}, '', window.location.pathname);
@@ -137,6 +142,34 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
       handleGenerateStory(inspirationTopic);
   };
 
+  const handleLoadTemplate = useCallback(async (templateId: string) => {
+    const tpl = TEMPLATES.find(t => t.id === templateId);
+    if (!tpl) return;
+    try {
+      const initialScenes: Scene[] = tpl.scenes.map((s, index) => ({
+        id: `${Date.now()}-${index}`,
+        prompt: s.prompt,
+        narration: s.narration,
+        status: 'idle',
+      }));
+      const newProjectId = await createProject({
+        topic: tpl.topic,
+        characterAndStyle: tpl.characterAndStyle,
+        scenes: initialScenes,
+      });
+      setProjectId(newProjectId);
+      setTopic(tpl.topic);
+      setCharacterAndStyle(tpl.characterAndStyle);
+      setCharacterRefs(tpl.characterRefs || []);
+      setScenes(initialScenes);
+      setSaveStatus('saved');
+      setShowTemplates(false);
+      window.history.pushState({}, '', `?projectId=${newProjectId}`);
+    } catch (e) {
+      alert('Failed to load template. Please try again.');
+    }
+  }, []);
+
   const handleGenerateImageSequence = useCallback(async (id: string, prompt: string) => {
     if (!characterAndStyle.trim()) {
         alert("Please describe your character and style before generating images.");
@@ -146,7 +179,24 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
       prevScenes.map(s => s.id === id ? { ...s, status: 'generating', error: undefined } : s)
     );
     try {
-      const imageUrls = await generateImageSequence(prompt, characterAndStyle);
+      const sceneObj = scenes.find(s => s.id === id);
+      const bg = sceneObj?.backgroundImage;
+      const stylePreset = sceneObj?.stylePreset || 'none';
+      const styleInstruction = ((): string => {
+        switch(stylePreset as StylePreset) {
+          case 'ghibli': return characterAndStyle + '. Studio Ghibli watercolor style, soft edges, warm palette, gentle lighting.';
+          case 'wes-anderson': return characterAndStyle + '. Wes Anderson aesthetic with symmetry, pastel colors, centered framing.';
+          case 'film-noir': return characterAndStyle + '. High-contrast film noir, moody lighting, dramatic shadows, monochrome.';
+          case 'pixel-art': return characterAndStyle + '. 16-bit pixel art, crisp dithered shading, retro palette.';
+          case 'claymation': return characterAndStyle + '. Claymation stop-motion look, tactile textures, soft studio lights.';
+          default: return characterAndStyle;
+        }
+      })();
+      const imageUrls = await generateImageSequence(prompt, styleInstruction, {
+        characterRefs,
+        backgroundImage: bg,
+        frames: renderMode === 'draft' ? 3 : 5,
+      });
       setScenes(prevScenes =>
         prevScenes.map(s => s.id === id ? { ...s, status: 'success', imageUrls } : s)
       );
@@ -158,7 +208,17 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
     } finally {
         setSaveStatus('idle'); // Mark project as having unsaved changes
     }
-  }, [characterAndStyle]);
+  }, [characterAndStyle, scenes, characterRefs, renderMode]);
+
+  // Local helper to read file as data URL
+  const fileToDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
   
   const handleGenerateAllImages = useCallback(async () => {
     if (!characterAndStyle.trim()) {
@@ -174,8 +234,42 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
     setIsGeneratingAll(false);
   }, [scenes, handleGenerateImageSequence, characterAndStyle]);
 
+  const handleGenerateVariant = useCallback(async (id: string, prompt: string) => {
+    // reuse same options but nudge prompt for variation
+    const sceneObj = scenes.find(s => s.id === id);
+    if (!sceneObj) return;
+    if (!characterAndStyle.trim()) {
+      alert('Please describe your character and style before generating images.');
+      return;
+    }
+    setScenes(prev => prev.map(s => s.id === id ? { ...s, status: 'generating', error: undefined } : s));
+    try {
+      const stylePreset = sceneObj.stylePreset || 'none';
+      const styleInstruction = ((): string => {
+        switch(stylePreset) {
+          case 'ghibli': return characterAndStyle + '. Studio Ghibli watercolor style, soft edges, warm palette, gentle lighting.';
+          case 'wes-anderson': return characterAndStyle + '. Wes Anderson aesthetic with symmetry, pastel colors, centered framing.';
+          case 'film-noir': return characterAndStyle + '. High-contrast film noir, moody lighting, dramatic shadows, monochrome.';
+          case 'pixel-art': return characterAndStyle + '. 16-bit pixel art, crisp dithered shading, retro palette.';
+          case 'claymation': return characterAndStyle + '. Claymation stop-motion look, tactile textures, soft studio lights.';
+          default: return characterAndStyle;
+        }
+      })();
+      const bg = sceneObj.backgroundImage;
+      const imageUrls = await generateImageSequence(`${prompt} (alternative angle variation)`, styleInstruction, {
+        characterRefs,
+        backgroundImage: bg,
+        frames: renderMode === 'draft' ? 3 : 5,
+      });
+      setScenes(prev => prev.map(s => s.id === id ? { ...s, status: 'success', variantImageUrls: imageUrls } : s));
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Variant generation failed.';
+      setScenes(prev => prev.map(s => s.id === id ? { ...s, status: 'error', error: errorMessage } : s));
+    }
+  }, [scenes, characterAndStyle, characterRefs, renderMode]);
 
-  const handleUpdateScene = useCallback((id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration'>>) => {
+
+  const handleUpdateScene = useCallback((id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration' | 'backgroundImage' | 'stylePreset'>>) => {
     setScenes(prevScenes =>
       prevScenes.map(s => s.id === id ? { ...s, ...updates } : s)
     );
@@ -246,22 +340,28 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                         ))}
                     </div>
                 </div>
-                 <div className="flex flex-col md:flex-row gap-4 items-start">
-                    <input
-                        type="text"
-                        value={topic}
-                        onChange={(e) => setTopic(e.target.value)}
-                        placeholder="Or write your own story topic, e.g., A banana who wants to be a superhero"
-                        className="flex-grow bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition"
-                        disabled={isLoadingStory}
-                    />
+                <div className="flex flex-col md:flex-row gap-4 items-start">
+                   <input
+                       type="text"
+                       value={topic}
+                       onChange={(e) => setTopic(e.target.value)}
+                       placeholder="Or write your own story topic, e.g., A banana who wants to be a superhero"
+                       className="flex-grow bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition"
+                       disabled={isLoadingStory}
+                   />
+                   <button
+                       onClick={() => handleGenerateStory(topic)}
+                       disabled={isLoadingStory}
+                       className="w-full md:w-auto bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 px-6 rounded-lg transition-all flex items-center justify-center gap-2 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                   >
+                       {isLoadingStory ? <Spinner /> : <SparklesIcon />}
+                       {isLoadingStory ? 'Generating...' : 'Generate Story'}
+                   </button>
                     <button
-                        onClick={() => handleGenerateStory(topic)}
-                        disabled={isLoadingStory}
-                        className="w-full md:w-auto bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 px-6 rounded-lg transition-all flex items-center justify-center gap-2 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                      onClick={() => setShowTemplates(true)}
+                      className="w-full md:w-auto bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition-colors"
                     >
-                        {isLoadingStory ? <Spinner /> : <SparklesIcon />}
-                        {isLoadingStory ? 'Generating...' : 'Generate Story'}
+                      Start from Template
                     </button>
                 </div>
                 {storyError && <p className="text-red-400 mt-3">{storyError}</p>}
@@ -297,12 +397,58 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                         </p>
                     </div>
                 )}
+
+                {/* Character Passport (Reference Images) */}
+                <div className="mt-4">
+                  <label className="text-sm font-semibold text-gray-300 block mb-2">Character Passport (up to 3 reference images)</label>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {characterRefs.map((url, idx) => (
+                      <div key={idx} className="relative w-20 h-20 rounded-md overflow-hidden border border-gray-600">
+                        <img src={url} alt={`ref-${idx}`} className="w-full h-full object-cover" />
+                        <button
+                          onClick={() => setCharacterRefs(refs => refs.filter((_, i) => i !== idx))}
+                          className="absolute top-1 right-1 bg-black/60 text-white text-xs px-1 rounded"
+                          aria-label="Remove reference"
+                        >✕</button>
+                      </div>
+                    ))}
+                    {characterRefs.length < 3 && (
+                      <label className="w-20 h-20 flex items-center justify-center border-2 border-dashed border-gray-600 rounded-md text-gray-400 cursor-pointer hover:border-amber-500 hover:text-amber-400">
+                        +
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            const dataUrl = await fileToDataUrl(f);
+                            setCharacterRefs(refs => [...refs, dataUrl]);
+                            setSaveStatus('idle');
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">These images help Gemini keep your character consistent across scenes.</p>
+                </div>
             </div>
 
             <div>
               <div className="flex flex-wrap justify-between items-center mb-4 gap-4">
                 <h2 className="text-2xl font-bold text-amber-400">Storyboard & Image Generation</h2>
                 <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200">
+                      <span>Mode</span>
+                      <select
+                        value={renderMode}
+                        onChange={(e) => setRenderMode(e.target.value as 'draft' | 'final')}
+                        className="bg-gray-900 border border-gray-700 text-white text-xs rounded px-2 py-1"
+                      >
+                        <option value="draft">Draft (3 frames)</option>
+                        <option value="final">Final (5 frames)</option>
+                      </select>
+                    </div>
                     <button
                         onClick={handleSaveProject}
                         disabled={saveStatus !== 'idle'}
@@ -339,6 +485,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                     index={index}
                     onDelete={handleDeleteScene}
                     onGenerateImage={handleGenerateImageSequence}
+                    onGenerateVariant={handleGenerateVariant}
                     onUpdateScene={handleUpdateScene}
                     onUpdateSequence={handleUpdateSequence}
                   />
@@ -358,10 +505,38 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                 {!hasGeneratedImages && <p className="text-sm text-gray-500 mt-2">Generate at least one image to enable this button.</p>}
               </div>
             </div>
+            <TemplatesModal open={showTemplates} onClose={() => setShowTemplates(false)} onPick={handleLoadTemplate} />
         </>
       )}
     </div>
   );
 };
+
+// Templates Modal (inline for simplicity)
+const TemplatesModal: React.FC<{ open: boolean; onClose: () => void; onPick: (id: string) => void }> = ({ open, onClose, onPick }) => {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-lg max-w-3xl w-full overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-gray-800">
+          <h3 className="text-white font-bold text-lg">Start from Template</n3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
+          {TEMPLATES.map(t => (
+            <button key={t.id} onClick={() => onPick(t.id)} className="bg-gray-800 hover:bg-gray-700 text-left p-4 rounded-lg border border-gray-700 transition-colors">
+              <div className="text-white font-semibold mb-1">{t.title}</div>
+              <div className="text-xs text-gray-400 line-clamp-3">{t.topic}</div>
+            </button>
+          ))}
+        </div>
+        <div className="p-4 border-t border-gray-800 text-xs text-gray-400">
+          Tip: After loading a template, add 1–3 Character Passport images to keep your hero consistent.
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 export default StoryboardEditor;

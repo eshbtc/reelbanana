@@ -25,45 +25,26 @@ const PublicGallery: React.FC = () => {
   useEffect(() => {
     const fetchMovies = async () => {
       try {
-        // For now, we'll create some mock data
-        // In a real implementation, you'd fetch from a 'public_movies' collection
-        const mockMovies: GalleryMovie[] = [
-          {
-            id: '1',
-            title: 'The Adventures of Banana Man',
-            description: 'A thrilling tale of a banana superhero saving the world from fruit villains!',
-            videoUrl: 'https://example.com/video1.mp4',
-            thumbnailUrl: 'https://picsum.photos/400/225?random=1',
-            createdAt: new Date().toISOString(),
-            views: 1250,
-            likes: 89
-          },
-          {
-            id: '2',
-            title: 'Space Banana Odyssey',
-            description: 'Join our brave banana astronaut on an epic journey through the cosmos!',
-            videoUrl: 'https://example.com/video2.mp4',
-            thumbnailUrl: 'https://picsum.photos/400/225?random=2',
-            createdAt: new Date(Date.now() - 86400000).toISOString(),
-            views: 2100,
-            likes: 156
-          },
-          {
-            id: '3',
-            title: 'The Great Banana Heist',
-            description: 'A comedic caper involving a gang of fruit thieves and their ultimate heist!',
-            videoUrl: 'https://example.com/video3.mp4',
-            thumbnailUrl: 'https://picsum.photos/400/225?random=3',
-            createdAt: new Date(Date.now() - 172800000).toISOString(),
-            views: 890,
-            likes: 67
-          }
-        ];
-        
-        setMovies(mockMovies);
-        setLoading(false);
+        const col = collection(db, 'public_movies');
+        const q = query(col, orderBy('createdAt', 'desc'), limit(18));
+        const snap = await getDocs(q);
+        const items: GalleryMovie[] = snap.docs.map((d) => {
+          const data: any = d.data();
+          return {
+            id: d.id,
+            title: data.title || 'Untitled Movie',
+            description: data.description || '',
+            videoUrl: data.videoUrl,
+            thumbnailUrl: data.thumbnailUrl || 'https://via.placeholder.com/400x225/374151/FFFFFF?text=ReelBanana',
+            createdAt: (data.createdAt?.toDate?.() || new Date()).toISOString(),
+            views: data.views || 0,
+            likes: data.likes || 0,
+          };
+        });
+        setMovies(items);
       } catch (error) {
         console.error('Error fetching movies:', error);
+      } finally {
         setLoading(false);
       }
     };

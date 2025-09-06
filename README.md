@@ -57,10 +57,13 @@ ReelBanana is a revolutionary AI-powered storytelling platform that transforms y
 - Public gallery showcase
 
 ### **Backend Services**:
-- **Music Service**: [https://compose-music-423229273041.us-central1.run.app](https://compose-music-423229273041.us-central1.run.app)
-- **Share Handler**: [https://sharehandler-nyckt4dazq-uc.a.run.app](https://sharehandler-nyckt4dazq-uc.a.run.app)
-- **Render Service**: [https://reel-banana-render-423229273041.us-central1.run.app](https://reel-banana-render-423229273041.us-central1.run.app)
-- **Narrate Service**: [https://reel-banana-narrate-423229273041.us-central1.run.app](https://reel-banana-narrate-423229273041.us-central1.run.app)
+- **Upload Assets**: [https://reel-banana-upload-assets-423229273041.us-central1.run.app](https://reel-banana-upload-assets-423229273041.us-central1.run.app)
+- **Narrate**: [https://reel-banana-narrate-423229273041.us-central1.run.app](https://reel-banana-narrate-423229273041.us-central1.run.app)
+- **Align Captions**: [https://reel-banana-align-captions-423229273041.us-central1.run.app](https://reel-banana-align-captions-423229273041.us-central1.run.app)
+- **Render**: [https://reel-banana-render-423229273041.us-central1.run.app](https://reel-banana-render-423229273041.us-central1.run.app)
+- **Compose Music**: [https://reel-banana-compose-music-423229273041.us-central1.run.app](https://reel-banana-compose-music-423229273041.us-central1.run.app)
+- **Polish (Fal)**: [https://reel-banana-polish-423229273041.us-central1.run.app](https://reel-banana-polish-423229273041.us-central1.run.app)
+- **Share Handler (CF)**: `/share/:id` (Firebase Function)
 
 ## 📖 API Documentation
 
@@ -77,14 +80,15 @@ ReelBanana is a revolutionary AI-powered storytelling platform that transforms y
 - **[📥 Postman Collection](./docs/api/postman/)** - Ready-to-use API testing
 
 ### **Available Services**
-| Service | Description | OpenAPI Spec | Swagger UI |
-|---------|-------------|--------------|------------|
-| **Upload Assets** | Image upload to GCS | [📄 YAML](./docs/api/upload-assets.yaml) | [🔗 View](https://reel-banana-upload-assets-423229273041.us-central1.run.app/docs) |
-| **Narrate** | Text-to-speech narration | [📄 YAML](./docs/api/narrate.yaml) | [🔗 View](https://reel-banana-narrate-423229273041.us-central1.run.app/docs) |
-| **Align Captions** | Caption synchronization | [📄 YAML](./docs/api/align-captions.yaml) | [🔗 View](https://reel-banana-align-captions-423229273041.us-central1.run.app/docs) |
-| **Compose Music** | AI music generation | [📄 YAML](./docs/api/compose-music.yaml) | [🔗 View](https://reel-banana-compose-music-423229273041.us-central1.run.app/docs) |
-| **Render** | Video rendering | [📄 YAML](./docs/api/render.yaml) | [🔗 View](https://reel-banana-render-423229273041.us-central1.run.app/docs) |
-| **API Key Service** | Secure key management | [📄 YAML](./docs/api/api-key-service.yaml) | [🔗 View](https://reel-banana-api-key-service-423229273041.us-central1.run.app/docs) |
+| Service | Description | OpenAPI Spec | Base URL |
+|---------|-------------|--------------|---------|
+| **Upload Assets** | Image upload to GCS | [📄 YAML](./docs/api/upload-assets.yaml) | https://reel-banana-upload-assets-423229273041.us-central1.run.app |
+| **Narrate** | Text-to-speech narration | [📄 YAML](./docs/api/narrate.yaml) | https://reel-banana-narrate-423229273041.us-central1.run.app |
+| **Align Captions** | Caption synchronization | [📄 YAML](./docs/api/align-captions.yaml) | https://reel-banana-align-captions-423229273041.us-central1.run.app |
+| **Compose Music** | AI music generation | [📄 YAML](./docs/api/compose-music.yaml) | https://reel-banana-compose-music-423229273041.us-central1.run.app |
+| **Render** | Video rendering | [📄 YAML](./docs/api/render.yaml) | https://reel-banana-render-423229273041.us-central1.run.app |
+| **Polish (Fal)** | Video upscale/interp | — | https://reel-banana-polish-423229273041.us-central1.run.app |
+| **API Key Service** | Secure key management | [📄 YAML](./docs/api/api-key-service.yaml) | https://reel-banana-api-key-service-423229273041.us-central1.run.app |
 
 ### **Quick API Test**
 ```bash
@@ -128,6 +132,103 @@ curl -o ReelBanana-API.postman_collection.json https://raw.githubusercontent.com
 4. **🎵 Music Composition**: AI analyzes mood and creates custom orchestral scores
 5. **🎬 Video Assembly**: FFmpeg combines everything with director-level effects
 6. **📱 Social Sharing**: One-click sharing with viral-ready meta tags
+
+## 🎥 Demo Script (2 minutes)
+
+1) Start from Template: Click “Start from Template” → pick “Superhero Banana”. A project with 4 scenes and Character & Style is loaded.
+2) Character Passport: Add 1–3 reference images (small, clear face/pose). Tip shows why it improves consistency.
+3) Draft Mode: Ensure “Draft (3 frames)” is selected. Generate images for Scene 1. It’s fast and quota‑friendly.
+4) Style Morph: Set Style Preset (e.g., Ghibli) and Generate images for Scene 2. Note the Style badge overlay.
+5) Reality Blend: Upload a background photo on Scene 3 and Generate. Note the “Blend: ON” badge and natural lighting.
+6) Variant + Compare: Click “Generate Variant”, then “Compare” to show a side‑by‑side of the same scene.
+7) Emotion: Choose “Excited” narration. Click “Play My Movie!” and let it render; call out smoother ducked audio.
+8) Pro Polish: Enable “Pro Polish (Upscale + Interpolate)” before rendering to show crisper frames and motion (Fal service).
+9) Publish: Click “Publish to Gallery”, set a title/description, publish, and copy the share link (dynamic OG preview).
+
+## ✨ New Wow Features
+
+- Character Passport: Upload 1–3 reference images to lock identity across scenes.
+- Reality Blend: Compose your character into a user photo with matching lighting and perspective.
+- Style Presets: Instantly morph scenes (Ghibli, Wes Anderson, Film Noir, Pixel Art, Claymation).
+- Emotion‑Aware VO: Global emotion control adjusts narration style via ElevenLabs.
+- Draft vs Final: 3 vs 5 frames per scene to balance speed and quality.
+- Generate Variant + Compare: Rapid A/B side‑by‑side evaluation of a scene.
+- Pro Polish (Fal): Optional upscale + motion interpolation pass.
+- Dynamic Share Pages: Cloud Function reads published metadata for rich OG cards.
+
+## 🔧 Fal Polish Service
+
+Deploy `backend/polish` to Cloud Run with one of the following configurations:
+
+- Model IDs (recommended):
+  - `FAL_KEY` (or `FAL_API_KEY`): your Fal API key
+  - `FAL_MODEL_UPSCALE`: e.g., `fal-ai/video-upscaler`, `fal-ai/topaz/upscale/video`, or `bria/video/increase-resolution`
+  - `FAL_MODEL_INTERP`: frame interpolation model id (optional)
+  - Optional model params:
+    - `FAL_VIDEO_UPSCALE_SCALE` (for `fal-ai/video-upscaler`) — default `2`
+    - `UPSCALE_FACTOR`, `TARGET_FPS` (for Topaz) — defaults `2` and `60`
+    - `FAL_BRIA_DESIRED_INCREASE`, `FAL_BRIA_OUTPUT_CODEC` (for Bria) — defaults `2`, `mp4_h264`
+
+- HTTP endpoints (alternative):
+  - `FAL_API_KEY`: your Fal API key
+  - `FAL_UPSCALE_ENDPOINT`: REST endpoint for upscaling (optional)
+  - `FAL_INTERP_ENDPOINT`: REST endpoint for interpolation (optional)
+  - Optional polling: `FAL_POLL_INTERVAL_MS`, `FAL_POLL_TIMEOUT_MS`
+
+- Persistence (optional):
+  - `OUTPUT_BUCKET_NAME`: GCS bucket for stable public URLs
+
+Frontend toggle:
+- Set `VITE_SHOW_POLISH=true` to show the “Pro Polish” checkbox.
+- Set `VITE_ENABLE_POLISH=true` to enable polish calls when checked.
+
+The frontend calls `/polish` only when the toggle is on and `VITE_ENABLE_POLISH=true`. If env vars are missing, it gracefully falls back to the original video URL.
+
+### 🔑 Bring Your Own Fal Key (BYO)
+
+To reduce platform costs for heavy users, you can allow Pro/Studio users to use their own Fal API key while keeping a platform key as the default.
+
+- API‑Key Service (Cloud Run): extend to support provider‑scoped keys
+  - `POST /store-api-key { provider: 'fal', apiKey }`
+  - `GET /check-api-key?provider=fal`
+  - `DELETE /remove-api-key?provider=fal`
+  - Store encrypted; never return raw keys to clients.
+- Polish service: prefer user’s Fal key when available (via verified ID token)
+  - Resolve userId from Firebase ID token
+  - If `provider=fal` key exists for user (and plan allows), call Fal with user key
+  - Otherwise, fall back to platform `FAL_KEY`
+- UI (Pro/Studio):
+  - User Dashboard → “Fal API Key” field (masked) + “Use my Fal key” toggle
+  - Label on Pro Polish: “Uses your Fal key if configured”
+
+Security notes:
+- Never accept or store keys on the frontend
+- Enforce App Check + Firebase Auth on all write calls
+- Redact sensitive headers/keys from logs
+
+### 💳 Credits & Billing (Optional)
+
+Implement a simple, provider‑agnostic credit system that tracks usage and debits credits with a small markup.
+
+- Price catalog (server): versioned table by `provider + modelId + unit`
+- Usage events (server): `requestId, userId, provider, modelId, operation, input_seconds, output_seconds, start_ms, end_ms, status`
+- Cost = f(usage, priceCatalog); Credits = ceil(cost / credit_value)
+- Idempotent charge: use requestId to avoid double charges
+- Optional pre‑auth holds for long jobs
+
+### 🧭 Plans & Gating (Optional)
+
+Keep demo simple; add plan gating later without changing UX:
+
+- Free (Basic): Draft only (3 frames), 480p, watermark, no Pro Polish
+- Plus: Final (5 frames), 720p, Upscale (video‑upscaler)
+- Pro: 1080p, Pro Polish (Topaz single‑call or two‑step), priority queue
+- Studio: 4K, team, API access
+
+Backend enforcement (render/polish):
+- Cap resolution by plan; add watermark for Free
+- Deny Pro Polish unless plan ≥ Pro
+- Always log `provider_used: 'user' | 'platform'` for BYO keys
 
 ## 🚀 **Quick Start**
 
