@@ -6,6 +6,7 @@ import Spinner from './Spinner';
 import EditSequenceModal from './EditSequenceModal';
 import CompareModal from './CompareModal';
 import { calculateSceneCost, formatCost, getCostTier } from '../utils/costCalculator';
+import { getImageCreditPriceUSD } from '../utils/pricing';
 
 interface SceneCardProps {
   scene: Scene;
