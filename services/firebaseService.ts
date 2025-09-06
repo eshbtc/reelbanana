@@ -91,27 +91,44 @@ export const getProject = async (projectId: string): Promise<ProjectData | null>
  * @param projectId The ID of the project to update.
  * @param data The data to update.
  */
-// Helper function to recursively remove undefined values from objects
+// Helper function to recursively remove undefined values and clean data for Firestore
 const removeUndefinedValues = (obj: any): any => {
     if (obj === null || obj === undefined) {
         return null;
     }
     
     if (Array.isArray(obj)) {
-        return obj.map(removeUndefinedValues).filter(item => item !== null && item !== undefined);
+        return obj.map(removeUndefinedValues).filter(item => {
+            // Filter out null, undefined, and empty objects
+            if (item === null || item === undefined) return false;
+            if (typeof item === 'object' && Object.keys(item).length === 0) return false;
+            return true;
+        });
     }
     
     if (typeof obj === 'object') {
         const cleaned: any = {};
         for (const [key, value] of Object.entries(obj)) {
-            if (value !== undefined) {
+            if (value !== undefined && value !== null) {
                 const cleanedValue = removeUndefinedValues(value);
                 if (cleanedValue !== null && cleanedValue !== undefined) {
+                    // Additional validation for Firestore
+                    if (typeof cleanedValue === 'string' && cleanedValue.trim() === '') {
+                        continue; // Skip empty strings
+                    }
+                    if (Array.isArray(cleanedValue) && cleanedValue.length === 0) {
+                        continue; // Skip empty arrays
+                    }
                     cleaned[key] = cleanedValue;
                 }
             }
         }
         return cleaned;
+    }
+    
+    // Ensure strings are not empty
+    if (typeof obj === 'string' && obj.trim() === '') {
+        return null;
     }
     
     return obj;
@@ -171,6 +188,20 @@ export const updateProject = async (projectId: string, data: ProjectData): Promi
         const cleanData = removeUndefinedValues(rawData);
         
         console.log('Saving to Firestore:', cleanData);
+        console.log('Clean data scenes:', cleanData.scenes);
+        
+        // Additional validation for arrays
+        if (cleanData.scenes && Array.isArray(cleanData.scenes)) {
+            cleanData.scenes = cleanData.scenes.map((scene: any, index: number) => {
+                console.log(`Scene ${index}:`, scene);
+                // Ensure all array fields are properly formatted
+                if (scene.imageUrls && Array.isArray(scene.imageUrls)) {
+                    scene.imageUrls = scene.imageUrls.filter((url: any) => url && typeof url === 'string');
+                }
+                return scene;
+            });
+        }
+        
         await setDoc(docRef, cleanData, { merge: true });
     } catch (error) {
         console.error("Error updating project in Firestore:", error);
