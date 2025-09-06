@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "reel-banana-35a54"
-  }
+  },
+  "targets": {
+    "reel-banana-35a54": {
+      "hosting": {
+        "reelbanana-ai": [
+          "reelbanana-ai"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
