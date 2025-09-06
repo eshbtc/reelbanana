@@ -1,6 +1,6 @@
 // User Dashboard component for managing profile, API keys, and usage
 import React, { useState, useEffect } from 'react';
-import { UserProfile, getUserProfile, updateUserApiKey, getUserUsageStats } from '../services/authService';
+import { UserProfile, getUserProfile, updateUserApiKey, getUserUsageStats, resetCreditsForTesting } from '../services/authService';
 import { getCurrentUser } from '../services/authService';
 import { API_ENDPOINTS } from '../config/apiConfig';
 import { authFetch } from '../lib/authFetch';
@@ -252,6 +252,31 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
                 {usageStats.hasCustomApiKey ? 'Configured' : 'Not set'}
               </div>
             </div>
+          </div>
+          
+          {/* Reset Credits Button for Testing */}
+          <div className="mt-6 text-center">
+            <button
+              onClick={async () => {
+                const currentUser = getCurrentUser();
+                if (currentUser) {
+                  try {
+                    await resetCreditsForTesting(currentUser.uid);
+                    await loadUserData(); // Reload data
+                    alert('Credits reset to 10 for testing!');
+                  } catch (error) {
+                    console.error('Error resetting credits:', error);
+                    alert('Failed to reset credits. Check console for details.');
+                  }
+                }
+              }}
+              className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg transition-colors duration-200 border border-orange-500/30"
+            >
+              🔄 Reset Credits for Testing
+            </button>
+            <p className="text-sm text-gray-400 mt-2">
+              Development only - resets credits to 10 and usage to 0
+            </p>
           </div>
         </div>
 

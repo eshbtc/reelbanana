@@ -13,7 +13,11 @@ import {
   getDoc,
   setDoc,
   updateDoc,
-  serverTimestamp
+  serverTimestamp,
+  collection,
+  query,
+  where,
+  getDocs
 } from 'firebase/firestore';
 import { firebaseApp } from '../lib/firebase';
 import { API_ENDPOINTS } from '../config/apiConfig';
@@ -42,13 +46,24 @@ export interface UserProfile {
   lastLoginAt: string;
 }
 
+// Token usage information from API calls
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  estimatedCost: number; // Cost in USD
+  model: string;
+}
+
 // Usage tracking interface
 export interface UsageRecord {
   userId: string;
   operation: 'story_generation' | 'image_generation' | 'music_composition' | 'video_rendering';
   timestamp: string;
-  cost: number; // API cost in credits
+  cost: number; // API cost in credits (legacy field)
   success: boolean;
+  tokenUsage?: TokenUsage; // New field for detailed token tracking
+  apiService: 'firebase' | 'custom'; // Track which service was used
 }
 
 /**
@@ -200,9 +215,16 @@ export const hasUserApiKey = async (userId: string): Promise<boolean> => {
 };
 
 /**
- * Record API usage
+ * Record API usage with token tracking
  */
-export const recordUsage = async (userId: string, operation: UsageRecord['operation'], cost: number, success: boolean): Promise<void> => {
+export const recordUsage = async (
+  userId: string, 
+  operation: UsageRecord['operation'], 
+  cost: number, 
+  success: boolean,
+  tokenUsage?: TokenUsage,
+  apiService: 'firebase' | 'custom' = 'firebase'
+): Promise<void> => {
   try {
     // Record usage in usage collection
     const usageRef = doc(db, 'usage', `${userId}_${Date.now()}`);
@@ -212,6 +234,8 @@ export const recordUsage = async (userId: string, operation: UsageRecord['operat
       timestamp: new Date().toISOString(),
       cost,
       success,
+      tokenUsage,
+      apiService,
     };
     
     await setDoc(usageRef, usageRecord);
@@ -258,12 +282,20 @@ export const checkUserCredits = async (userId: string, requiredCredits: number):
 };
 
 /**
- * Get user's usage statistics
+ * Get user's usage statistics with token analytics
  */
 export const getUserUsageStats = async (userId: string): Promise<{
   freeCredits: number;
   totalUsage: number;
   hasCustomApiKey: boolean;
+  tokenAnalytics?: {
+    totalTokens: number;
+    totalCost: number;
+    tokensByOperation: { [key: string]: number };
+    costByOperation: { [key: string]: number };
+    tokensByService: { [key: string]: number };
+    costByService: { [key: string]: number };
+  };
 }> => {
   try {
     const userProfile = await getUserProfile(userId);
@@ -274,13 +306,77 @@ export const getUserUsageStats = async (userId: string): Promise<{
     // Check if user has API key stored server-side
     const hasApiKey = await hasUserApiKey(userId);
     
+    // Get detailed usage records for token analytics
+    const usageQuery = query(
+      collection(db, 'usage'),
+      where('userId', '==', userId),
+      where('success', '==', true)
+    );
+    
+    const usageSnapshot = await getDocs(usageQuery);
+    const usageRecords = usageSnapshot.docs.map(doc => doc.data() as UsageRecord);
+
+    // Calculate token analytics
+    const tokenAnalytics = {
+      totalTokens: 0,
+      totalCost: 0,
+      tokensByOperation: {} as { [key: string]: number },
+      costByOperation: {} as { [key: string]: number },
+      tokensByService: {} as { [key: string]: number },
+      costByService: {} as { [key: string]: number },
+    };
+
+    usageRecords.forEach(record => {
+      if (record.tokenUsage) {
+        const tokens = record.tokenUsage.totalTokens;
+        const cost = record.tokenUsage.estimatedCost;
+        
+        tokenAnalytics.totalTokens += tokens;
+        tokenAnalytics.totalCost += cost;
+        
+        // By operation
+        tokenAnalytics.tokensByOperation[record.operation] = 
+          (tokenAnalytics.tokensByOperation[record.operation] || 0) + tokens;
+        tokenAnalytics.costByOperation[record.operation] = 
+          (tokenAnalytics.costByOperation[record.operation] || 0) + cost;
+        
+        // By service
+        tokenAnalytics.tokensByService[record.apiService] = 
+          (tokenAnalytics.tokensByService[record.apiService] || 0) + tokens;
+        tokenAnalytics.costByService[record.apiService] = 
+          (tokenAnalytics.costByService[record.apiService] || 0) + cost;
+      }
+    });
+    
     return {
       freeCredits: userProfile.freeCredits,
       totalUsage: userProfile.totalUsage,
       hasCustomApiKey: hasApiKey,
+      tokenAnalytics,
     };
   } catch (error) {
     console.error('Error getting usage stats:', error);
     return { freeCredits: 0, totalUsage: 0, hasCustomApiKey: false };
+  }
+};
+
+/**
+ * Reset user credits for testing purposes (development only)
+ */
+export const resetCreditsForTesting = async (userId: string): Promise<void> => {
+  try {
+    const db = getFirestore();
+    const userRef = doc(db, 'users', userId);
+    
+    await updateDoc(userRef, {
+      freeCredits: 10, // Reset to default
+      totalUsage: 0,   // Reset usage counter
+      lastResetAt: new Date().toISOString()
+    });
+    
+    console.log('Credits reset for testing');
+  } catch (error) {
+    console.error('Error resetting credits:', error);
+    throw error;
   }
 };
