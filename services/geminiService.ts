@@ -619,18 +619,40 @@ Return ONLY a JSON object with this exact format:
   ]
 }`
 
-        // Create a GenerativeModel instance for shot director
-        const shotDirectorModel = getGenerativeModel(ai, { 
-            model: "gemini-2.5-flash",
-                systemInstruction: directorSystemInstruction,
-            generationConfig: {
-                responseMimeType: "application/json",
-            }
-        });
+        let shotDirectorResult: any;
         
-        const shotDirectorResult = await shotDirectorModel.generateContent(
-            `Scene Description: "${characterAndStyle}. ${mainPrompt}"`
-        );
+        if (aiService === 'custom') {
+            // Use custom API key for shot director
+            const response = await authFetch(API_ENDPOINTS.apiKey.use, {
+                method: 'POST',
+                body: {
+                    prompt: `${directorSystemInstruction}\n\nScene Description: "${characterAndStyle}. ${mainPrompt}"`,
+                    model: 'gemini-2.5-flash'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Shot director API request failed: ${response.status}`);
+            }
+            
+            const apiResult = await response.json();
+            const parts = apiResult?.candidates?.[0]?.content?.parts || [];
+            const textPart = parts.find((p: any) => typeof p?.text === 'string')?.text || '';
+            shotDirectorResult = { response: { text: () => textPart } };
+        } else {
+            // Use Firebase AI Logic for shot director
+            const shotDirectorModel = getGenerativeModel(ai, { 
+                model: "gemini-2.5-flash",
+                systemInstruction: directorSystemInstruction,
+                generationConfig: {
+                    responseMimeType: "application/json",
+                }
+            });
+            
+            shotDirectorResult = await shotDirectorModel.generateContent(
+                `Scene Description: "${characterAndStyle}. ${mainPrompt}"`
+            );
+        }
 
         const jsonStr = shotDirectorResult.response.text().trim();
         const shotList = JSON.parse(jsonStr);
