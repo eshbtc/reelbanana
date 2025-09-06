@@ -104,6 +104,12 @@ const locationId = 'global';
 const keyRingId = 'api-keys';
 const keyId = 'user-api-keys';
 
+console.log('KMS Client initialized');
+console.log('Project ID:', projectId);
+console.log('Location ID:', locationId);
+console.log('Key Ring ID:', keyRingId);
+console.log('Key ID:', keyId);
+
 // Middleware to verify Firebase ID token
 const verifyToken = async (req, res, next) => {
   try {
@@ -126,6 +132,12 @@ const verifyToken = async (req, res, next) => {
 async function encryptApiKey(plaintext, userId) {
   try {
     const name = kmsClient.cryptoKeyPath(projectId, locationId, keyRingId, keyId);
+    console.log('KMS key path:', name);
+    console.log('Project ID:', projectId);
+    console.log('Location ID:', locationId);
+    console.log('Key Ring ID:', keyRingId);
+    console.log('Key ID:', keyId);
+    
     const [result] = await kmsClient.encrypt({
       name: name,
       plaintext: Buffer.from(plaintext),
@@ -134,6 +146,8 @@ async function encryptApiKey(plaintext, userId) {
     return result.ciphertext.toString('base64');
   } catch (error) {
     console.error('Encryption failed:', error);
+    console.error('Error details:', error.message);
+    console.error('Error code:', error.code);
     throw new Error('Failed to encrypt API key');
   }
 }
