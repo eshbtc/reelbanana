@@ -243,8 +243,13 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
   }, [isGeneratingInspiration, refreshCredits]);
 
   const handleLoadTemplate = useCallback(async (templateId: string) => {
+    console.log('📝 handleLoadTemplate called with:', templateId);
     const tpl = TEMPLATES.find(t => t.id === templateId);
-    if (!tpl) return;
+    console.log('📝 Found template:', tpl?.title || 'NOT FOUND');
+    if (!tpl) {
+      console.error('📝 Template not found for ID:', templateId);
+      return;
+    }
     try {
       const initialScenes: Scene[] = tpl.scenes.map((s, index) => ({
         id: `${Date.now()}-${index}`,
@@ -252,11 +257,13 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
         narration: s.narration,
         status: 'idle',
       }));
+      console.log('📝 Creating project from template...');
       const newProjectId = await createProject({
         topic: tpl.topic,
         characterAndStyle: tpl.characterAndStyle,
         scenes: initialScenes,
       });
+      console.log('📝 Project created with ID:', newProjectId);
       setProjectId(newProjectId);
       setTopic(tpl.topic);
       setCharacterAndStyle(tpl.characterAndStyle);
@@ -265,7 +272,9 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
       setSaveStatus('saved');
       setShowTemplates(false);
       window.history.pushState({}, '', `?projectId=${newProjectId}`);
+      console.log('📝 Template loaded successfully!');
     } catch (e) {
+      console.error('📝 Failed to load template:', e);
       alert('Failed to load template. Please try again.');
     }
   }, []);
@@ -508,8 +517,11 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                    </button>
                     <button
                       onClick={() => {
-                        console.log('📝 Opening templates modal');
+                        console.log('📝 Start from Template clicked');
+                        console.log('📝 Current showTemplates state:', showTemplates);
+                        console.log('📝 Available templates:', TEMPLATES.length);
                         setShowTemplates(true);
+                        console.log('📝 Setting showTemplates to true');
                       }}
                       className="w-full md:w-auto bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition-colors"
                     >
@@ -765,7 +777,12 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
 // Templates Modal (inline for simplicity)
 const TemplatesModal: React.FC<{ open: boolean; onClose: () => void; onPick: (id: string) => void }> = ({ open, onClose, onPick }) => {
   console.log('📝 TemplatesModal render: open =', open);
-  if (!open) return null;
+  console.log('📝 TemplatesModal TEMPLATES available:', TEMPLATES?.length || 0);
+  if (!open) {
+    console.log('📝 TemplatesModal not rendering - open is false');
+    return null;
+  }
+  console.log('📝 TemplatesModal rendering modal UI');
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[9999]">
       <div className="bg-gray-900 border border-gray-700 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
@@ -775,7 +792,14 @@ const TemplatesModal: React.FC<{ open: boolean; onClose: () => void; onPick: (id
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
           {TEMPLATES.map(t => (
-            <button key={t.id} onClick={() => onPick(t.id)} className="bg-gray-800 hover:bg-gray-700 text-left p-4 rounded-lg border border-gray-700 transition-colors">
+            <button 
+              key={t.id} 
+              onClick={() => {
+                console.log('📝 Template clicked:', t.id, t.title);
+                onPick(t.id);
+              }} 
+              className="bg-gray-800 hover:bg-gray-700 text-left p-4 rounded-lg border border-gray-700 transition-colors"
+            >
               <div className="text-white font-semibold mb-1">{t.title}</div>
               <div className="text-xs text-gray-400 line-clamp-3">{t.topic}</div>
             </button>

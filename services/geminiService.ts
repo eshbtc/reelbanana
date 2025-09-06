@@ -649,24 +649,33 @@ Return ONLY a JSON object with this exact format:
         let shotDirectorResult: any;
         
         if (aiService === 'custom') {
-            // Use custom API key for shot director
-            const response = await authFetch(API_ENDPOINTS.apiKey.use, {
-                method: 'POST',
-                body: {
-                    prompt: `${directorSystemInstruction}\n\nScene Description: "${characterAndStyle}. ${mainPrompt}"`,
-                    model: 'gemini-2.5-flash'
+            try {
+                // Use custom API key for shot director
+                const response = await authFetch(API_ENDPOINTS.apiKey.use, {
+                    method: 'POST',
+                    body: {
+                        prompt: `${directorSystemInstruction}\n\nScene Description: "${characterAndStyle}. ${mainPrompt}"`,
+                        model: 'gemini-2.5-flash'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Shot director API request failed: ${response.status}`);
                 }
-            });
             
-            if (!response.ok) {
-                throw new Error(`Shot director API request failed: ${response.status}`);
+                const apiResult = await response.json();
+                const parts = apiResult?.candidates?.[0]?.content?.parts || [];
+                const textPart = parts.find((p: any) => typeof p?.text === 'string')?.text || '';
+                shotDirectorResult = { response: { text: () => textPart } };
+            } catch (customApiError: any) {
+                console.log('❌ Custom API key failed for shot director:', customApiError.message);
+                console.log('🔄 Falling back to Firebase AI Logic for shot director');
+                // Fall back to Firebase AI Logic
+                aiService = 'firebase';
             }
-            
-            const apiResult = await response.json();
-            const parts = apiResult?.candidates?.[0]?.content?.parts || [];
-            const textPart = parts.find((p: any) => typeof p?.text === 'string')?.text || '';
-            shotDirectorResult = { response: { text: () => textPart } };
-        } else {
+        }
+        
+        if (aiService === 'firebase') {
             // Use Firebase AI Logic for shot director
             const shotDirectorModel = getGenerativeModel(ai, { 
                 model: "gemini-2.5-flash",
