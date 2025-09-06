@@ -866,6 +866,15 @@ export const editImageSequence = async (base64Images: string[], editPrompt: stri
  * Uses gemini-2.5-flash for descriptors and gemini-2.5-flash-image-preview for images.
  * Cheap default: 4 characters, 1 image per character.
  */
+const CHAR_OPTIONS_CACHE = 'char_options_cache';
+const coalesce = (s: string) => s.trim().toLowerCase();
+const charOptionsCacheKey = (topic: string, count: number, styleHint?: string) => {
+  const base = `${coalesce(topic)}|${count}|${coalesce(styleHint || '')}`;
+  let h = 0;
+  for (let i = 0; i < base.length; i++) h = (h * 31 + base.charCodeAt(i)) | 0;
+  return `opt_${Math.abs(h).toString(36)}`;
+};
+
 export const generateCharacterOptions = async (
   topic: string,
   count: number = 4,
@@ -875,6 +884,23 @@ export const generateCharacterOptions = async (
   const currentUser = getCurrentUser();
   // Guard: require auth so we can record usage/credits if desired
   if (!currentUser) throw new Error('Please sign in to generate character options.');
+
+  // Try cache first
+  try {
+    const cacheId = charOptionsCacheKey(topic, count, styleHint);
+    const cacheDoc = doc(db, CHAR_OPTIONS_CACHE, cacheId);
+    const snap = await getDoc(cacheDoc);
+    if (snap.exists()) {
+      const data = snap.data() as any;
+      const optionsArr = Array.isArray(data.options) ? data.options : [];
+      const createdAtIso = data.createdAt as string | undefined;
+      const ttlMs = 24 * 60 * 60 * 1000; // 24h TTL
+      const fresh = createdAtIso ? (Date.now() - Date.parse(createdAtIso) < ttlMs) : false;
+      if (optionsArr.length > 0 && fresh) {
+        return optionsArr as CharacterOption[];
+      }
+    }
+  } catch (_) {}
 
   // 1) Generate character descriptors
   const model = getGenerativeModel(ai, {
@@ -927,5 +953,10 @@ Example description: "A brave banana with a tiny red cape and bright eyes, paint
     if (!dataUri) throw new Error('Failed to generate a character image.');
     options.push({ id: `${Date.now()}-${options.length}`, name, description: desc, images: [dataUri] });
   }
+  // Save to cache (best-effort)
+  try {
+    const cacheId = charOptionsCacheKey(topic, count, styleHint);
+    await setDoc(doc(db, CHAR_OPTIONS_CACHE, cacheId), { options, topic, count, styleHint: styleHint || null, createdAt: new Date().toISOString() });
+  } catch (_) {}
   return options;
 };

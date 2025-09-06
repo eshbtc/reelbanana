@@ -378,3 +378,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   
   [Live Demo](https://reel-banana-35a54.web.app) • [GitHub](https://github.com/eshbtc/reelbanana) • [AI Studio](https://ai.studio/apps/drive/1G1sY0kiMQO4yiAmgPXBB6nlUUInRIqVT)
 </div>
+- ### **Characters for Demo**
+- Pick a character using the “Pick a Character” button under Character & Style. We generate a few lightweight options with Gemini (Nano Banana) or load pre‑seeded demo characters.
+- To avoid API calls in demos, seed Firestore collection `demo_characters`:
+  - Run: `GOOGLE_APPLICATION_CREDENTIALS=service-account.json node scripts/seed-demo-characters.js`
+  - Each doc: `name`, `description`, `images: [url]`, optional `templateId`.

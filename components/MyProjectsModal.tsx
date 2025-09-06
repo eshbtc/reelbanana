@@ -240,9 +240,21 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
               <div key={p.id} className={`group px-6 py-4 flex items-center justify-between hover:bg-gray-900/30 transition-colors ${focusedIndex === idx ? 'bg-gray-900/40' : ''}`}>
                 <div className="min-w-0 flex items-center gap-3">
                   <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelect(p.id)} className="accent-amber-500" />
-                  {p.thumbnailUrl && (
-                    <img src={p.thumbnailUrl} alt="thumb" className="w-16 h-10 object-cover rounded border border-gray-700 transition-transform group-hover:scale-105" />
-                  )}
+                  {/* Thumbnail mosaic */}
+                  {p.thumbs && p.thumbs.length > 0 ? (
+                    <div className="w-20 h-12 grid grid-cols-2 gap-[2px]">
+                      {p.thumbs.slice(0, 3).map((t, i) => (
+                        <img
+                          key={i}
+                          src={t}
+                          alt="thumb"
+                          className={`object-cover rounded border border-gray-700 transition-transform group-hover:scale-[1.03] ${i === 2 ? 'col-span-2' : ''}`}
+                        />
+                      ))}
+                    </div>
+                  ) : p.thumbnailUrl ? (
+                    <img src={p.thumbnailUrl} alt="thumb" className="w-20 h-12 object-cover rounded border border-gray-700 transition-transform group-hover:scale-[1.03]" />
+                  ) : null}
                   {renamingId === p.id ? (
                     <div className="flex items-center gap-2">
                       <input

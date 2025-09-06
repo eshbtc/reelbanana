@@ -82,7 +82,7 @@ const CharacterPicker: React.FC<CharacterPickerProps> = ({ topic, open, onClose,
           {error && <div className="text-red-400 text-sm mb-3">{error}</div>}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {options.map(opt => (
-              <button key={opt.id} onClick={() => onPick(opt)} className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden text-left hover:bg-gray-700 transition-colors">
+              <button key={opt.id} onClick={() => onPick(opt)} className="relative bg-gray-800 border border-gray-700 rounded-lg overflow-hidden text-left hover:bg-gray-700 transition-colors group">
                 {opt.images?.[0] && (
                   <img src={opt.images[0]} alt={opt.name} className="w-full h-40 object-cover" />
                 )}
@@ -90,6 +90,7 @@ const CharacterPicker: React.FC<CharacterPickerProps> = ({ topic, open, onClose,
                   <div className="text-white font-semibold text-sm">{opt.name}</div>
                   <div className="text-gray-400 text-xs mt-1 line-clamp-3">{opt.description}</div>
                 </div>
+                <div className="absolute bottom-2 right-2 bg-amber-600 text-white text-xs font-semibold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">Use</div>
               </button>
             ))}
           </div>
