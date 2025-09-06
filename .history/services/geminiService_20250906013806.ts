@@ -65,11 +65,6 @@ type StoryScene = {
     narration: string;
 }
 
-/**
- * Generates a story with multiple scenes from a topic
- * @param topic The topic of the story
- * @returns An array of scene objects with prompts and narration
- */
 export const generateStory = async (topic: string): Promise<StoryScene[]> => {
     try {
         const result = await ai.models.generateContent({
@@ -120,16 +115,9 @@ const sequentialPromptsSchema = {
     required: ["prompts"],
 };
 
-/**
- * Generates a sequence of 5 images for a scene with caching
- * Uses sophisticated "shot director" approach for cinematic quality
- * @param mainPrompt The main prompt for the scene
- * @param characterAndStyle The character and style description
- * @returns An array of base64 encoded image strings
- */
 export const generateImageSequence = async (mainPrompt: string, characterAndStyle: string): Promise<string[]> => {
     try {
-        // 1. Check cache first for cost control
+        // 1. Check cache first
         const cacheKey = generateCacheKey(mainPrompt, characterAndStyle);
         const cacheDoc = doc(db, CACHE_COLLECTION, cacheKey);
         const cacheSnap = await getDoc(cacheDoc);
@@ -142,7 +130,7 @@ export const generateImageSequence = async (mainPrompt: string, characterAndStyl
         
         console.log(`Cache miss for prompt: ${mainPrompt.substring(0, 50)}...`);
         
-        // 2. Use sophisticated "shot director" approach for cinematic quality
+        // Step 1: Act as a "shot director" to generate 5 sequential prompts.
         const directorSystemInstruction = `You are a film director planning a 2-second shot. Based on the following scene description, create a sequence of exactly 5 distinct, continuous camera shots that show a brief moment of action. Each shot should be a detailed visual prompt for an image generation model.
             
 Example Output:
@@ -169,7 +157,7 @@ Example Output:
             throw new Error("Failed to generate sequential prompts.");
         }
 
-        // 3. Generate an image for each of the 5 prompts sequentially to avoid rate limiting
+        // Step 2: Generate an image for each of the 5 prompts sequentially to avoid rate limiting.
         const base64Images: string[] = [];
         for (const prompt of shotList.prompts) {
             const finalPrompt = `${characterAndStyle}. Maintain this character and style consistently. A cinematic, high quality, professional photograph of: ${prompt}`;
@@ -188,12 +176,12 @@ Example Output:
                 const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
                 base64Images.push(`data:image/jpeg;base64,${base64ImageBytes}`);
             } else {
-                // If one image fails, we'll stop the sequence for this scene
+                // If one image fails, we'll stop the sequence for this scene.
                 throw new Error(`An image in the sequence failed to generate for prompt: "${prompt}"`);
             }
         }
         
-        // 4. Save to cache for future use (cost control)
+        // 3. Save to cache for future use
         try {
             await setDoc(cacheDoc, {
                 imageUrls: base64Images,
@@ -224,6 +212,7 @@ Example Output:
         throw new Error("Failed to generate images. The prompt might be too sensitive or the service is unavailable.");
     }
 };
+
 
 /**
  * Converts a data URI (base64 string) into a format suitable for the Gemini API.
