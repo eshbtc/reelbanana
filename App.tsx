@@ -112,7 +112,7 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (view) {
       case 'rendering':
-        return <RenderingScreen scenes={scenes} emotion={narrationEmotion} proPolish={proPolish} onRenderComplete={handleRenderComplete} onRenderFail={handleRenderFail} />;
+        return <RenderingScreen scenes={scenes} emotion={narrationEmotion} proPolish={proPolish} projectId={projectId || undefined} onRenderComplete={handleRenderComplete} onRenderFail={handleRenderFail} />;
       case 'player':
         return <MoviePlayer scenes={scenes} videoUrl={videoUrl} originalUrl={videoUrlOriginal || undefined} polishedUrl={videoUrlPolished || undefined} emotion={narrationEmotion} onBack={handleBackToEditor} projectId={projectId || undefined} />;
       case 'gallery':
@@ -150,7 +150,7 @@ const App: React.FC = () => {
                 )}
               </div>
             </div>
-            <StoryboardEditor onPlayMovie={handlePlayMovie} />
+            <StoryboardEditor onPlayMovie={handlePlayMovie} onProjectIdChange={(id) => setProjectId(id || null)} />
           </>
         );
     }

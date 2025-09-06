@@ -8,6 +8,7 @@ interface RenderingScreenProps {
   scenes: Scene[];
   emotion?: string;
   proPolish?: boolean;
+  projectId?: string;
   onRenderComplete: (url: string, projectId?: string) => void;
   onRenderFail: (errorMessage: string) => void;
 }
@@ -38,7 +39,7 @@ const STAGE_MESSAGES: Record<RenderStage, string> = {
 
 import { API_ENDPOINTS, apiCall } from './config/apiConfig';
 
-const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'neutral', proPolish = false, onRenderComplete, onRenderFail }) => {
+const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'neutral', proPolish = false, projectId: providedProjectId, onRenderComplete, onRenderFail }) => {
   const [stage, setStage] = useState<RenderStage>('idle');
   const [progress, setProgress] = useState(0); // For uploads, 0 to 100
 
@@ -46,16 +47,19 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
     const startRenderingProcess = async () => {
       // 1. Initialize project
       setStage('initializing');
-      const projectId = `movie-${Date.now()}`;
+      const projectId = providedProjectId || `movie-${Date.now()}`;
       
       try {
         // 2. Upload all images
         setStage('uploading');
+        // Only upload images that are data URIs; HTTPS images were already persisted during generation
         const allImageUrls = scenes.flatMap((scene, sceneIndex) =>
-          (scene.imageUrls || []).map((url, imageIndex) => ({
-            base64Image: url,
-            fileName: `scene-${sceneIndex}-${imageIndex}.jpeg`,
-          }))
+          (scene.imageUrls || [])
+            .filter(url => typeof url === 'string' && url.startsWith('data:image/'))
+            .map((url, imageIndex) => ({
+              base64Image: url,
+              fileName: `scene-${sceneIndex}-${imageIndex}.jpeg`,
+            }))
         );
 
         console.log('🎬 Upload debug - Total images to upload:', allImageUrls.length);
@@ -67,24 +71,28 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
           });
         }
 
-        let uploadedCount = 0;
-        await Promise.all(
-          allImageUrls.map(async (image, index) => {
-            console.log(`🎬 Upload debug - Uploading image ${index + 1}:`, {
-              fileName: image.fileName,
-              isValidDataUri: image.base64Image.startsWith('data:image/'),
-              dataUriPrefix: image.base64Image.substring(0, 50)
-            });
-            
-            await apiCall(API_ENDPOINTS.upload, 
-              { projectId, ...image }, 
-              'Failed to upload image'
-            );
-            uploadedCount++;
-            setProgress(Math.round((uploadedCount / allImageUrls.length) * 100));
-            console.log(`🎬 Upload debug - Successfully uploaded image ${index + 1}`);
-          })
-        );
+        if (allImageUrls.length > 0) {
+          let uploadedCount = 0;
+          await Promise.all(
+            allImageUrls.map(async (image, index) => {
+              console.log(`🎬 Upload debug - Uploading image ${index + 1}:`, {
+                fileName: image.fileName,
+                isValidDataUri: image.base64Image.startsWith('data:image/'),
+                dataUriPrefix: image.base64Image.substring(0, 50)
+              });
+              await apiCall(API_ENDPOINTS.upload, 
+                { projectId, ...image }, 
+                'Failed to upload image'
+              );
+              uploadedCount++;
+              setProgress(Math.round((uploadedCount / allImageUrls.length) * 100));
+              console.log(`🎬 Upload debug - Successfully uploaded image ${index + 1}`);
+            })
+          );
+        } else {
+          // No inline images to upload; frames already persisted
+          setProgress(100);
+        }
         
         // 3. Generate narration
         setStage('narrating');

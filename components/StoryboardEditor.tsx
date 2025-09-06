@@ -21,6 +21,7 @@ const ai = getAI(firebaseApp);
 
 interface StoryboardEditorProps {
   onPlayMovie: (scenes: Scene[]) => void;
+  onProjectIdChange?: (id: string | null) => void;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -42,7 +43,7 @@ const inspirationCategories = [
     "Drama & Emotion"
 ];
 
-const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
+const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProjectIdChange }) => {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [topic, setTopic] = useState('');
   const [characterAndStyle, setCharacterAndStyle] = useState('');
@@ -151,6 +152,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
       });
       
       setProjectId(newProjectId);
+      try { onProjectIdChange?.(newProjectId); } catch {}
       setTopic(storyTopic);
       setCharacterAndStyle(characterStyle); // Auto-generated
       setScenes(initialScenes);
@@ -185,6 +187,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
   const handleNewStory = () => {
     if (window.confirm("Are you sure you want to start a new story? Any unsaved changes will be lost.")) {
         setProjectId(null);
+        try { onProjectIdChange?.(null); } catch {}
         setTopic('');
         setCharacterAndStyle('');
         setCharacterRefs([]);
@@ -265,6 +268,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
       });
       console.log('📝 Project created with ID:', newProjectId);
       setProjectId(newProjectId);
+      try { onProjectIdChange?.(newProjectId); } catch {}
       setTopic(tpl.topic);
       setCharacterAndStyle(tpl.characterAndStyle);
       setCharacterRefs(tpl.characterRefs || []);
