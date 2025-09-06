@@ -1,12 +1,10 @@
 // Authentication button component with Google Sign-In
 import React, { useState, useEffect } from 'react';
 import { signInWithGoogle, signOutUser, getCurrentUser, onAuthStateChange, UserProfile, getUserProfile } from '../services/authService';
-import UserDashboard from './UserDashboard';
 
 const AuthButton: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showDashboard, setShowDashboard] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChange(async (firebaseUser) => {
@@ -79,13 +77,6 @@ const AuthButton: React.FC = () => {
             </div>
           </div>
 
-          {/* Dashboard Button */}
-          <button
-            onClick={() => setShowDashboard(true)}
-            className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm transition-colors"
-          >
-            Dashboard
-          </button>
 
           {/* Sign Out Button */}
           <button
@@ -96,10 +87,6 @@ const AuthButton: React.FC = () => {
           </button>
         </div>
 
-        {/* User Dashboard Modal */}
-        {showDashboard && (
-          <UserDashboard onClose={() => setShowDashboard(false)} />
-        )}
       </>
     );
   }

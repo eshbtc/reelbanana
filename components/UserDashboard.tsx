@@ -83,51 +83,55 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
 
   if (!userProfile) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500 mx-auto"></div>
-          <p className="text-center text-gray-300 mt-4">Loading user data...</p>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500 mx-auto"></div>
+          <p className="text-gray-300 mt-4 text-lg">Loading user data...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div className="max-w-6xl mx-auto">
+      <div className="mb-8">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-white">User Dashboard</h2>
+          <h2 className="text-3xl font-bold text-white">User Dashboard</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors"
+            className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
+            Back to Editor
           </button>
         </div>
+      </div>
 
         {/* User Profile Section */}
         <div className="mb-8">
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-            </svg>
+          <h3 className="text-xl font-semibold text-white mb-6 flex items-center gap-3">
+            <div className="p-2 bg-amber-500/20 rounded-lg">
+              <svg className="w-6 h-6 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+              </svg>
+            </div>
             Profile
           </h3>
-          <div className="bg-gray-900 rounded-lg p-4">
-            <div className="flex items-center gap-4 mb-4">
+          <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700">
+            <div className="flex items-center gap-6">
               {userProfile.photoURL && (
                 <img
                   src={userProfile.photoURL}
                   alt="Profile"
-                  className="w-16 h-16 rounded-full"
+                  className="w-20 h-20 rounded-full border-2 border-amber-500/30"
                 />
               )}
-              <div>
-                <h4 className="text-white font-semibold">{userProfile.displayName}</h4>
-                <p className="text-gray-400">{userProfile.email}</p>
-                <p className="text-sm text-gray-500">
+              <div className="flex-1">
+                <h4 className="text-white font-bold text-xl">{userProfile.displayName}</h4>
+                <p className="text-gray-300 text-lg">{userProfile.email}</p>
+                <p className="text-sm text-gray-400 mt-2">
                   Member since {new Date(userProfile.createdAt).toLocaleDateString()}
                 </p>
               </div>
@@ -137,39 +141,48 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
 
         {/* Usage Statistics Section */}
         <div className="mb-8">
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
-            </svg>
+          <h3 className="text-xl font-semibold text-white mb-6 flex items-center gap-3">
+            <div className="p-2 bg-blue-500/20 rounded-lg">
+              <svg className="w-6 h-6 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
+              </svg>
+            </div>
             Usage Statistics
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-gray-900 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold text-green-400">{usageStats.freeCredits}</div>
-              <div className="text-sm text-gray-400">Free Credits</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-gradient-to-br from-green-900/30 to-green-800/20 rounded-xl p-6 text-center border border-green-500/30">
+              <div className="text-4xl font-bold text-green-400 mb-2">{usageStats.freeCredits}</div>
+              <div className="text-gray-300 font-medium">Free Credits</div>
+              <div className="text-sm text-gray-400 mt-1">Available for use</div>
             </div>
-            <div className="bg-gray-900 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold text-blue-400">{usageStats.totalUsage}</div>
-              <div className="text-sm text-gray-400">Total Usage</div>
+            <div className="bg-gradient-to-br from-blue-900/30 to-blue-800/20 rounded-xl p-6 text-center border border-blue-500/30">
+              <div className="text-4xl font-bold text-blue-400 mb-2">{usageStats.totalUsage}</div>
+              <div className="text-gray-300 font-medium">Total Usage</div>
+              <div className="text-sm text-gray-400 mt-1">API calls made</div>
             </div>
-            <div className="bg-gray-900 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold text-amber-400">
+            <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/20 rounded-xl p-6 text-center border border-amber-500/30">
+              <div className="text-4xl font-bold text-amber-400 mb-2">
                 {usageStats.hasCustomApiKey ? '✓' : '✗'}
               </div>
-              <div className="text-sm text-gray-400">Custom API Key</div>
+              <div className="text-gray-300 font-medium">Custom API Key</div>
+              <div className="text-sm text-gray-400 mt-1">
+                {usageStats.hasCustomApiKey ? 'Configured' : 'Not set'}
+              </div>
             </div>
           </div>
         </div>
 
         {/* API Key Management Section */}
         <div className="mb-8">
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 8a6 6 0 01-7.743 5.743L10 14l-1 1-1 1H6v2H2v-4l4.257-4.257A6 6 0 1118 8zm-6-4a1 1 0 100 2 2 2 0 012 2 1 1 0 102 0 4 4 0 00-4-4z" clipRule="evenodd" />
-            </svg>
+          <h3 className="text-xl font-semibold text-white mb-6 flex items-center gap-3">
+            <div className="p-2 bg-purple-500/20 rounded-lg">
+              <svg className="w-6 h-6 text-purple-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 8a6 6 0 01-7.743 5.743L10 14l-1 1-1 1H6v2H2v-4l4.257-4.257A6 6 0 1118 8zm-6-4a1 1 0 100 2 2 2 0 012 2 1 1 0 102 0 4 4 0 00-4-4z" clipRule="evenodd" />
+              </svg>
+            </div>
             API Key Management
           </h3>
-          <div className="bg-gray-900 rounded-lg p-4">
+          <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700">
             <p className="text-gray-300 mb-4">
               Add your own Gemini API key to use your quota after free credits expire. 
               Your API key is encrypted and stored securely. This allows unlimited usage with your own resources.
@@ -222,33 +235,34 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
 
         {/* Free Credits Info */}
         <div className="mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-            </svg>
-            Free Credits
+          <h3 className="text-xl font-semibold text-white mb-6 flex items-center gap-3">
+            <div className="p-2 bg-cyan-500/20 rounded-lg">
+              <svg className="w-6 h-6 text-cyan-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            Free Credits Information
           </h3>
-          <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
-            <p className="text-blue-300">
-              <strong>Free Credits:</strong> You have {usageStats.freeCredits} free API calls remaining. 
-              Each movie creation uses approximately 3-5 credits (story + images + music + rendering).
-            </p>
-            <p className="text-blue-300 mt-2">
-              <strong>Tip:</strong> Add your own Gemini API key above to use unlimited credits with your own quota!
-            </p>
+          <div className="bg-gradient-to-r from-cyan-900/20 to-blue-900/20 border border-cyan-500/30 rounded-xl p-6">
+            <div className="flex items-start gap-4">
+              <div className="p-2 bg-cyan-500/20 rounded-lg">
+                <svg className="w-5 h-5 text-cyan-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-cyan-300 text-lg mb-3">
+                  <strong>Free Credits:</strong> You have {usageStats.freeCredits} free API calls remaining. 
+                  Each movie creation uses approximately 3-5 credits (story + images + music + rendering).
+                </p>
+                <p className="text-cyan-300">
+                  <strong>💡 Tip:</strong> Add your own Gemini API key above to use unlimited credits with your own quota!
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Close Button */}
-        <div className="flex justify-end">
-          <button
-            onClick={onClose}
-            className="bg-gray-600 hover:bg-gray-500 text-white px-6 py-2 rounded transition-colors"
-          >
-            Close
-          </button>
-        </div>
-      </div>
     </div>
   );
 };
