@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# History files (from AI Studio and other editors)
+.history/
+*.history
