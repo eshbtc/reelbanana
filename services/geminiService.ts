@@ -571,7 +571,7 @@ const sequentialPromptsSchema = {
 export const generateImageSequence = async (
     mainPrompt: string,
     characterAndStyle: string,
-    opts?: { characterRefs?: string[]; backgroundImage?: string; frames?: number; projectId?: string; forceUseApiKey?: boolean }
+    opts?: { characterRefs?: string[]; backgroundImage?: string; frames?: number; projectId?: string; forceUseApiKey?: boolean; sceneIndex?: number }
 ): Promise<string[]> => {
     try {
         const currentUser = getCurrentUser();
@@ -844,7 +844,8 @@ Return ONLY a JSON object with this exact format:
             const projectId = opts?.projectId || `gen-${Date.now()}`;
             for (let idx = 0; idx < base64Images.length; idx++) {
                 const base64Image = base64Images[idx];
-                const fileName = `scene-0-${idx}.jpeg`;
+                const sceneIdx = typeof opts?.sceneIndex === 'number' ? opts.sceneIndex : 0;
+                const fileName = `scene-${sceneIdx}-${idx}.jpeg`;
                 const resp = await authFetch(API_ENDPOINTS.upload, {
                     method: 'POST',
                     body: { projectId, fileName, base64Image }
@@ -895,6 +896,21 @@ Return ONLY a JSON object with this exact format:
             );
         }
         
+        // Save to cache now that we have stable URLs
+        try {
+            await setDoc(doc(db, CACHE_COLLECTION, cacheKey), {
+                imageUrls: httpsUrls,
+                imageCount: httpsUrls.length,
+                prompt: mainPrompt,
+                characterAndStyle,
+                userId: currentUser?.uid || null,
+                createdAt: new Date().toISOString(),
+                cacheKey,
+                hasBackground: !!opts?.backgroundImage,
+                refCount: opts?.characterRefs?.length || 0,
+            }, { merge: true });
+        } catch (_) {}
+
         return httpsUrls;
     } catch (error) {
         console.error("Error generating image sequence:", error);
