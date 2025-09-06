@@ -15,11 +15,9 @@ import {
   updateDoc,
   serverTimestamp 
 } from 'firebase/firestore';
-import { initializeApp } from 'firebase/app';
-import { apiConfig } from '../config/apiConfig';
+import { firebaseApp } from '../lib/firebase';
 
-// Initialize Firebase
-const firebaseApp = initializeApp(apiConfig.firebase);
+// Use centralized Firebase app
 const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
 

@@ -27,3 +27,10 @@ dist-ssr
 # History files (from AI Studio and other editors)
 .history/
 *.history
+
+# Environment variables (NEVER commit these!)
+.env
+.env.local
+.env.production
+.env.development
+.env.*.local

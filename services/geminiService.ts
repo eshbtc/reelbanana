@@ -1,12 +1,10 @@
 // Firebase AI Logic service with native Gemini and nano-bana integration
 import { getAI, getGenerativeModel, VertexAIBackend, ResponseModality } from 'firebase/ai';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
-import { initializeApp } from 'firebase/app';
-import { apiConfig } from '../config/apiConfig';
+import { firebaseApp } from '../lib/firebase';
 import { getCurrentUser, getUserProfile, recordUsage, checkUserCredits } from './authService';
 
-// Initialize Firebase for AI Logic and caching
-const firebaseApp = initializeApp(apiConfig.firebase);
+// Use centralized Firebase app
 const db = getFirestore(firebaseApp);
 
 // Initialize Firebase AI Logic with Vertex AI backend (global for nano-bana/gemini-2.5-flash-image-preview)
