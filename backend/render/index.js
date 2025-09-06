@@ -293,6 +293,11 @@ app.post('/render', appCheckVerification, async (req, res) => {
     }
 });
 
+// Lightweight health check (no App Check required)
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', service: 'render', inputBucket: inputBucketName, outputBucket: outputBucketName, time: new Date().toISOString() });
+});
+
 
 const PORT = process.env.PORT || 8082;
 app.listen(PORT, () => {

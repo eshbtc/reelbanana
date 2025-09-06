@@ -202,6 +202,11 @@ app.post('/align', appCheckVerification, async (req, res) => {
     }
 });
 
+// Lightweight health check (no App Check required)
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', service: 'align-captions', bucket: bucketName, time: new Date().toISOString() });
+});
+
 
 const PORT = process.env.PORT || 8081; // Use a different port than narrate service
 app.listen(PORT, () => {

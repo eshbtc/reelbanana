@@ -150,6 +150,17 @@ app.post('/narrate', appCheckVerification, async (req, res) => {
   }
 });
 
+// Lightweight health check (no App Check required)
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'narrate',
+    elevenlabsConfigured: !!process.env.ELEVENLABS_API_KEY,
+    bucket: bucketName,
+    time: new Date().toISOString()
+  });
+});
+
 // Note: No music generation endpoint is included here as per the latest stable implementation.
 
 const PORT = process.env.PORT || 8080;

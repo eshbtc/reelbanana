@@ -268,6 +268,17 @@ app.post('/polish', appCheckVerification, async (req, res) => {
   }
 });
 
+// Lightweight health check (no App Check required)
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'polish',
+    usingApiKeyService: !!process.env.API_KEY_SERVICE_URL,
+    hasDefaultFalKey: !!(process.env.FAL_API_KEY || process.env.FAL_KEY),
+    time: new Date().toISOString()
+  });
+});
+
 const PORT = process.env.PORT || 8086;
 app.listen(PORT, () => {
   console.log(`Polish service listening on port ${PORT}`);

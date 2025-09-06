@@ -25,8 +25,8 @@ const CompareModal: React.FC<CompareModalProps> = ({ isOpen, onClose, leftImages
   const ri = rightImages[frame % Math.max(1, rightImages.length)] || rightImages[0];
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 rounded-lg border border-gray-700 max-w-5xl w-full overflow-hidden">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[9999] p-4">
+      <div className="bg-gray-900 rounded-lg border border-gray-700 max-w-5xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
           <h3 className="text-white font-bold text-lg">Compare Variant</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>

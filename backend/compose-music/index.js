@@ -137,6 +137,17 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
   }
 });
 
+// Lightweight health check (no App Check required)
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'compose-music',
+    geminiConfigured: !!process.env.GEMINI_API_KEY,
+    bucket: bucketName,
+    time: new Date().toISOString()
+  });
+});
+
 /**
  * Create a placeholder audio file based on mood analysis
  * In production, this would be replaced with actual music generation

@@ -86,7 +86,8 @@ const getAIService = async (forceUseApiKey?: boolean): Promise<'firebase' | 'cus
       console.log('✅ getAIService: Using custom API key (forced by user)');
       return 'custom';
     } else {
-      console.log('❌ getAIService: User forced API key but none found, falling back to credit check');
+      console.log('❌ getAIService: User forced API key but none found - cannot use Firebase AI Logic with customer keys');
+      throw new Error('No API key configured. Please add your Gemini API key in the Dashboard to use BYOK mode.');
     }
   }
 
@@ -187,7 +188,7 @@ export const generateCharacterAndStyle = async (topic: string, forceUseApiKey?: 
         }
 
         // Determine which AI service to use
-        const aiService = await getAIService(forceUseApiKey);
+        let aiService = await getAIService(forceUseApiKey);
         if (!aiService) {
             throw new Error("No credits remaining and no API key configured. Please add your Gemini API key or contact support for more credits.");
         }
@@ -199,33 +200,46 @@ export const generateCharacterAndStyle = async (topic: string, forceUseApiKey?: 
         if (aiService === 'firebase') {
             // Use Firebase AI Logic with free credits
             console.log('Using Firebase AI Logic for character and style generation');
-            const model = getGenerativeModel(ai, { 
-                model: "gemini-2.5-flash",
-                generationConfig: {
-                    responseMimeType: "text/plain",
-                }
-            });
-            
-            console.log('Generating character and style with Firebase AI Logic...');
-            result = await model.generateContent(
-                `Create a character and visual style description for a kid-friendly story about "${topic}". 
-                Include:
-                - Main character description (appearance, personality)
-                - Visual style (art style, color palette, mood)
-                - Keep it concise (2-3 sentences)
-                - Make it suitable for children
+            try {
+                const model = getGenerativeModel(ai, { 
+                    model: "gemini-2.5-flash",
+                    generationConfig: {
+                        responseMimeType: "text/plain",
+                    }
+                });
                 
-                Example format: "A cute banana character with a tiny red cape, adventurous and curious, in a vibrant watercolor style with warm colors and soft edges."`
-            );
-            console.log('Firebase AI Logic character response received');
-            
-            // Extract token usage from response
-            const tokenUsage = extractTokenUsage(result, 'gemini-2.5-flash');
-            if (tokenUsage) {
-                console.log('Token usage:', tokenUsage);
+                console.log('Generating character and style with Firebase AI Logic...');
+                result = await model.generateContent(
+                    `Create a character and visual style description for a kid-friendly story about "${topic}". 
+                    Include:
+                    - Main character description (appearance, personality)
+                    - Visual style (art style, color palette, mood)
+                    - Keep it concise (2-3 sentences)
+                    - Make it suitable for children
+                    
+                    Example format: "A cute banana character with a tiny red cape, adventurous and curious, in a vibrant watercolor style with warm colors and soft edges."`
+                );
+            } catch (firebaseError: any) {
+                console.log('❌ Firebase AI Logic failed:', firebaseError.message);
+                // Check if user has API key for automatic fallback
+                const hasGoogleApiKey = await hasUserApiKey(currentUser.uid, 'google');
+                const hasFalApiKey = await hasUserApiKey(currentUser.uid, 'fal');
+                const hasApiKey = hasGoogleApiKey || hasFalApiKey;
+                
+                if (hasApiKey) {
+                    console.log('🔄 Auto-falling back to custom API key due to Firebase AI Logic error');
+                    aiService = 'custom'; // Switch to custom key
+                } else {
+                    throw new Error(`Firebase AI Logic is not configured for this project. Please add your Gemini API key in the Dashboard, or contact support. Error: ${firebaseError.message}`);
+                }
             }
-            
         } else {
+            // Firebase AI Logic succeeded - extract result
+            console.log('Firebase AI Logic character response received');
+        }
+        
+        // Handle custom API key path (either from start or fallback)
+        if (aiService === 'custom') {
             // Use custom API key via secure server-side service
             const response = await authFetch(API_ENDPOINTS.apiKey.use, {
                 method: 'POST',
@@ -319,7 +333,7 @@ export const generateStory = async (topic: string, forceUseApiKey?: boolean): Pr
         }
 
         // Determine which AI service to use
-        const aiService = await getAIService(forceUseApiKey);
+        let aiService = await getAIService(forceUseApiKey);
         console.log('AI Service selected:', aiService);
         if (!aiService) {
             throw new Error("No credits remaining and no API key configured. Please add your Gemini API key or contact support for more credits.");
@@ -332,35 +346,48 @@ export const generateStory = async (topic: string, forceUseApiKey?: boolean): Pr
         if (aiService === 'firebase') {
             // Use Firebase AI Logic with free credits
             console.log('Using Firebase AI Logic for story generation');
-            const model = getGenerativeModel(ai, {
-            model: "gemini-2.5-flash",
-                // Try to coerce structured output where supported
-                generationConfig: {
-                responseMimeType: "application/json",
-                    // responseSchema is supported in newer SDKs; harmless if ignored
-                    // @ts-ignore
-                    responseSchema: (storyResponseSchema as any),
+            try {
+                const model = getGenerativeModel(ai, {
+                model: "gemini-2.5-flash",
+                    // Try to coerce structured output where supported
+                    generationConfig: {
+                    responseMimeType: "application/json",
+                        // responseSchema is supported in newer SDKs; harmless if ignored
+                        // @ts-ignore
+                        responseSchema: (storyResponseSchema as any),
+                    }
+                });
+                
+                console.log('Generating content with Firebase AI Logic...');
+                result = await model.generateContent(
+                    `Return ONLY JSON. Format: {"scenes":[{"prompt":"...","narration":"..."}]}.
+                     Create 4-8 scenes for a short, kid-friendly storyboard about "${topic}".
+                     Each scene must include:
+                     - prompt: a detailed, visually rich description for image generation
+                     - narration: 1-2 sentences to be spoken.
+                     Do not include any markdown or extra commentary. Only valid JSON.`
+                );
+            } catch (firebaseError: any) {
+                console.log('❌ Firebase AI Logic failed:', firebaseError.message);
+                // Check if user has API key for automatic fallback
+                const hasGoogleApiKey = await hasUserApiKey(currentUser.uid, 'google');
+                const hasFalApiKey = await hasUserApiKey(currentUser.uid, 'fal');
+                const hasApiKey = hasGoogleApiKey || hasFalApiKey;
+                
+                if (hasApiKey) {
+                    console.log('🔄 Auto-falling back to custom API key due to Firebase AI Logic error');
+                    aiService = 'custom'; // Switch to custom key
+                } else {
+                    throw new Error(`Firebase AI Logic is not configured for this project. Please add your Gemini API key in the Dashboard, or contact support. Error: ${firebaseError.message}`);
                 }
-            });
-            
-            console.log('Generating content with Firebase AI Logic...');
-            result = await model.generateContent(
-                `Return ONLY JSON. Format: {"scenes":[{"prompt":"...","narration":"..."}]}.
-                 Create 4-8 scenes for a short, kid-friendly storyboard about "${topic}".
-                 Each scene must include:
-                 - prompt: a detailed, visually rich description for image generation
-                 - narration: 1-2 sentences to be spoken.
-                 Do not include any markdown or extra commentary. Only valid JSON.`
-            );
-            console.log('Firebase AI Logic response received');
-            
-            // Extract token usage from response
-            const tokenUsage = extractTokenUsage(result, 'gemini-2.5-flash');
-            if (tokenUsage) {
-                console.log('Story generation token usage:', tokenUsage);
             }
-            
         } else {
+            // Firebase AI Logic succeeded - extract result
+            console.log('Firebase AI Logic response received');
+        }
+        
+        // Handle custom API key path (either from start or fallback)
+        if (aiService === 'custom') {
             // Use custom API key via secure server-side service
             const response = await authFetch(API_ENDPOINTS.apiKey.use, {
                 method: 'POST',
@@ -696,22 +723,23 @@ Return ONLY a JSON object with this exact format:
                 if (!pushed) throw new Error(`No image generated for prompt: "${prompt}"`);
             } else {
                 // Firebase AI Logic path
-                const imagenModel = getGenerativeModel(ai, { 
-                    model: 'gemini-2.5-flash-image-preview',
-                    generationConfig: { responseModalities: [ResponseModality.TEXT, ResponseModality.IMAGE] }
-                });
-                // Build parts: optional character refs and background image, then prompt text
-                const parts: any[] = [];
-                if (opts?.characterRefs && opts.characterRefs.length > 0) {
-                    for (const ref of opts.characterRefs) {
-                        try { parts.push(fileToGenerativePart(ref)); } catch (e) { console.warn('Invalid character ref image skipped'); }
+                try {
+                    const imagenModel = getGenerativeModel(ai, { 
+                        model: 'gemini-2.5-flash-image-preview',
+                        generationConfig: { responseModalities: [ResponseModality.TEXT, ResponseModality.IMAGE] }
+                    });
+                    // Build parts: optional character refs and background image, then prompt text
+                    const parts: any[] = [];
+                    if (opts?.characterRefs && opts.characterRefs.length > 0) {
+                        for (const ref of opts.characterRefs) {
+                            try { parts.push(fileToGenerativePart(ref)); } catch (e) { console.warn('Invalid character ref image skipped'); }
+                        }
                     }
-                }
-                if (opts?.backgroundImage) {
-                    try { parts.push(fileToGenerativePart(opts.backgroundImage)); } catch (e) { console.warn('Invalid background image skipped'); }
-                }
-                parts.push({ text: finalPrompt });
-                const response = await imagenModel.generateContent(parts);
+                    if (opts?.backgroundImage) {
+                        try { parts.push(fileToGenerativePart(opts.backgroundImage)); } catch (e) { console.warn('Invalid background image skipped'); }
+                    }
+                    parts.push({ text: finalPrompt });
+                    const response = await imagenModel.generateContent(parts);
                 const tokenUsage = extractTokenUsage(response, 'gemini-2.5-flash-image-preview');
                 if (tokenUsage) perImageTokenUsages.push(tokenUsage);
                 try {
@@ -734,9 +762,42 @@ Return ONLY a JSON object with this exact format:
                             throw new Error(`No image generated for prompt: "${prompt}"`);
                         }
                     }
-                } catch (err) {
-                    console.error('Image generation failed:', err);
-                    throw new Error(`An image in the sequence failed to generate for prompt: "${prompt}"`);
+                } catch (firebaseError: any) {
+                    console.log('❌ Firebase AI Logic image generation failed:', firebaseError.message);
+                    // Check if user has API key for automatic fallback
+                    const hasGoogleApiKey = await hasUserApiKey(currentUser.uid, 'google');
+                    const hasFalApiKey = await hasUserApiKey(currentUser.uid, 'fal');
+                    const hasApiKey = hasGoogleApiKey || hasFalApiKey;
+                    
+                    if (hasApiKey) {
+                        console.log('🔄 Auto-falling back to custom API key for image generation due to Firebase error');
+                        // Use custom API key path
+                        const imageInputs: string[] = [];
+                        if (opts?.characterRefs && opts.characterRefs.length) imageInputs.push(...opts.characterRefs);
+                        if (opts?.backgroundImage) imageInputs.push(opts.backgroundImage);
+                        const resp = await authFetch(API_ENDPOINTS.apiKey.use, {
+                            method: 'POST',
+                            body: { model: 'gemini-2.5-flash-image-preview', prompt: finalPrompt, imageInputs }
+                        });
+                        if (!resp.ok) throw new Error(`Custom image gen fallback failed: HTTP ${resp.status}`);
+                        const json = await resp.json();
+                        const candidates = json?.candidates || [];
+                        let pushed = false;
+                        for (const c of candidates) {
+                            const parts = c?.content?.parts || [];
+                            for (const part of parts) {
+                                if (part.inlineData && part.inlineData.data) {
+                                    base64Images.push(`data:${part.inlineData.mimeType || 'image/jpeg'};base64,${part.inlineData.data}`);
+                                    pushed = true;
+                                    break;
+                                }
+                            }
+                            if (pushed) break;
+                        }
+                        if (!pushed) throw new Error(`No image generated via API key fallback for prompt: "${prompt}"`);
+                    } else {
+                        throw new Error(`Firebase AI Logic is not configured for image generation and no API key available. Please add your Gemini API key in the Dashboard. Error: ${firebaseError.message}`);
+                    }
                 }
             }
         }

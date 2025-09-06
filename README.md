@@ -264,6 +264,15 @@ Backend enforcement (render/polish):
 
 5. **Open in browser**: [http://localhost:5173](http://localhost:5173)
 
+### Environment & Config
+
+- Frontend config selection is automatic:
+  - Development: when served from `localhost` or `127.0.0.1`, uses local service URLs (http://localhost:8080–8086).
+  - Production: when built (`import.meta.env.PROD`), uses Cloud Run URLs.
+  - AI Studio: set `VITE_TARGET_ENV=ai-studio` to target the AI Studio deployment URLs.
+- Firebase storage bucket now uses the canonical GCS name `reel-banana-35a54.appspot.com`.
+- Pipelines expect the input bucket `oneminute-movie-in` by default; override via `INPUT_BUCKET_NAME`.
+
 ### **Deployment**
 
 1. **Deploy Backend Services**:
@@ -285,6 +294,19 @@ Backend enforcement (render/polish):
    ```bash
    firebase deploy --only functions
    ```
+
+### Service Health Checks
+
+- Every microservice exposes a lightweight `GET /health` endpoint (no App Check required) returning JSON status.
+  - Upload Assets: `${UPLOAD_BASE}/health`
+  - Narrate: `${NARRATE_BASE}/health`
+  - Align Captions: `${ALIGN_BASE}/health`
+  - Compose Music: `${COMPOSE_BASE}/health`
+  - Render: `${RENDER_BASE}/health`
+  - Polish: `${POLISH_BASE}/health`
+  - API Key Service: `${API_KEY_BASE}/health`
+- Admin UI: open Dashboard → “Service Health” to run checks from the browser across all configured services.
+  - Shows status, latency, and last checked time per service.
 
 ## 🏗 **Project Structure**
 

@@ -5,6 +5,7 @@ import { getCurrentUser } from '../services/authService';
 import { API_ENDPOINTS } from '../config/apiConfig';
 import { authFetch } from '../lib/authFetch';
 import { useUserCredits } from '../hooks/useUserCredits';
+import AdminHealth from './AdminHealth';
 
 interface UserDashboardProps {
   onClose: () => void;
@@ -309,6 +310,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
             </p>
           </div>
         </div>
+
+        {/* Service Health Section */}
+        <AdminHealth />
 
         {/* Token Analytics */}
         {usageStats.tokenAnalytics && (

@@ -767,8 +767,8 @@ const TemplatesModal: React.FC<{ open: boolean; onClose: () => void; onPick: (id
   console.log('📝 TemplatesModal render: open =', open);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
-      <div className="bg-gray-900 border border-gray-700 rounded-lg max-w-3xl w-full overflow-hidden">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[9999]">
+      <div className="bg-gray-900 border border-gray-700 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
           <h3 className="text-white font-bold text-lg">Start from Template</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
