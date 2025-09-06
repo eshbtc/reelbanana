@@ -1,8 +1,10 @@
-gimport React, { useEffect, useState } from 'react';
-import { getCurrentUser } from '../services/authService';
+import React, { useEffect, useState } from 'react';
+import { getCurrentUser, onAuthStateChange } from '../services/authService';
 import { listMyProjects, deleteProject, ProjectSummary, renameProject, duplicateProject } from '../services/firebaseService';
 
 const MyProjectsPage: React.FC = () => {
+  const [user, setUser] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [filtered, setFiltered] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -17,7 +19,6 @@ const MyProjectsPage: React.FC = () => {
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
 
   const load = async () => {
-    const user = getCurrentUser();
     if (!user) {
       setError('Please sign in to view your projects.');
       return;
@@ -37,9 +38,22 @@ const MyProjectsPage: React.FC = () => {
     }
   };
 
+  // Set up authentication state listener
   useEffect(() => {
-    load();
+    const unsubscribe = onAuthStateChange((firebaseUser) => {
+      setUser(firebaseUser);
+      setAuthLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
+
+  // Load projects when user changes
+  useEffect(() => {
+    if (!authLoading && user) {
+      load();
+    }
+  }, [user, authLoading]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -181,8 +195,31 @@ const MyProjectsPage: React.FC = () => {
 
       {/* Content */}
       <div className="max-w-6xl mx-auto px-6 py-8">
+        {/* Authentication Loading */}
+        {authLoading && (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500"></div>
+            <p className="text-gray-400 mt-4">Checking authentication...</p>
+          </div>
+        )}
+
+        {/* Not Signed In */}
+        {!authLoading && !user && (
+          <div className="bg-red-900/50 border border-red-500 rounded-lg p-6 text-center">
+            <div className="text-red-400 text-4xl mb-4">⚠️</div>
+            <h3 className="font-medium text-red-200 text-lg mb-2">Please Sign In</h3>
+            <p className="text-red-300 mb-4">You need to be signed in to view your projects.</p>
+            <button
+              onClick={() => window.location.href = '/'}
+              className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors duration-200"
+            >
+              Go to Home to Sign In
+            </button>
+          </div>
+        )}
+
         {/* Error Banner */}
-        {error && (
+        {!authLoading && user && error && (
           <div className="bg-red-900/50 border border-red-500 rounded-lg p-4 mb-6">
             <div className="flex items-center">
               <div className="text-red-400 mr-3">⚠️</div>
@@ -194,7 +231,10 @@ const MyProjectsPage: React.FC = () => {
           </div>
         )}
 
-        {/* Controls */}
+        {/* Main Content - Only show when user is authenticated */}
+        {!authLoading && user && (
+          <>
+            {/* Controls */}
         <div className="flex items-center gap-4 mb-6">
           <input
             type="text"
@@ -346,32 +386,34 @@ const MyProjectsPage: React.FC = () => {
             <div><kbd className="bg-gray-700 px-1 rounded">Space</kbd> Select</div>
           </div>
         </div>
-      </div>
 
-      {/* Delete Confirmation Modal */}
-      {confirmDeleteId && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 max-w-md mx-4 border border-gray-700">
-            <h3 className="text-lg font-medium text-white mb-2">Delete Project</h3>
-            <p className="text-gray-300 mb-4">Are you sure you want to delete this project? This action cannot be undone.</p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setConfirmDeleteId(null)}
-                className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleDelete(confirmDeleteId)}
-                disabled={deletingId === confirmDeleteId}
-                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors disabled:opacity-50"
-              >
-                {deletingId === confirmDeleteId ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            {/* Delete Confirmation Modal */}
+            {confirmDeleteId && (
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+                <div className="bg-gray-800 rounded-lg p-6 max-w-md mx-4 border border-gray-700">
+                  <h3 className="text-lg font-medium text-white mb-2">Delete Project</h3>
+                  <p className="text-gray-300 mb-4">Are you sure you want to delete this project? This action cannot be undone.</p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleDelete(confirmDeleteId)}
+                      disabled={deletingId === confirmDeleteId}
+                      className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors disabled:opacity-50"
+                    >
+                      {deletingId === confirmDeleteId ? 'Deleting...' : 'Delete'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 };
