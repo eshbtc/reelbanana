@@ -1,14 +1,13 @@
-const express = require('express');
+const functions = require('firebase-functions');
 const { Firestore } = require('@google-cloud/firestore');
 
-const app = express();
 const firestore = new Firestore();
 
 /**
  * Cloud Function to handle share links
  * Generates HTML with proper meta tags for social media sharing
  */
-app.get('/share/:shareId', async (req, res) => {
+exports.shareHandler = functions.https.onRequest(async (req, res) => {
   const { shareId } = req.params;
   
   try {
@@ -105,7 +104,7 @@ app.get('/share/:shareId', async (req, res) => {
             This movie was created using ReelBanana - the revolutionary AI-powered storytelling platform 
             that turns your ideas into professional movies in minutes.
         </p>
-        <a href="https://reelbanana.com" class="cta-button">
+        <a href="https://reel-banana-35a54.web.app" class="cta-button">
             Create Your Own Movie
         </a>
         
@@ -128,7 +127,7 @@ app.get('/share/:shareId', async (req, res) => {
     <script>
         // Redirect to main app after a short delay
         setTimeout(() => {
-            window.location.href = 'https://reelbanana.com';
+            window.location.href = 'https://reel-banana-35a54.web.app';
         }, 10000);
     </script>
 </body>
@@ -142,15 +141,3 @@ app.get('/share/:shareId', async (req, res) => {
     res.status(500).send('Error generating share page');
   }
 });
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-});
-
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-  console.log(`Share handler service listening on port ${PORT}`);
-});
-
-module.exports = app;
