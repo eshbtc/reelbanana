@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Scene } from './types';
 import AnimatedLoader from './components/AnimatedLoader';
+import { getCurrentUser } from './services/authService';
 
 // Define the structure of the props
 interface RenderingScreenProps {
   scenes: Scene[];
+  emotion?: string;
+  proPolish?: boolean;
   onRenderComplete: (url: string, projectId?: string) => void;
   onRenderFail: (errorMessage: string) => void;
 }
@@ -18,6 +21,7 @@ type RenderStage =
   | 'aligning'
   | 'composing'
   | 'rendering'
+  | 'polishing'
   | 'done';
 
 const STAGE_MESSAGES: Record<RenderStage, string> = {
@@ -28,12 +32,13 @@ const STAGE_MESSAGES: Record<RenderStage, string> = {
   aligning: 'Generating synchronized captions...',
   composing: 'Creating musical score...',
   rendering: 'Assembling the final movie...',
+  polishing: 'Applying Pro Polish (upscale + motion)...',
   done: 'Your movie is ready!',
 };
 
 import { API_ENDPOINTS, apiCall } from './config/apiConfig';
 
-const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderComplete, onRenderFail }) => {
+const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'neutral', proPolish = false, onRenderComplete, onRenderFail }) => {
   const [stage, setStage] = useState<RenderStage>('idle');
   const [progress, setProgress] = useState(0); // For uploads, 0 to 100
 
@@ -69,7 +74,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderCompl
         setStage('narrating');
         const narrationScript = scenes.map(s => s.narration).join(' ');
         const { gsAudioPath } = await apiCall(API_ENDPOINTS.narrate, 
-          { projectId, narrationScript }, 
+          { projectId, narrationScript, emotion }, 
           'Failed to generate narration'
         );
 
@@ -101,9 +106,29 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderCompl
           'Failed to render video'
         );
 
-        // 7. Complete
+        // 7. Optional polish
+        let finalUrl = videoUrl;
+        try { sessionStorage.setItem('lastRenderOriginalUrl', videoUrl); } catch {}
+        const polishEnabledFlag = (import.meta as any)?.env?.VITE_ENABLE_POLISH === 'true';
+        if (proPolish && polishEnabledFlag) {
+          setStage('polishing');
+          try {
+            const currentUser = getCurrentUser();
+            const { polishedUrl } = await apiCall(API_ENDPOINTS.polish, { 
+              projectId, 
+              videoUrl, 
+              userId: currentUser?.uid 
+            }, 'Failed to polish video');
+            if (polishedUrl) finalUrl = polishedUrl;
+          } catch (e) {
+            console.warn('Polish failed, using original video');
+          }
+        }
+        try { sessionStorage.setItem('lastRenderPolishedUrl', finalUrl); } catch {}
+
+        // 8. Complete
         setStage('done');
-        onRenderComplete(videoUrl, projectId);
+        onRenderComplete(finalUrl, projectId);
 
       } catch (error) {
         if (error instanceof Error) {

@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, getUserProfile, updateUserApiKey, getUserUsageStats } from '../services/authService';
 import { getCurrentUser } from '../services/authService';
+import { API_ENDPOINTS } from '../config/apiConfig';
+import { authFetch } from '../lib/authFetch';
 
 interface UserDashboardProps {
   onClose: () => void;
@@ -23,8 +25,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
     } | undefined,
   });
   const [customApiKey, setCustomApiKey] = useState('');
+  const [falApiKey, setFalApiKey] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showFalApiKey, setShowFalApiKey] = useState(false);
+  const [hasFalApiKey, setHasFalApiKey] = useState(false);
 
   useEffect(() => {
     loadUserData();
@@ -42,8 +47,19 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
 
       setUserProfile(profile);
       setUsageStats(stats);
-      // Don't load API key for security - user must re-enter it
+      // Don't load API keys for security - user must re-enter them
       setCustomApiKey('');
+      setFalApiKey('');
+      
+      // Check if user has FAL API key
+      try {
+        const falKeyResponse = await authFetch(`${API_ENDPOINTS.apiKey.check}?keyType=fal`);
+        const falKeyData = await falKeyResponse.json();
+        setHasFalApiKey(falKeyData.hasApiKey || false);
+      } catch (error) {
+        console.error('Error checking FAL API key:', error);
+        setHasFalApiKey(false);
+      }
     } catch (error) {
       console.error('Error loading user data:', error);
     }
@@ -84,6 +100,65 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
     } catch (error) {
       console.error('Error clearing API key:', error);
       alert('Failed to clear API key. Please try again.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleUpdateFalApiKey = async () => {
+    const currentUser = getCurrentUser();
+    if (!currentUser || !falApiKey.trim()) return;
+
+    setIsUpdating(true);
+    try {
+      const response = await authFetch(API_ENDPOINTS.apiKey.store, {
+        method: 'POST',
+        body: {
+          apiKey: falApiKey.trim(),
+          keyType: 'fal'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to store FAL API key');
+      }
+
+      setFalApiKey('');
+      setHasFalApiKey(true);
+      alert('FAL API key stored securely! You can now use Pro Polish features.');
+    } catch (error) {
+      console.error('Error storing FAL API key:', error);
+      alert('Failed to store FAL API key. Please check the format and try again.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleClearFalApiKey = async () => {
+    const currentUser = getCurrentUser();
+    if (!currentUser) return;
+
+    if (!confirm('Are you sure you want to clear your FAL API key? This action cannot be undone.')) return;
+
+    setIsUpdating(true);
+    try {
+      const response = await authFetch(API_ENDPOINTS.apiKey.remove, {
+        method: 'DELETE',
+        body: { keyType: 'fal' }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to clear FAL API key');
+      }
+
+      setFalApiKey('');
+      setHasFalApiKey(false);
+      alert('FAL API key securely cleared!');
+    } catch (error) {
+      console.error('Error clearing FAL API key:', error);
+      alert('Failed to clear FAL API key. Please try again.');
     } finally {
       setIsUpdating(false);
     }
@@ -306,6 +381,71 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
                     className="bg-red-500 hover:bg-red-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-colors"
                   >
                     Clear API Key
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* FAL API Key Management Section */}
+        <div className="mb-8">
+          <h3 className="text-xl font-semibold text-white mb-6 flex items-center gap-3">
+            <div className="p-2 bg-orange-500/20 rounded-lg">
+              <svg className="w-6 h-6 text-orange-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+              </svg>
+            </div>
+            FAL API Key Management
+          </h3>
+          <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700">
+            <p className="text-gray-300 mb-4">
+              Add your own FAL API key to use Pro Polish features (video upscaling and interpolation) with your own credits. 
+              Your API key is encrypted and stored securely. This allows unlimited video enhancement with your own FAL resources.
+            </p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  FAL API Key
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type={showFalApiKey ? 'text' : 'password'}
+                    value={falApiKey}
+                    onChange={(e) => setFalApiKey(e.target.value)}
+                    placeholder="Enter your FAL API key (will be encrypted)..."
+                    className="flex-1 bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white focus:ring-orange-500 focus:border-orange-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowFalApiKey(!showFalApiKey)}
+                    className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+                  >
+                    {showFalApiKey ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Format: Your FAL API key (e.g., 7126914c-9ee8-44f8-ba99-4620d2804af7:d6c4efbb379c2e6e7bfa1ee7aebfd46b)
+                </p>
+              </div>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={handleUpdateFalApiKey}
+                  disabled={isUpdating || !falApiKey.trim()}
+                  className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-colors"
+                >
+                  {isUpdating ? 'Encrypting...' : 'Store FAL Key Securely'}
+                </button>
+                
+                {hasFalApiKey && (
+                  <button
+                    onClick={handleClearFalApiKey}
+                    disabled={isUpdating}
+                    className="bg-red-500 hover:bg-red-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-colors"
+                  >
+                    Clear FAL Key
                   </button>
                 )}
               </div>

@@ -151,19 +151,27 @@ async function decryptApiKey(ciphertext, userId) {
   }
 }
 
-// Store API key securely
+// Store API key securely (supports both Google and FAL keys)
 app.post('/store-api-key', appCheckVerification, verifyToken, async (req, res) => {
   try {
-    const { apiKey } = req.body;
+    const { apiKey, keyType = 'google' } = req.body;
     const userId = req.user.uid;
 
     if (!apiKey || typeof apiKey !== 'string') {
       return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Invalid API key');
     }
 
-    // Validate API key format (basic validation)
-    if (!apiKey.startsWith('AIza') || apiKey.length < 30) {
-      return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Invalid API key format');
+    // Validate API key format based on type
+    if (keyType === 'google') {
+      if (!apiKey.startsWith('AIza') || apiKey.length < 30) {
+        return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Invalid Google API key format');
+      }
+    } else if (keyType === 'fal') {
+      if (!apiKey.includes(':') || apiKey.length < 20) {
+        return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Invalid FAL API key format');
+      }
+    } else {
+      return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Invalid key type. Must be "google" or "fal"');
     }
 
     // Encrypt the API key
@@ -172,11 +180,12 @@ app.post('/store-api-key', appCheckVerification, verifyToken, async (req, res) =
     // Store in Firestore (only encrypted version)
     const db = admin.firestore();
     await db.collection('user_api_keys').doc(userId).set({
-      encryptedApiKey: encryptedKey,
-      hasApiKey: true,
+      [`encryptedApiKey_${keyType}`]: encryptedKey,
+      [`hasApiKey_${keyType}`]: true,
+      [`keyType_${keyType}`]: keyType,
       lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
       keyVersion: '1.0'
-    });
+    }, { merge: true });
 
     res.json({ success: true, message: 'API key stored securely', requestId: req.requestId });
   } catch (error) {
@@ -209,15 +218,10 @@ app.post('/use-api-key', appCheckVerification, verifyToken, async (req, res) => 
     // Make request to Gemini API using the decrypted key
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${decryptedKey}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: prompt
-          }]
-        }]
+        generationConfig: { responseMimeType: 'application/json' },
+        contents: [{ parts: [{ text: prompt }] }]
       })
     });
 
@@ -233,34 +237,91 @@ app.post('/use-api-key', appCheckVerification, verifyToken, async (req, res) => 
   }
 });
 
-// Check if user has API key
+// Check if user has API key (supports both Google and FAL keys)
 app.get('/check-api-key', appCheckVerification, verifyToken, async (req, res) => {
   try {
     const userId = req.user.uid;
+    const { keyType = 'google' } = req.query;
     const db = admin.firestore();
     
     const keyDoc = await db.collection('user_api_keys').doc(userId).get();
-    const hasApiKey = keyDoc.exists && keyDoc.data().hasApiKey;
+    const keyData = keyDoc.exists ? keyDoc.data() : {};
     
-    res.json({ hasApiKey, requestId: req.requestId });
+    const hasApiKey = keyDoc.exists && keyData[`hasApiKey_${keyType}`] === true;
+    
+    res.json({ 
+      hasApiKey, 
+      keyType: keyData[`keyType_${keyType}`] || null,
+      requestId: req.requestId 
+    });
   } catch (error) {
     console.error('Error checking API key:', error);
     return sendError(req, res, 500, 'INTERNAL', 'Failed to check API key');
   }
 });
 
-// Remove API key
+// Remove API key (supports both Google and FAL keys)
 app.delete('/remove-api-key', appCheckVerification, verifyToken, async (req, res) => {
   try {
     const userId = req.user.uid;
+    const { keyType = 'google' } = req.body;
     const db = admin.firestore();
     
-    await db.collection('user_api_keys').doc(userId).delete();
+    const keyDoc = await db.collection('user_api_keys').doc(userId).get();
+    if (!keyDoc.exists) {
+      return sendError(req, res, 404, 'NOT_FOUND', 'No API key found');
+    }
     
-    res.json({ success: true, message: 'API key removed', requestId: req.requestId });
+    const keyData = keyDoc.data();
+    if (keyData[`hasApiKey_${keyType}`]) {
+      // Remove the specific key type
+      await db.collection('user_api_keys').doc(userId).update({
+        [`encryptedApiKey_${keyType}`]: admin.firestore.FieldValue.delete(),
+        [`hasApiKey_${keyType}`]: admin.firestore.FieldValue.delete(),
+        [`keyType_${keyType}`]: admin.firestore.FieldValue.delete()
+      });
+    }
+    
+    res.json({ success: true, message: `${keyType} API key removed`, requestId: req.requestId });
   } catch (error) {
     console.error('Error removing API key:', error);
     return sendError(req, res, 500, 'INTERNAL', 'Failed to remove API key');
+  }
+});
+
+// Get API key for service use (supports both Google and FAL keys)
+app.post('/get-api-key', appCheckVerification, verifyToken, async (req, res) => {
+  try {
+    const { keyType = 'google' } = req.body;
+    const userId = req.user.uid;
+    const db = admin.firestore();
+    
+    const keyDoc = await db.collection('user_api_keys').doc(userId).get();
+    if (!keyDoc.exists) {
+      return sendError(req, res, 404, 'NOT_FOUND', 'No API key found');
+    }
+    
+    const keyData = keyDoc.data();
+    if (!keyData[`hasApiKey_${keyType}`]) {
+      return sendError(req, res, 404, 'NOT_FOUND', `No ${keyType} API key found`);
+    }
+    
+    const encryptedKey = keyData[`encryptedApiKey_${keyType}`];
+    if (!encryptedKey) {
+      return sendError(req, res, 404, 'NOT_FOUND', 'Encrypted API key not found');
+    }
+    
+    // Decrypt the API key
+    const decryptedKey = await decryptApiKey(encryptedKey, userId);
+    
+    res.json({ 
+      apiKey: decryptedKey, 
+      keyType: keyType,
+      requestId: req.requestId 
+    });
+  } catch (error) {
+    console.error('Error retrieving API key:', error);
+    return sendError(req, res, 500, 'INTERNAL', 'Failed to retrieve API key');
   }
 });
 
