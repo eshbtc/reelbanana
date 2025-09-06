@@ -1,37 +1,16 @@
-// Gemini API service with hybrid security approach, caching, and user authentication
-import { GoogleGenAI, Type, Modality } from "@google/genai";
+// Firebase AI Logic service with native Gemini and nano-bana integration
+import { getAI, getGenerativeModel, VertexAIBackend, ResponseModality } from 'firebase/ai';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
 import { apiConfig } from '../config/apiConfig';
 import { getCurrentUser, getUserProfile, recordUsage, checkUserCredits } from './authService';
 
-// Hybrid approach: Use user's API key, fallback to environment variable
-const getApiKey = async (): Promise<string> => {
-  const currentUser = getCurrentUser();
-  
-  if (currentUser) {
-    try {
-      const userProfile = await getUserProfile(currentUser.uid);
-      if (userProfile?.apiKey) {
-        return userProfile.apiKey;
-      }
-    } catch (error) {
-      console.warn('Failed to get user API key, falling back to environment key:', error);
-    }
-  }
-  
-  // Fallback to environment variable
-  const envApiKey = process.env.REEL_BANANA_GEMINI_API_KEY || process.env.API_KEY;
-  if (!envApiKey) {
-    throw new Error("No API key available. Please sign in and add your Gemini API key, or contact support.");
-  }
-  
-  return envApiKey;
-};
-
-// Initialize Firebase for caching
+// Initialize Firebase for AI Logic and caching
 const firebaseApp = initializeApp(apiConfig.firebase);
 const db = getFirestore(firebaseApp);
+
+// Initialize Firebase AI Logic with Vertex AI backend (global for nano-bana/gemini-2.5-flash-image-preview)
+const ai = getAI(firebaseApp, { backend: new VertexAIBackend('global') });
 
 // Cache collection name
 const CACHE_COLLECTION = 'generated_images_cache';
@@ -49,20 +28,20 @@ const generateCacheKey = (prompt: string, characterAndStyle: string): string => 
 };
 
 const storyResponseSchema = {
-    type: Type.OBJECT,
+    type: "object",
     properties: {
         scenes: {
-            type: Type.ARRAY,
+            type: "array",
             description: "An array of 4-8 scenes for the storyboard.",
             items: {
-                type: Type.OBJECT,
+                type: "object",
                 properties: {
                     prompt: {
-                        type: Type.STRING,
+                        type: "string",
                         description: "A detailed, visually rich prompt for an image generation model. Describe the scene, characters, setting, and mood in a single paragraph. Should be in English. Example: 'A cute, fluffy banana character, with big googly eyes and a cheerful smile, is surfing on a giant wave of milk. The sun is shining brightly in a clear blue sky, and other breakfast cereal characters are cheering from the shore.'",
                     },
                     narration: {
-                        type: Type.STRING,
+                        type: "string",
                         description: "A short narration for this scene, to be read by a voiceover artist. Around 1-2 sentences. Keep it concise and engaging.",
                     },
                 },
@@ -90,23 +69,23 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
         if (currentUser) {
             const hasCredits = await checkUserCredits(currentUser.uid, 1);
             if (!hasCredits) {
-                throw new Error("Insufficient credits. Please add your own API key or contact support.");
+                throw new Error("Insufficient credits. Please contact support for more credits.");
             }
         }
 
-        const apiKey = await getApiKey();
-        const ai = new GoogleGenAI({ apiKey });
-        
-        const result = await ai.models.generateContent({
+        // Create a GenerativeModel instance with Firebase AI Logic
+        const model = getGenerativeModel(ai, { 
             model: "gemini-2.5-flash",
-            contents: `Create a short, creative, and kid-friendly storyboard script about "${topic}". The story should have a clear beginning, middle, and end.`,
-            config: {
+            generationConfig: {
                 responseMimeType: "application/json",
-                responseSchema: storyResponseSchema,
-            },
+            }
         });
+        
+        const result = await model.generateContent(
+            `Create a short, creative, and kid-friendly storyboard script about "${topic}". The story should have a clear beginning, middle, and end.`
+        );
 
-        const jsonStr = result.text.trim();
+        const jsonStr = result.response.text().trim();
         const response = JSON.parse(jsonStr);
 
         if (response && response.scenes && Array.isArray(response.scenes)) {
@@ -150,12 +129,12 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
 };
 
 const sequentialPromptsSchema = {
-    type: Type.OBJECT,
+    type: "object",
     properties: {
         prompts: {
-            type: Type.ARRAY,
+            type: "array",
             description: "An array of 5 sequential, continuous prompts for an image generation model.",
-            items: { type: Type.STRING },
+            items: { type: "string" },
         },
     },
     required: ["prompts"],
@@ -202,20 +181,20 @@ Example Output:
 4. The knight pushes with all his might, muscles straining, the door beginning to grind open with a low rumble.
 5. A sliver of brilliant golden light spills from the opening, illuminating the knight's astonished eyes.`
 
-        const apiKey = await getApiKey();
-        const ai = new GoogleGenAI({ apiKey });
-        
-        const shotDirectorResult = await ai.models.generateContent({
+        // Create a GenerativeModel instance for shot director
+        const shotDirectorModel = getGenerativeModel(ai, { 
             model: "gemini-2.5-flash",
-            contents: `Scene Description: "${characterAndStyle}. ${mainPrompt}"`,
-            config: {
-                systemInstruction: directorSystemInstruction,
+            systemInstruction: directorSystemInstruction,
+            generationConfig: {
                 responseMimeType: "application/json",
-                responseSchema: sequentialPromptsSchema,
-            },
+            }
         });
+        
+        const shotDirectorResult = await shotDirectorModel.generateContent(
+            `Scene Description: "${characterAndStyle}. ${mainPrompt}"`
+        );
 
-        const jsonStr = shotDirectorResult.text.trim();
+        const jsonStr = shotDirectorResult.response.text().trim();
         const shotList = JSON.parse(jsonStr);
 
         if (!shotList || !shotList.prompts || shotList.prompts.length === 0) {
@@ -227,21 +206,40 @@ Example Output:
         for (const prompt of shotList.prompts) {
             const finalPrompt = `${characterAndStyle}. Maintain this character and style consistently. A cinematic, high quality, professional photograph of: ${prompt}`;
             
-            const response = await ai.models.generateImages({
-                model: 'imagen-4.0-generate-001',
-                prompt: finalPrompt,
-                config: {
-                    numberOfImages: 1,
-                    outputMimeType: 'image/jpeg',
-                    aspectRatio: '16:9',
-                },
+            // Create a GenerativeModel instance using nano-bana (gemini-2.5-flash-image-preview) for contest
+            const imagenModel = getGenerativeModel(ai, { 
+                model: 'gemini-2.5-flash-image-preview',
+                generationConfig: {
+                    responseModalities: [ResponseModality.TEXT, ResponseModality.IMAGE],
+                }
             });
+            
+            const response = await imagenModel.generateContent(finalPrompt);
 
-            if (response.generatedImages && response.generatedImages.length > 0) {
-                const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
-                base64Images.push(`data:image/jpeg;base64,${base64ImageBytes}`);
-            } else {
-                // If one image fails, we'll stop the sequence for this scene
+            // Handle the generated image using Firebase AI Logic nano-bana API
+            try {
+                const inlineDataParts = response.response.inlineDataParts();
+                if (inlineDataParts?.[0]) {
+                    const image = inlineDataParts[0].inlineData;
+                    base64Images.push(`data:${image.mimeType};base64,${image.data}`);
+                } else {
+                    // Fallback: check candidates for interleaved content
+                    const candidates = response.response.candidates;
+                    if (candidates?.[0]?.content?.parts) {
+                        for (const part of candidates[0].content.parts) {
+                            if (part.inlineData) {
+                                const image = part.inlineData;
+                                base64Images.push(`data:${image.mimeType};base64,${image.data}`);
+                                break;
+                            }
+                        }
+                    }
+                    if (base64Images.length === 0) {
+                        throw new Error(`No image generated for prompt: "${prompt}"`);
+                    }
+                }
+            } catch (err) {
+                console.error('Image generation failed:', err);
                 throw new Error(`An image in the sequence failed to generate for prompt: "${prompt}"`);
             }
         }
@@ -318,32 +316,47 @@ const fileToGenerativePart = (base64Data: string) => {
  */
 export const editImageSequence = async (base64Images: string[], editPrompt: string): Promise<string[]> => {
     try {
-        const apiKey = await getApiKey();
-        const ai = new GoogleGenAI({ apiKey });
-        
         const editedImages: string[] = [];
         for (const image of base64Images) {
             const imagePart = fileToGenerativePart(image);
             
-            const response = await ai.models.generateContent({
+            // Create a GenerativeModel instance for image editing using Gemini (Imagen doesn't support image input yet)
+            const editModel = getGenerativeModel(ai, { 
                 model: 'gemini-2.5-flash-image-preview',
-                contents: {
-                    parts: [
-                        imagePart,
-                        { text: editPrompt },
-                    ],
-                },
-                config: {
-                    responseModalities: [Modality.IMAGE, Modality.TEXT],
-                },
+                generationConfig: {
+                    responseModalities: [ResponseModality.IMAGE, ResponseModality.TEXT],
+                }
             });
+            
+            const response = await editModel.generateContent([
+                imagePart,
+                { text: editPrompt }
+            ]);
 
-            const imageResponsePart = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
-            if (imageResponsePart?.inlineData) {
-                const mimeType = imageResponsePart.inlineData.mimeType;
-                const base64Data = imageResponsePart.inlineData.data;
-                editedImages.push(`data:${mimeType};base64,${base64Data}`);
-            } else {
+            // Handle the edited image using Firebase AI Logic API
+            try {
+                const inlineDataParts = response.response.inlineDataParts();
+                if (inlineDataParts?.[0]) {
+                    const editedImage = inlineDataParts[0].inlineData;
+                    editedImages.push(`data:${editedImage.mimeType};base64,${editedImage.data}`);
+                } else {
+                    // Fallback: check candidates for interleaved content
+                    const candidates = response.response.candidates;
+                    if (candidates?.[0]?.content?.parts) {
+                        for (const part of candidates[0].content.parts) {
+                            if (part.inlineData) {
+                                const editedImage = part.inlineData;
+                                editedImages.push(`data:${editedImage.mimeType};base64,${editedImage.data}`);
+                                break;
+                            }
+                        }
+                    }
+                    if (editedImages.length === 0) {
+                        throw new Error("The AI could not edit one of the images. Please try a different prompt.");
+                    }
+                }
+            } catch (err) {
+                console.error('Image editing failed:', err);
                 throw new Error("The AI could not edit one of the images. Please try a different prompt.");
             }
         }
