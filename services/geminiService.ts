@@ -135,7 +135,23 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
             const result = await response.json();
             const jsonStr = result.candidates[0].content.parts[0].text.trim();
             const responseData = JSON.parse(jsonStr);
-            return responseData.scenes;
+            
+            // Validate the response format
+            if (responseData && responseData.scenes && Array.isArray(responseData.scenes)) {
+                const scenes = responseData.scenes.filter(
+                    (scene: any): scene is StoryScene =>
+                        typeof scene.prompt === 'string' && typeof scene.narration === 'string'
+                );
+                
+                // Record successful usage
+                if (currentUser) {
+                    await recordUsage(currentUser.uid, 'story_generation', 1, true);
+                }
+                
+                return scenes;
+            } else {
+                throw new Error("Invalid story format received from API.");
+            }
         }
 
         const jsonStr = result.response.text().trim();

@@ -1,8 +1,9 @@
-// Centralized App Check token helper (dynamic import for compatibility)
+// Centralized App Check token helper
+import { getToken } from 'firebase/app-check';
+import { appCheck } from './firebase';
+
 export const getAppCheckToken = async (): Promise<string | null> => {
   try {
-    const { getToken } = await import('firebase/app-check');
-    const { appCheck } = await import('./firebase');
     const tokenResponse = await getToken(appCheck, false);
     return tokenResponse.token;
   } catch (error) {

@@ -84,16 +84,18 @@ const AI_STUDIO_CONFIG: ApiConfig = {
 
 // Determine which configuration to use based on environment
 const getConfig = (): ApiConfig => {
-  const environment = process.env.NODE_ENV || 'development';
-  
-  switch (environment) {
-    case 'production':
-      return PRODUCTION_CONFIG;
-    case 'ai-studio':
-      return AI_STUDIO_CONFIG;
-    default:
-      return DEVELOPMENT_CONFIG;
+  // In production (Firebase Hosting), always use production config
+  if (import.meta.env.PROD) {
+    return PRODUCTION_CONFIG;
   }
+  
+  // For development, check if we're on the live domain
+  if (typeof window !== 'undefined' && window.location.hostname === 'reelbanana.ai') {
+    return PRODUCTION_CONFIG;
+  }
+  
+  // Default to production config for deployed environments
+  return PRODUCTION_CONFIG;
 };
 
 export const apiConfig = getConfig();
