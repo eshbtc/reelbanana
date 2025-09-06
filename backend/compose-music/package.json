@@ -10,7 +10,10 @@
     "@google-cloud/storage": "^7.11.0",
     "cors": "^2.8.5",
     "express": "^4.19.2",
-    "firebase-admin": "^12.6.0"
+    "firebase-admin": "^12.6.0",
+    "genkit": "^0.9.0",
+    "@genkit-ai/firebase": "^0.9.0",
+    "@genkit-ai/vertexai": "^0.9.0"
   },
   "engines": {
     "node": ">=18.0.0"

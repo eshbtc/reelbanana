@@ -2,6 +2,10 @@ const express = require('express');
 const cors = require('cors');
 const { Storage } = require('@google-cloud/storage');
 const admin = require('firebase-admin');
+const { configureGenkit } = require('@genkit-ai/core');
+const { firebase } = require('@genkit-ai/firebase');
+const { vertexAI, gemini15Flash } = require('@genkit-ai/vertexai');
+const { generate } = require('@genkit-ai/ai/model');
 
 const app = express();
 app.use(express.json());
@@ -14,6 +18,15 @@ if (!admin.apps.length) {
     projectId: 'reel-banana-35a54'
   });
 }
+
+// Configure Firebase Genkit for server-side AI
+configureGenkit({
+  plugins: [
+    firebase(),
+    vertexAI({ projectId: 'reel-banana-35a54', location: 'us-central1' })
+  ],
+  logLevel: 'info'
+});
 
 // Observability & Error helpers
 const { randomUUID } = require('crypto');
@@ -67,8 +80,36 @@ const appCheckVerification = async (req, res, next) => {
 const storage = new Storage();
 const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 
-// Music prompt generation using keyword analysis
-function generateMusicPrompt(narrationScript) {
+// AI-powered music prompt generation using Firebase Genkit with Vertex AI
+async function generateMusicPromptWithAI(narrationScript) {
+  const prompt = `Analyze the following narration script and provide a short, descriptive musical prompt (e.g., "An upbeat, whimsical, adventurous orchestral score for a children's story, with a sense of wonder and a triumphant finish."). Only return the prompt text, nothing else. Script: "${narrationScript}"`;
+  
+  try {
+    console.log('🎵 Generating music prompt with Firebase Genkit + Vertex AI...');
+    
+    // Use Firebase Genkit with Vertex AI Gemini model
+    const response = await generate({
+      model: gemini15Flash,
+      prompt: prompt,
+      config: {
+        maxOutputTokens: 100,
+        temperature: 0.7
+      }
+    });
+    
+    const aiResponse = response.text?.trim();
+    console.log('🎵 AI-generated music prompt:', aiResponse);
+    
+    return aiResponse || generateFallbackPrompt(narrationScript);
+    
+  } catch (error) {
+    console.log('🎵 AI generation failed, using fallback:', error.message);
+    return generateFallbackPrompt(narrationScript);
+  }
+}
+
+// Fallback music prompt generation
+function generateFallbackPrompt(narrationScript) {
   const script = narrationScript.toLowerCase();
   
   if (script.includes('adventure') || script.includes('journey') || script.includes('quest')) {
@@ -77,8 +118,6 @@ function generateMusicPrompt(narrationScript) {
     return "A mysterious, atmospheric score with haunting strings and subtle percussion";
   } else if (script.includes('happy') || script.includes('joy') || script.includes('celebration')) {
     return "An upbeat, cheerful orchestral score with bright melodies and uplifting harmonies";
-  } else if (script.includes('sad') || script.includes('melancholy') || script.includes('tear')) {
-    return "A gentle, melancholic score with soft strings and emotional depth";
   } else if (script.includes('magic') || script.includes('fantasy') || script.includes('wonder')) {
     return "A whimsical, magical orchestral score with sparkling melodies and enchanting harmonies";
   } else {
@@ -128,8 +167,8 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
         cached: true
       });
     }
-    // 1. Generate music prompt based on narration content analysis
-    const musicPrompt = generateMusicPrompt(narrationScript);
+    // 1. Generate music prompt using AI analysis of narration content
+    const musicPrompt = await generateMusicPromptWithAI(narrationScript);
     console.log(`Generated music prompt: "${musicPrompt}"`);
 
     // 2. For hackathon demo, create a placeholder audio file
