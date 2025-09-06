@@ -19,8 +19,6 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState<string>('');
   const [filterText, setFilterText] = useState<string>('');
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
 
