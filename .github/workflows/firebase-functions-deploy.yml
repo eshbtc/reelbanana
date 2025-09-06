@@ -16,6 +16,6 @@ jobs:
         with:
           args: deploy --only functions
         env:
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_REEL_BANANA_35A54 }}
+          GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_REEL_BANANA_35A54 }}
           PROJECT_ID: reel-banana-35a54
 
