@@ -28,6 +28,13 @@ interface ProjectData {
     topic: string;
     characterAndStyle: string;
     scenes: Scene[];
+    characterRefs?: string[];
+    characterOption?: {
+        id: string;
+        name: string;
+        description: string;
+        images: string[];
+    };
 }
 
 /**
@@ -105,6 +112,7 @@ export interface ProjectSummary {
     createdAt?: string;
     updatedAt?: string;
     sceneCount: number;
+    thumbnailUrl?: string;
 }
 
 /**
@@ -128,6 +136,7 @@ export const listMyProjects = async (userId: string, limit: number = 20): Promis
                 createdAt: data.createdAt?.toDate?.()?.toISOString?.() || undefined,
                 updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || undefined,
                 sceneCount: Array.isArray(data.scenes) ? data.scenes.length : 0,
+                thumbnailUrl: Array.isArray(data.scenes) && data.scenes[0]?.imageUrls?.[0] ? data.scenes[0].imageUrls[0] : undefined,
             } as ProjectSummary;
         });
     } catch (error) {
@@ -164,6 +173,31 @@ export const renameProject = async (projectId: string, newTopic: string): Promis
     }
 };
 
+/**
+ * Duplicate an existing project. Returns the new project id.
+ */
+export const duplicateProject = async (projectId: string): Promise<string> => {
+    try {
+        const srcRef = doc(db, PROJECTS_COLLECTION, projectId);
+        const snap = await getDoc(srcRef);
+        if (!snap.exists()) throw new Error('Source project not found');
+        const data: any = snap.data();
+        const newTopic = `Copy of ${data.topic || 'Untitled'}`;
+        const currentUser = getCurrentUser();
+        const dstRef = await addDoc(collection(db, PROJECTS_COLLECTION), {
+            ...data,
+            topic: newTopic,
+            userId: currentUser?.uid || data.userId,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+        });
+        return dstRef.id;
+    } catch (error) {
+        console.error('Error duplicating project:', error);
+        throw new Error('Could not duplicate the project.');
+    }
+};
+
 // --- Public Gallery ---
 
 interface PublicMovie {
@@ -192,4 +226,21 @@ export const publishMovie = async (movie: Omit<PublicMovie, 'createdAt'>): Promi
         // Non-fatal for user flow
         throw error;
     }
+};
+
+// Load pre-generated demo characters from Firestore
+export const getDemoCharacters = async (templateId?: string): Promise<Array<{ id: string; name: string; description: string; images: string[] }>> => {
+    const db = getFirestore(firebaseApp);
+    const col = collection(db, 'demo_characters');
+    const snap = await getDocs(col as any).catch(() => null as any);
+    if (!snap) return [];
+    const items: any[] = [];
+    // @ts-ignore
+    snap.forEach((doc: any) => {
+        const data = doc.data();
+        if (!templateId || data.templateId === templateId) {
+            items.push({ id: doc.id, name: data.name, description: data.description, images: data.images || [] });
+        }
+    });
+    return items;
 };

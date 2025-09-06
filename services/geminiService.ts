@@ -2,6 +2,7 @@
 import { getAI, getGenerativeModel, VertexAIBackend, ResponseModality } from 'firebase/ai';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 import { firebaseApp } from '../lib/firebase';
+import type { CharacterOption } from '../types';
 import { getCurrentUser, getUserProfile, recordUsage, checkUserCredits, hasUserApiKey, TokenUsage } from './authService';
 import { API_ENDPOINTS } from '../config/apiConfig';
 import { authFetch } from '../lib/authFetch';
@@ -858,4 +859,73 @@ export const editImageSequence = async (base64Images: string[], editPrompt: stri
         }
         throw new Error(error instanceof Error ? error.message : "Failed to apply edits to the image sequence.");
     }
+};
+
+/**
+ * Generate a small set of character options (name + description + 1 image each)
+ * Uses gemini-2.5-flash for descriptors and gemini-2.5-flash-image-preview for images.
+ * Cheap default: 4 characters, 1 image per character.
+ */
+export const generateCharacterOptions = async (
+  topic: string,
+  count: number = 4,
+  styleHint?: string
+): Promise<CharacterOption[]> => {
+  const options: CharacterOption[] = [];
+  const currentUser = getCurrentUser();
+  // Guard: require auth so we can record usage/credits if desired
+  if (!currentUser) throw new Error('Please sign in to generate character options.');
+
+  // 1) Generate character descriptors
+  const model = getGenerativeModel(ai, {
+    model: 'gemini-2.5-flash',
+    generationConfig: { responseMimeType: 'application/json' },
+  });
+  const prompt = `Return ONLY JSON as {"characters":[{"name":"...","description":"..."}]}.
+Create ${count} distinct, kid-friendly characters that could star in a short story about "${topic}".
+Each description must combine appearance + personality + visual art style (1-2 sentences).
+${styleHint ? `Bias styles toward: ${styleHint}.` : ''}
+Example description: "A brave banana with a tiny red cape and bright eyes, painted in warm watercolor with soft edges."`;
+  const result = await model.generateContent(prompt);
+  let list: any[] = [];
+  try {
+    const raw = result.response.text().trim();
+    const json = JSON.parse(raw);
+    list = Array.isArray(json.characters) ? json.characters.slice(0, count) : [];
+  } catch (e) {
+    throw new Error('Failed to generate character list. Please try again.');
+  }
+
+  // 2) For each character, generate one image
+  for (const ch of list) {
+    const name = typeof ch.name === 'string' ? ch.name : 'Character';
+    const desc = typeof ch.description === 'string' ? ch.description : 'A friendly character.';
+    const imagenModel = getGenerativeModel(ai, {
+      model: 'gemini-2.5-flash-image-preview',
+      generationConfig: { responseModalities: [ResponseModality.TEXT, ResponseModality.IMAGE] },
+    });
+    const imgResp = await imagenModel.generateContent(`Portrait of ${desc}. ${styleHint ? `Style: ${styleHint}. `: ''}Centered, well-lit, plain background.`);
+    let dataUri: string | null = null;
+    try {
+      const inlineDataParts = imgResp.response.inlineDataParts();
+      if (inlineDataParts?.[0]) {
+        const image = inlineDataParts[0].inlineData;
+        dataUri = `data:${image.mimeType};base64,${image.data}`;
+      } else {
+        const candidates = imgResp.response.candidates;
+        if (candidates?.[0]?.content?.parts) {
+          for (const part of candidates[0].content.parts) {
+            if ((part as any).inlineData) {
+              const image = (part as any).inlineData;
+              dataUri = `data:${image.mimeType};base64,${image.data}`;
+              break;
+            }
+          }
+        }
+      }
+    } catch {}
+    if (!dataUri) throw new Error('Failed to generate a character image.');
+    options.push({ id: `${Date.now()}-${options.length}`, name, description: desc, images: [dataUri] });
+  }
+  return options;
 };

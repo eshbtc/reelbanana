@@ -5,10 +5,18 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   children: React.ReactNode;
+  panelClassName?: string; // Optional class override for the inner panel
 }
 
-const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, panelClassName }) => {
   if (!isOpen) return null;
+
+  // Close on Escape
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
 
   return (
     <div 
@@ -16,7 +24,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
       onClick={onClose}
     >
       <div 
-        className="bg-gray-800 rounded-lg shadow-xl w-full max-w-md m-4 p-6 border border-gray-700"
+        className={panelClassName || 'bg-gray-800 rounded-lg shadow-xl w-full max-w-md m-4 p-6 border border-gray-700'}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

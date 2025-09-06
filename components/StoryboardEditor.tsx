@@ -7,6 +7,7 @@ import SceneCard from './SceneCard';
 import Spinner from './Spinner';
 import { PlusIcon, SparklesIcon, SaveIcon, DocumentAddIcon } from './Icon';
 import { TEMPLATES } from '../lib/templates';
+import CharacterPicker from './CharacterPicker';
 
 interface StoryboardEditorProps {
   onPlayMovie: (scenes: Scene[]) => void;
@@ -34,6 +35,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showCharacterPicker, setShowCharacterPicker] = useState(false);
   const [renderMode, setRenderMode] = useState<'draft' | 'final'>('draft');
 
   // Effect to load project from URL on initial mount
@@ -390,6 +392,14 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                     className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition mb-2"
                     rows={2}
                 />
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    onClick={() => setShowCharacterPicker(true)}
+                    className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                  >
+                    Pick a Character
+                  </button>
+                </div>
                  {characterAndStyle.trim() && (
                     <div className="text-sm p-2 bg-green-900/50 border border-green-700 rounded-lg">
                         <p className="text-green-300">
@@ -506,6 +516,23 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
               </div>
             </div>
             <TemplatesModal open={showTemplates} onClose={() => setShowTemplates(false)} onPick={handleLoadTemplate} />
+            <CharacterPicker
+              topic={topic || 'an adventurous banana'}
+              open={showCharacterPicker}
+              onClose={() => setShowCharacterPicker(false)}
+              onPick={(opt) => {
+                setCharacterAndStyle(opt.description);
+                setCharacterRefs(opt.images);
+                setShowCharacterPicker(false);
+                setSaveStatus('idle');
+                // Persist to project if available
+                if (projectId) {
+                  try {
+                    updateProject(projectId, { topic, characterAndStyle: opt.description, scenes, characterRefs: opt.images } as any);
+                  } catch {}
+                }
+              }}
+            />
         </>
       )}
     </div>

@@ -23,3 +23,10 @@ export interface Scene {
   // Optional style preset for visual morphing
   stylePreset?: StylePreset;
 }
+
+export interface CharacterOption {
+  id: string;
+  name: string;
+  description: string; // character + style summary
+  images: string[]; // data URIs or https URLs
+}

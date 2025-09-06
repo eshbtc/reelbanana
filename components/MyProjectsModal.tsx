@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Modal from './Modal';
 import { getCurrentUser } from '../services/authService';
-import { listMyProjects, deleteProject, ProjectSummary, renameProject } from '../services/firebaseService';
+import { listMyProjects, deleteProject, ProjectSummary, renameProject, duplicateProject } from '../services/firebaseService';
 
 interface MyProjectsModalProps {
   isOpen: boolean;
@@ -10,9 +10,15 @@ interface MyProjectsModalProps {
 
 const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [filtered, setFiltered] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameText, setRenameText] = useState<string>('');
+  const [filterText, setFilterText] = useState<string>('');
 
   const load = async () => {
     const user = getCurrentUser();
@@ -25,6 +31,7 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
     try {
       const items = await listMyProjects(user.uid, 30);
       setProjects(items);
+      setFiltered(items);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load projects.');
     } finally {
@@ -43,57 +50,171 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this project? This cannot be undone.')) return;
     setDeletingId(id);
     try {
       await deleteProject(id);
       setProjects(prev => prev.filter(p => p.id !== id));
+      setFiltered(prev => prev.filter(p => p.id !== id));
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Delete failed');
     } finally {
       setDeletingId(null);
+      setConfirmDeleteId(null);
     }
   };
 
-  const handleRename = async (id: string, currentTitle: string) => {
-    const next = prompt('Rename project', currentTitle);
-    if (next == null) return;
-    const name = next.trim();
-    if (!name) return;
+  const startRename = (id: string, currentTitle: string) => {
+    setRenamingId(id);
+    setRenameText(currentTitle);
+  };
+
+  const saveRename = async (id: string) => {
+    const name = renameText.trim();
+    if (!name) { setRenamingId(null); return; }
     try {
       await renameProject(id, name);
       setProjects(prev => prev.map(p => (p.id === id ? { ...p, topic: name } : p)));
+      setFiltered(prev => prev.map(p => (p.id === id ? { ...p, topic: name } : p)));
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Rename failed');
+    } finally {
+      setRenamingId(null);
+    }
+  };
+
+  const cancelRename = () => {
+    setRenamingId(null);
+    setRenameText('');
+  };
+
+  const applyFilter = (value: string) => {
+    setFilterText(value);
+    const v = value.toLowerCase();
+    setFiltered(projects.filter(p => (p.topic || '').toLowerCase().includes(v)));
+  };
+
+  const handleDuplicate = async (id: string) => {
+    setDuplicatingId(id);
+    try {
+      await duplicateProject(id);
+      await load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Duplicate failed');
+    } finally {
+      setDuplicatingId(null);
+    }
+  };
+
+  const handleDuplicateAndOpen = async (id: string) => {
+    setDuplicatingId(id);
+    try {
+      const newId = await duplicateProject(id);
+      window.location.href = `/?projectId=${newId}`;
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Duplicate failed');
+    } finally {
+      setDuplicatingId(null);
+    }
+  };
+
+  const formatRelative = (iso?: string) => {
+    if (!iso) return 'n/a';
+    try {
+      const d = new Date(iso);
+      const s = Math.floor((Date.now() - d.getTime()) / 1000);
+      if (s < 60) return `${s}s ago`;
+      const m = Math.floor(s / 60);
+      if (m < 60) return `${m}m ago`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return `${h}h ago`;
+      const days = Math.floor(h / 24);
+      if (days < 7) return `${days}d ago`;
+      return d.toLocaleDateString();
+    } catch {
+      return 'n/a';
     }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose}>
+    <Modal isOpen={isOpen} onClose={onClose} panelClassName="bg-gray-850 bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl m-4 p-0 border border-gray-700">
       <div className="text-white">
-        <h2 className="text-2xl font-bold mb-4">My Projects</h2>
-        {error && <div className="text-red-400 mb-3">{error}</div>}
-        {loading ? (
-          <div className="flex items-center gap-2 text-gray-300"><div className="animate-spin h-5 w-5 border-b-2 border-amber-500 rounded-full"/> Loading…</div>
-        ) : projects.length === 0 ? (
-          <div className="text-gray-400">No projects yet. Create a story to get started!</div>
-        ) : (
-          <div className="max-h-[60vh] overflow-auto divide-y divide-gray-700">
-            {projects.map(p => (
-              <div key={p.id} className="py-3 flex items-center justify-between">
-                <div>
-                  <div className="font-semibold">{p.topic}</div>
-                  <div className="text-xs text-gray-400">Scenes: {p.sceneCount} • Updated: {p.updatedAt ? new Date(p.updatedAt).toLocaleString() : 'n/a'}</div>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+          <div>
+            <h2 className="text-xl font-bold">My Projects</h2>
+            <p className="text-xs text-gray-400">Browse, rename, open or delete your saved projects</p>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white">
+            ✕
+          </button>
+        </div>
+
+        {/* Toolbar */}
+        <div className="px-6 py-3 border-b border-gray-800 bg-gray-900/40 flex items-center gap-3">
+          <input
+            type="text"
+            value={filterText}
+            onChange={(e) => applyFilter(e.target.value)}
+            placeholder="Search by title..."
+            className="flex-1 bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:ring-amber-500 focus:border-amber-500"
+          />
+          <button onClick={load} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">Refresh</button>
+        </div>
+
+        {/* Content */}
+        <div className="max-h-[60vh] overflow-auto divide-y divide-gray-800">
+          {error && (
+            <div className="px-6 py-3 bg-red-900/30 text-red-300 border-b border-red-700">{error}</div>
+          )}
+          {loading ? (
+            <div className="px-6 py-6 text-gray-300 flex items-center gap-2">
+              <div className="animate-spin h-5 w-5 border-b-2 border-amber-500 rounded-full"/> Loading projects…
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="px-6 py-10 text-center text-gray-400">No projects found. Create a story to get started!</div>
+          ) : (
+            filtered.map(p => (
+              <div key={p.id} className="group px-6 py-4 flex items-center justify-between hover:bg-gray-900/30 transition-colors">
+                <div className="min-w-0 flex items-center gap-3">
+                  {p.thumbnailUrl && (
+                    <img src={p.thumbnailUrl} alt="thumb" className="w-16 h-10 object-cover rounded border border-gray-700 transition-transform group-hover:scale-105" />
+                  )}
+                  {renamingId === p.id ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={renameText}
+                        onChange={(e) => setRenameText(e.target.value)}
+                        className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm text-white focus:ring-amber-500 focus:border-amber-500 w-64"
+                      />
+                      <button onClick={() => saveRename(p.id)} className="px-2 py-1 text-xs bg-amber-600 hover:bg-amber-500 text-white rounded">Save</button>
+                      <button onClick={cancelRename} className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-white rounded">Cancel</button>
+                    </div>
+                  ) : (
+                    <div className="truncate font-semibold">{p.topic}</div>
+                  )}
+                  <div className="text-xs text-gray-500">Scenes: {p.sceneCount} • Updated: {formatRelative(p.updatedAt)}</div>
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={() => handleOpen(p.id)} className="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1 rounded">Open</button>
-                  <button onClick={() => handleRename(p.id, p.topic)} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded">Rename</button>
-                  <button disabled={deletingId === p.id} onClick={() => handleDelete(p.id)} className="bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white px-3 py-1 rounded">Delete</button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => handleOpen(p.id)} className="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1 rounded text-sm">Open</button>
+                  {renamingId === p.id ? null : (
+                    <button onClick={() => startRename(p.id, p.topic)} className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm">Rename</button>
+                  )}
+                  <button disabled={duplicatingId === p.id} onClick={() => handleDuplicate(p.id)} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-3 py-1 rounded text-sm">{duplicatingId === p.id ? 'Duplicating…' : 'Duplicate'}</button>
+                  <button disabled={duplicatingId === p.id} onClick={() => handleDuplicateAndOpen(p.id)} className="bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white px-3 py-1 rounded text-sm">{duplicatingId === p.id ? 'Opening…' : 'Duplicate & Open'}</button>
+                  {confirmDeleteId === p.id ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-300">Delete?</span>
+                      <button disabled={deletingId === p.id} onClick={() => handleDelete(p.id)} className="bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white px-2 py-1 rounded text-xs">Yes</button>
+                      <button onClick={() => setConfirmDeleteId(null)} className="bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs">No</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setConfirmDeleteId(p.id)} className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded text-sm">Delete</button>
+                  )}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
+            ))
+          )}
+        </div>
       </div>
     </Modal>
   );
