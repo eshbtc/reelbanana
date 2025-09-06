@@ -61,7 +61,7 @@ const calculateCost = (totalTokens: number, model: string): number => {
 };
 
 // Helper function to determine which AI service to use
-const getAIService = async (): Promise<'firebase' | 'custom' | null> => {
+const getAIService = async (forceUseApiKey?: boolean): Promise<'firebase' | 'custom' | null> => {
   const currentUser = getCurrentUser();
   if (!currentUser) {
     console.log('🔍 getAIService: No current user');
@@ -74,11 +74,27 @@ const getAIService = async (): Promise<'firebase' | 'custom' | null> => {
     return null;
   }
 
+  // If user explicitly wants to use their API key, skip credit check
+  if (forceUseApiKey) {
+    console.log('🔑 getAIService: User forced API key usage, checking for stored keys...');
+    // Check if user has API key stored server-side (check both Google and FAL keys)
+    const hasGoogleApiKey = await hasUserApiKey(currentUser.uid, 'google');
+    const hasFalApiKey = await hasUserApiKey(currentUser.uid, 'fal');
+    const hasApiKey = hasGoogleApiKey || hasFalApiKey;
+    
+    if (hasApiKey) {
+      console.log('✅ getAIService: Using custom API key (forced by user)');
+      return 'custom';
+    } else {
+      console.log('❌ getAIService: User forced API key but none found, falling back to credit check');
+    }
+  }
+
   // Check if user has any free credits remaining
   const hasCredits = await checkUserCredits(currentUser.uid, 1);
   console.log(`🔍 getAIService: User ${currentUser.uid} has credits: ${hasCredits}`);
   
-  if (hasCredits) {
+  if (hasCredits && !forceUseApiKey) {
     console.log('✅ getAIService: Using Firebase AI Logic (free credits)');
     return 'firebase'; // Use Firebase AI Logic with free credits
     // Note: Specific credit amount will be checked later in generateImageSequence after cache miss
@@ -163,7 +179,7 @@ type StoryScene = {
  * @param topic The topic of the story
  * @returns A character and style description
  */
-export const generateCharacterAndStyle = async (topic: string): Promise<string> => {
+export const generateCharacterAndStyle = async (topic: string, forceUseApiKey?: boolean): Promise<string> => {
     try {
         const currentUser = getCurrentUser();
         if (!currentUser) {
@@ -171,7 +187,7 @@ export const generateCharacterAndStyle = async (topic: string): Promise<string> 
         }
 
         // Determine which AI service to use
-        const aiService = await getAIService();
+        const aiService = await getAIService(forceUseApiKey);
         if (!aiService) {
             throw new Error("No credits remaining and no API key configured. Please add your Gemini API key or contact support for more credits.");
         }
@@ -295,7 +311,7 @@ export const generateCharacterAndStyle = async (topic: string): Promise<string> 
     }
 };
 
-export const generateStory = async (topic: string): Promise<StoryScene[]> => {
+export const generateStory = async (topic: string, forceUseApiKey?: boolean): Promise<StoryScene[]> => {
     try {
         const currentUser = getCurrentUser();
         if (!currentUser) {
@@ -303,7 +319,7 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
         }
 
         // Determine which AI service to use
-        const aiService = await getAIService();
+        const aiService = await getAIService(forceUseApiKey);
         console.log('AI Service selected:', aiService);
         if (!aiService) {
             throw new Error("No credits remaining and no API key configured. Please add your Gemini API key or contact support for more credits.");
@@ -528,7 +544,7 @@ const sequentialPromptsSchema = {
 export const generateImageSequence = async (
     mainPrompt: string,
     characterAndStyle: string,
-    opts?: { characterRefs?: string[]; backgroundImage?: string; frames?: number; projectId?: string }
+    opts?: { characterRefs?: string[]; backgroundImage?: string; frames?: number; projectId?: string; forceUseApiKey?: boolean }
 ): Promise<string[]> => {
     try {
         const currentUser = getCurrentUser();
@@ -537,7 +553,7 @@ export const generateImageSequence = async (
         }
 
         // Determine which AI service to use (text vs custom key path)
-        let aiService = await getAIService();
+        let aiService = await getAIService(opts?.forceUseApiKey);
         if (!aiService) {
             throw new Error("No credits remaining and no API key configured. Please add your Gemini API key or contact support for more credits.");
         }

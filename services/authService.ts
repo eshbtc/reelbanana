@@ -138,7 +138,7 @@ const createOrUpdateUserProfile = async (user: User): Promise<UserProfile> => {
       email: user.email || '',
       displayName: user.displayName || 'Anonymous User',
       photoURL: user.photoURL || undefined,
-      freeCredits: 10, // Start with 10 free API calls
+      freeCredits: 100, // Start with 100 free API calls
       totalUsage: 0,
       createdAt: now,
       lastLoginAt: now,
@@ -373,7 +373,7 @@ export const resetCreditsForTesting = async (userId: string): Promise<void> => {
     const userRef = doc(db, 'users', userId);
     
     await updateDoc(userRef, {
-      freeCredits: 10, // Reset to default
+      freeCredits: 100, // Reset to default
       totalUsage: 0,   // Reset usage counter
       lastResetAt: new Date().toISOString()
     });

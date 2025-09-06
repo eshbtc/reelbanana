@@ -10,6 +10,7 @@ import { TEMPLATES } from '../lib/templates';
 import CharacterPicker from './CharacterPicker';
 import { calculateTotalCost, formatCost } from '../utils/costCalculator';
 import { useUserCredits } from '../hooks/useUserCredits';
+import { getCurrentUser, hasUserApiKey } from '../services/authService';
 
 interface StoryboardEditorProps {
   onPlayMovie: (scenes: Scene[]) => void;
@@ -39,6 +40,8 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
   const [showTemplates, setShowTemplates] = useState(false);
   const [showCharacterPicker, setShowCharacterPicker] = useState(false);
   const [renderMode, setRenderMode] = useState<'draft' | 'final'>('draft');
+  const [forceUseApiKey, setForceUseApiKey] = useState(false);
+  const [userHasApiKey, setUserHasApiKey] = useState(false);
   
   // Use the real-time credits hook
   const { refreshCredits } = useUserCredits();
@@ -69,6 +72,28 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
     loadProjectFromUrl();
   }, []);
 
+  // Check if user has API key for BYOK option
+  useEffect(() => {
+    const checkUserApiKey = async () => {
+      const currentUser = getCurrentUser();
+      if (!currentUser) {
+        setUserHasApiKey(false);
+        return;
+      }
+
+      try {
+        const hasGoogleKey = await hasUserApiKey(currentUser.uid, 'google');
+        const hasFalKey = await hasUserApiKey(currentUser.uid, 'fal');
+        setUserHasApiKey(hasGoogleKey || hasFalKey);
+      } catch (error) {
+        console.error('Error checking API key:', error);
+        setUserHasApiKey(false);
+      }
+    };
+
+    checkUserApiKey();
+  }, []);
+
   const handleGenerateStory = useCallback(async (storyTopic: string) => {
     if (!storyTopic.trim()) {
       setStoryError("Please enter or select a topic for your story.");
@@ -81,8 +106,8 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
     try {
       // Generate both story and character/style in parallel
       const [storyScenes, characterStyle] = await Promise.all([
-        generateStory(storyTopic),
-        generateCharacterAndStyle(storyTopic)
+        generateStory(storyTopic, forceUseApiKey),
+        generateCharacterAndStyle(storyTopic, forceUseApiKey)
       ]);
       
       if (storyScenes.length === 0) {
@@ -207,6 +232,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
         backgroundImage: bg,
         frames: renderMode === 'draft' ? 3 : 5,
         projectId: projectId || undefined,
+        forceUseApiKey
       });
       setScenes(prevScenes =>
         prevScenes.map(s => s.id === id ? { ...s, status: 'success', imageUrls } : s)
@@ -275,6 +301,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
         backgroundImage: bg,
         frames: renderMode === 'draft' ? 3 : 5,
         projectId: projectId || undefined,
+        forceUseApiKey
       });
       setScenes(prev => prev.map(s => s.id === id ? { ...s, status: 'success', variantImageUrls: imageUrls } : s));
     } catch (e) {
@@ -355,15 +382,32 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                         ))}
                     </div>
                 </div>
-                <div className="flex flex-col md:flex-row gap-4 items-start">
+                <div className="flex flex-col gap-4">
                    <input
                        type="text"
                        value={topic}
                        onChange={(e) => setTopic(e.target.value)}
                        placeholder="Or write your own story topic, e.g., A banana who wants to be a superhero"
-                       className="flex-grow bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition"
+                       className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition"
                        disabled={isLoadingStory}
                    />
+                   
+                   {userHasApiKey && (
+                     <div className="flex items-center gap-3">
+                       <input
+                         type="checkbox"
+                         id="forceUseApiKey"
+                         checked={forceUseApiKey}
+                         onChange={(e) => setForceUseApiKey(e.target.checked)}
+                         className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
+                       />
+                       <label htmlFor="forceUseApiKey" className="text-sm text-gray-300">
+                         🔑 Use My API Key (Skip free credits)
+                       </label>
+                     </div>
+                   )}
+                   
+                   <div className="flex flex-col md:flex-row gap-4">
                    <button
                        onClick={() => handleGenerateStory(topic)}
                        disabled={isLoadingStory}
@@ -378,6 +422,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                     >
                       Start from Template
                     </button>
+                   </div>
                 </div>
                 {storyError && <p className="text-red-400 mt-3">{storyError}</p>}
             </div>
@@ -467,6 +512,22 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                       .reduce((sum) => sum + (renderMode === 'draft' ? 3 : 5), 0)
                   }
                 </div>
+                
+                {userHasApiKey && (
+                  <div className="flex items-center gap-3 mb-4">
+                    <input
+                      type="checkbox"
+                      id="forceUseApiKeyImagesGenerate"
+                      checked={forceUseApiKey}
+                      onChange={(e) => setForceUseApiKey(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
+                    />
+                    <label htmlFor="forceUseApiKeyImagesGenerate" className="text-sm text-gray-300">
+                      🔑 Use My API Key for image generation (Skip free credits)
+                    </label>
+                  </div>
+                )}
+                
                 <div className="flex items-center gap-2">
                     <div className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200">
                       <span>Mode</span>
