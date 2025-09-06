@@ -519,7 +519,7 @@ const TemplatesModal: React.FC<{ open: boolean; onClose: () => void; onPick: (id
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
       <div className="bg-gray-900 border border-gray-700 rounded-lg max-w-3xl w-full overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
-          <h3 className="text-white font-bold text-lg">Start from Template</n3>
+          <h3 className="text-white font-bold text-lg">Start from Template</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
