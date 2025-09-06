@@ -762,6 +762,10 @@ Return ONLY a JSON object with this exact format:
                             throw new Error(`No image generated for prompt: "${prompt}"`);
                         }
                     }
+                } catch (err) {
+                    console.error('Image generation failed:', err);
+                    throw new Error(`An image in the sequence failed to generate for prompt: "${prompt}"`);
+                }
                 } catch (firebaseError: any) {
                     console.log('❌ Firebase AI Logic image generation failed:', firebaseError.message);
                     // Check if user has API key for automatic fallback
@@ -883,7 +887,6 @@ Return ONLY a JSON object with this exact format:
         }
         
         return httpsUrls;
-
     } catch (error) {
         console.error("Error generating image sequence:", error);
         
