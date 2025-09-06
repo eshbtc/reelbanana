@@ -5,7 +5,6 @@ import StoryboardEditor from './components/StoryboardEditor';
 import RenderingScreen from './RenderingScreen';
 import MovieWizard from './components/MovieWizard';
 import MoviePlayer from './components/MoviePlayer';
-import QuickDemo from './components/QuickDemo';
 import PublicGallery from './components/PublicGallery';
 import UserDashboard from './components/UserDashboard';
 import MyProjectsPage from './components/MyProjectsPage';
@@ -16,7 +15,7 @@ import { API_ENDPOINTS } from './config/apiConfig';
 import { authFetch } from './lib/authFetch';
 // Removed auto-publish; handled in MoviePlayer for one-click publish UX
 
-type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects' | 'quickdemo';
+type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects';
 
 const App: React.FC = () => {
   // Initialize view based on URL path
@@ -143,8 +142,6 @@ const App: React.FC = () => {
         return <UserDashboard onClose={() => setView('editor')} />;
       case 'projects':
         return <MyProjectsPage />;
-      case 'quickdemo':
-        return <QuickDemo onBack={() => setView('editor')} />;
       case 'editor':
       default:
         return (
@@ -198,7 +195,7 @@ const App: React.FC = () => {
                     </label>
                   </div>
                 )}
-                <div className="ml-4 flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <input id="wizardMode" type="checkbox" checked={useWizardMode} onChange={(e) => setUseWizardMode(e.target.checked)} />
                   <label htmlFor="wizardMode" className="text-sm text-gray-300">
                     Wizard Mode (Step-by-step control)

@@ -32,7 +32,28 @@ jobs:
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           REGION: ${{ secrets.GCP_REGION }}
 
+      - name: Check for changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            upload-assets:
+              - 'backend/upload-assets/**'
+            narrate:
+              - 'backend/narrate/**'
+            align-captions:
+              - 'backend/align-captions/**'
+            compose-music:
+              - 'backend/compose-music/**'
+            render:
+              - 'backend/render/**'
+            polish:
+              - 'backend/polish/**'
+            api-key-service:
+              - 'backend/api-key-service/**'
+
       - name: Deploy upload-assets
+        if: steps.changes.outputs.upload-assets == 'true'
         run: |
           ENV_FLAGS=""
           [[ -n "$INPUT_BUCKET_NAME" ]] && ENV_FLAGS+=" --set-env-vars=INPUT_BUCKET_NAME=$INPUT_BUCKET_NAME"
@@ -41,6 +62,7 @@ jobs:
           INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME }}
 
       - name: Deploy narrate
+        if: steps.changes.outputs.narrate == 'true'
         run: |
           ENV_FLAGS=""
           [[ -n "$ELEVENLABS_API_KEY" ]] && ENV_FLAGS+=" --set-env-vars=ELEVENLABS_API_KEY=$ELEVENLABS_API_KEY"
@@ -51,6 +73,7 @@ jobs:
           INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME }}
 
       - name: Deploy align-captions
+        if: steps.changes.outputs.align-captions == 'true'
         run: |
           ENV_FLAGS=""
           [[ -n "$INPUT_BUCKET_NAME" ]] && ENV_FLAGS+=" --set-env-vars=INPUT_BUCKET_NAME=$INPUT_BUCKET_NAME"
@@ -59,6 +82,7 @@ jobs:
           INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME }}
 
       - name: Deploy compose-music
+        if: steps.changes.outputs.compose-music == 'true'
         run: |
           ENV_FLAGS=""
           [[ -n "$GEMINI_API_KEY" ]] && ENV_FLAGS+=" --set-env-vars=GEMINI_API_KEY=$GEMINI_API_KEY"
@@ -69,6 +93,7 @@ jobs:
           INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME }}
 
       - name: Deploy render
+        if: steps.changes.outputs.render == 'true'
         run: |
           ENV_FLAGS=""
           [[ -n "$INPUT_BUCKET_NAME" ]] && ENV_FLAGS+=" --set-env-vars=INPUT_BUCKET_NAME=$INPUT_BUCKET_NAME"
@@ -79,6 +104,7 @@ jobs:
           OUTPUT_BUCKET_NAME: ${{ secrets.OUTPUT_BUCKET_NAME }}
 
       - name: Deploy polish
+        if: steps.changes.outputs.polish == 'true'
         run: |
           ENV_FLAGS=""
           [[ -n "$API_KEY_SERVICE_URL" ]] && ENV_FLAGS+=" --set-env-vars=API_KEY_SERVICE_URL=$API_KEY_SERVICE_URL"
@@ -101,8 +127,22 @@ jobs:
           OUTPUT_BUCKET_NAME: ${{ secrets.OUTPUT_BUCKET_NAME }}
 
       - name: Deploy api-key-service
+        if: steps.changes.outputs.api-key-service == 'true'
         run: |
           # Enable CORS origins via env if needed, otherwise deploy with defaults
           ENV_FLAGS=""
           gcloud run deploy reel-banana-api-key-service --source backend/api-key-service --allow-unauthenticated $ENV_FLAGS
+
+      - name: Deployment Summary
+        run: |
+          echo "🚀 Cloud Run Deployment Summary:"
+          echo "================================"
+          [[ "${{ steps.changes.outputs.upload-assets }}" == "true" ]] && echo "✅ upload-assets - DEPLOYED" || echo "⏭️  upload-assets - SKIPPED (no changes)"
+          [[ "${{ steps.changes.outputs.narrate }}" == "true" ]] && echo "✅ narrate - DEPLOYED" || echo "⏭️  narrate - SKIPPED (no changes)"
+          [[ "${{ steps.changes.outputs.align-captions }}" == "true" ]] && echo "✅ align-captions - DEPLOYED" || echo "⏭️  align-captions - SKIPPED (no changes)"
+          [[ "${{ steps.changes.outputs.compose-music }}" == "true" ]] && echo "✅ compose-music - DEPLOYED" || echo "⏭️  compose-music - SKIPPED (no changes)"
+          [[ "${{ steps.changes.outputs.render }}" == "true" ]] && echo "✅ render - DEPLOYED" || echo "⏭️  render - SKIPPED (no changes)"
+          [[ "${{ steps.changes.outputs.polish }}" == "true" ]] && echo "✅ polish - DEPLOYED" || echo "⏭️  polish - SKIPPED (no changes)"
+          [[ "${{ steps.changes.outputs.api-key-service }}" == "true" ]] && echo "✅ api-key-service - DEPLOYED" || echo "⏭️  api-key-service - SKIPPED (no changes)"
+          echo "================================"
 
