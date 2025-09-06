@@ -91,12 +91,38 @@ export const getProject = async (projectId: string): Promise<ProjectData | null>
  * @param projectId The ID of the project to update.
  * @param data The data to update.
  */
+// Helper function to recursively remove undefined values from objects
+const removeUndefinedValues = (obj: any): any => {
+    if (obj === null || obj === undefined) {
+        return null;
+    }
+    
+    if (Array.isArray(obj)) {
+        return obj.map(removeUndefinedValues).filter(item => item !== null && item !== undefined);
+    }
+    
+    if (typeof obj === 'object') {
+        const cleaned: any = {};
+        for (const [key, value] of Object.entries(obj)) {
+            if (value !== undefined) {
+                const cleanedValue = removeUndefinedValues(value);
+                if (cleanedValue !== null && cleanedValue !== undefined) {
+                    cleaned[key] = cleanedValue;
+                }
+            }
+        }
+        return cleaned;
+    }
+    
+    return obj;
+};
+
 export const updateProject = async (projectId: string, data: ProjectData): Promise<void> => {
     try {
         const docRef = doc(db, PROJECTS_COLLECTION, projectId);
         
-        // Clean the data to remove undefined values and limit size
-        const cleanData: any = {
+        // Build the data object with all possible fields
+        const rawData: any = {
             topic: data.topic || 'Untitled',
             characterAndStyle: data.characterAndStyle || '',
             updatedAt: serverTimestamp()
@@ -104,7 +130,7 @@ export const updateProject = async (projectId: string, data: ProjectData): Promi
         
         // Only include characterRefs if it exists and is not empty
         if (data.characterRefs && data.characterRefs.length > 0) {
-            cleanData.characterRefs = data.characterRefs;
+            rawData.characterRefs = data.characterRefs;
         }
         
         // Only include characterOption if it exists
@@ -114,19 +140,21 @@ export const updateProject = async (projectId: string, data: ProjectData): Promi
             if (data.characterOption.name) co.name = data.characterOption.name;
             if (data.characterOption.description) co.description = data.characterOption.description;
             if (Array.isArray(data.characterOption.images)) co.images = data.characterOption.images;
-            cleanData.characterOption = co;
+            rawData.characterOption = co;
         }
         
         // For scenes, we'll store a lightweight version to avoid size limits
         // Store only essential scene data, not full image URLs
         if (data.scenes && data.scenes.length > 0) {
-            cleanData.scenes = data.scenes.map(scene => {
+            rawData.scenes = data.scenes.map(scene => {
                 const s: any = {};
                 if (scene.id) s.id = scene.id;
                 if (typeof scene.prompt === 'string') s.prompt = scene.prompt;
                 if (typeof scene.narration === 'string') s.narration = scene.narration;
                 // Keep a single thumbnail to avoid exceeding Firestore limits
-                if (scene.imageUrls && Array.isArray(scene.imageUrls) && scene.imageUrls[0]) s.imageUrls = [scene.imageUrls[0]];
+                if (scene.imageUrls && Array.isArray(scene.imageUrls) && scene.imageUrls[0]) {
+                    s.imageUrls = [scene.imageUrls[0]];
+                }
                 if (scene.status) s.status = scene.status;
                 if (typeof scene.duration === 'number') s.duration = scene.duration;
                 if (scene.backgroundImage) s.backgroundImage = scene.backgroundImage;
@@ -135,10 +163,14 @@ export const updateProject = async (projectId: string, data: ProjectData): Promi
                 if (scene.transition) s.transition = scene.transition;
                 return s;
             });
-            cleanData.sceneCount = data.scenes.length;
-            cleanData.thumbnailUrl = cleanData.scenes[0]?.imageUrls?.[0] || null;
+            rawData.sceneCount = data.scenes.length;
+            rawData.thumbnailUrl = rawData.scenes[0]?.imageUrls?.[0] || null;
         }
 
+        // Recursively remove all undefined values
+        const cleanData = removeUndefinedValues(rawData);
+        
+        console.log('Saving to Firestore:', cleanData);
         await setDoc(docRef, cleanData, { merge: true });
     } catch (error) {
         console.error("Error updating project in Firestore:", error);
