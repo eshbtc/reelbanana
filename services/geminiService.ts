@@ -1,9 +1,18 @@
 
-// Fix: Implement the Gemini API service. This file was previously missing.
+// Gemini API service with hybrid security approach
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 
-// Initialization according to guidelines. API_KEY is expected to be in the environment.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Hybrid approach: Use environment variable with fallback
+// In production, this should be set via Google Cloud Secret Manager
+// In development, it can be set via .env file
+const geminiApiKey = process.env.REEL_BANANA_GEMINI_API_KEY || process.env.API_KEY;
+
+if (!geminiApiKey) {
+    console.error("CRITICAL: No Gemini API Key found. Please set either REEL_BANANA_GEMINI_API_KEY or ensure the standard API_KEY is available in your environment.");
+    throw new Error("Gemini API Key is not configured. Please set REEL_BANANA_GEMINI_API_KEY or API_KEY in your environment.");
+}
+
+const ai = new GoogleGenAI({ apiKey: geminiApiKey });
 
 const storyResponseSchema = {
     type: Type.OBJECT,
@@ -59,7 +68,17 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
         }
     } catch (error) {
         console.error("Error generating story:", error);
-        throw new Error("Failed to generate story. Please try again.");
+        if (error instanceof Error) {
+            // Provide more specific error messages
+            if (error.message.includes('API key')) {
+                throw new Error("Authentication failed. Please check your API key configuration.");
+            } else if (error.message.includes('quota') || error.message.includes('limit')) {
+                throw new Error("API quota exceeded. Please try again later.");
+            } else if (error.message.includes('safety')) {
+                throw new Error("Content was blocked by safety filters. Please try a different topic.");
+            }
+        }
+        throw new Error("Failed to generate story. The AI may be experiencing issues or the topic is too sensitive.");
     }
 };
 
@@ -132,7 +151,16 @@ Example Output:
 
     } catch (error) {
         console.error("Error generating image sequence:", error);
-        throw new Error("Failed to generate image sequence. Please try again.");
+        if (error instanceof Error) {
+            if (error.message.includes('API key')) {
+                throw new Error("Authentication failed. Please check your API key configuration.");
+            } else if (error.message.includes('quota') || error.message.includes('limit')) {
+                throw new Error("API quota exceeded. Please try again later.");
+            } else if (error.message.includes('safety')) {
+                throw new Error("Content was blocked by safety filters. Please try a different prompt.");
+            }
+        }
+        throw new Error("Failed to generate images. The prompt might be too sensitive or the service is unavailable.");
     }
 };
 
@@ -192,6 +220,15 @@ export const editImageSequence = async (base64Images: string[], editPrompt: stri
         return editedImages;
     } catch (error) {
         console.error("Error editing image sequence:", error);
-        throw new Error(error instanceof Error ? error.message : "Failed to edit image sequence. Please try again.");
+        if (error instanceof Error) {
+            if (error.message.includes('API key')) {
+                throw new Error("Authentication failed. Please check your API key configuration.");
+            } else if (error.message.includes('quota') || error.message.includes('limit')) {
+                throw new Error("API quota exceeded. Please try again later.");
+            } else if (error.message.includes('safety')) {
+                throw new Error("Content was blocked by safety filters. Please try a different edit prompt.");
+            }
+        }
+        throw new Error(error instanceof Error ? error.message : "Failed to apply edits to the image sequence.");
     }
 };

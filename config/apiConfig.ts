@@ -1,5 +1,6 @@
 // API Configuration for ReelBanana Backend Services
-// This file contains all the backend service endpoints and configuration
+// Hybrid approach: Secret Manager for production, env vars for development
+// This combines enterprise security with developer-friendly fallbacks
 
 export interface ApiConfig {
   baseUrls: {
@@ -29,12 +30,12 @@ const PRODUCTION_CONFIG: ApiConfig = {
     compose: 'https://reel-banana-compose-music-423229273041.us-central1.run.app',
   },
   firebase: {
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-    appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+    projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || '',
+    apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || '',
+    authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || '',
+    storageBucket: (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || '',
+    messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+    appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '',
   },
 };
 
@@ -48,12 +49,12 @@ const DEVELOPMENT_CONFIG: ApiConfig = {
     compose: 'http://localhost:8084',
   },
   firebase: {
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-    appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+    projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || '',
+    apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || '',
+    authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || '',
+    storageBucket: (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || '',
+    messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+    appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '',
   },
 };
 
@@ -67,12 +68,12 @@ const AI_STUDIO_CONFIG: ApiConfig = {
     compose: 'https://reel-banana-compose-music-423229273041.us-central1.run.app',
   },
   firebase: {
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-    appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+    projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || '',
+    apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || '',
+    authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || '',
+    storageBucket: (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || '',
+    messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+    appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '',
   },
 };
 
@@ -101,22 +102,31 @@ export const API_ENDPOINTS = {
   compose: `${apiConfig.baseUrls.compose}/compose-music`,
 };
 
-// Helper function for making API calls
+// Helper function for making API calls with improved error handling
 export const apiCall = async (url: string, body: object, errorMessage: string) => {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-    },
-    body: JSON.stringify(body),
-  });
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ details: 'Could not parse error response.' }));
-    throw new Error(`${errorMessage}: ${errorData.details || response.statusText}`);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+      body: JSON.stringify(body),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ 
+        details: `HTTP ${response.status}: ${response.statusText}` 
+      }));
+      throw new Error(`${errorMessage}: ${errorData.details || response.statusText}`);
+    }
+    
+    return response.json();
+  } catch (error) {
+    console.error(`API call failed for ${url}:`, error);
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(`${errorMessage}: Network or parsing error`);
   }
-  
-  return response.json();
 };
- 

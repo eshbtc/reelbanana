@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 # Restore script for Dockerfiles after AI Studio overwrites them
