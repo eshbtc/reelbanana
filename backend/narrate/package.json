@@ -1,0 +1,19 @@
+
+{
+  "name": "reel-banana-narrate-service",
+  "version": "1.0.0",
+  "description": "Microservice to generate narration using ElevenLabs and save to GCS.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "^7.11.0",
+    "cors": "^2.8.5",
+    "elevenlabs": "^0.6.1",
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

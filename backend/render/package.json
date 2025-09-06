@@ -1,0 +1,18 @@
+{
+  "name": "reel-banana-render-service",
+  "version": "1.0.0",
+  "description": "Microservice to render the final video using FFmpeg.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "^7.11.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "fluent-ffmpeg": "^2.1.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

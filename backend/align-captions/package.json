@@ -1,0 +1,18 @@
+{
+  "name": "reel-banana-align-captions-service",
+  "version": "1.0.0",
+  "description": "Microservice to generate SRT captions from audio using Google Speech-to-Text.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@google-cloud/speech": "^6.5.0",
+    "@google-cloud/storage": "^7.11.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
