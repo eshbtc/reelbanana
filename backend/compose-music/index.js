@@ -1,7 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const { Storage } = require('@google-cloud/storage');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { initializeApp } = require('firebase-admin/app');
+const { getVertexAI, getGenerativeModel } = require('firebase-admin/vertexai');
 const admin = require('firebase-admin');
 
 const app = express();
@@ -68,9 +69,9 @@ const appCheckVerification = async (req, res, next) => {
 const storage = new Storage();
 const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 
-// IMPORTANT: Set GEMINI_API_KEY as environment variable
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const geminiModel = genAI.getGenerativeModel({ model: "gemini-pro" });
+// Initialize Vertex AI with Firebase Admin for free credits
+const vertexAI = getVertexAI(admin.app());
+const geminiModel = getGenerativeModel(vertexAI, { model: 'gemini-2.5-flash' });
 
 /**
  * POST /compose-music
@@ -121,7 +122,7 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
     // 1. Analyze narration mood with Gemini
     const prompt = `Analyze the following narration script and provide a short, descriptive musical prompt (e.g., "An upbeat, whimsical, adventurous orchestral score for a children's story, with a sense of wonder and a triumphant finish."). Only return the prompt text, nothing else. Script: "${narrationScript}"`;
     const result = await geminiModel.generateContent(prompt);
-    const response = await result.response;
+    const response = result.response;
     const musicPrompt = response.text().trim();
     console.log(`Generated music prompt: "${musicPrompt}"`);
 

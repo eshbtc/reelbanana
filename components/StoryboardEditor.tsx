@@ -11,13 +11,6 @@ import CharacterPicker from './CharacterPicker';
 import { calculateTotalCost, formatCost } from '../utils/costCalculator';
 import { useUserCredits } from '../hooks/useUserCredits';
 import { getCurrentUser, hasUserApiKey } from '../services/authService';
-import { getAI, getGenerativeModel } from 'firebase/ai';
-import { firebaseApp } from '../lib/firebase';
-import { authFetch } from '../lib/authFetch';
-import { API_ENDPOINTS } from '../config/apiConfig';
-
-// Initialize Firebase AI
-const ai = getAI(firebaseApp);
 
 interface StoryboardEditorProps {
   onPlayMovie: (scenes: Scene[]) => void;
@@ -258,17 +251,8 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         throw new Error("Please sign in to generate inspiration.");
       }
 
-      // Use Firebase AI directly for inspiration generation
-      const model = getGenerativeModel(ai, { 
-        model: "gemini-2.5-flash",
-        generationConfig: {
-          maxOutputTokens: 100,
-          temperature: 0.9, // Higher creativity
-        }
-      });
-      
-      const result = await model.generateContent(inspirationPrompt);
-      const inspiration = result.response.text().trim();
+      // Use the consistent geminiService for inspiration generation
+      const inspiration = await generateCharacterAndStyle(inspirationPrompt);
       
       setGeneratedInspiration(inspiration);
       setTopic(inspiration);
@@ -344,11 +328,13 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
           default: return characterAndStyle;
         }
       })();
+      const sceneIndex = scenes.findIndex(s => s.id === id);
       const imageUrls = await generateImageSequence(prompt, styleInstruction, {
         characterRefs,
         backgroundImage: bg,
         frames: renderMode === 'draft' ? 3 : 5,
         projectId: projectId || undefined,
+        sceneIndex,
         forceUseApiKey
       });
       setScenes(prevScenes =>
@@ -413,11 +399,13 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         }
       })();
       const bg = sceneObj.backgroundImage;
+      const sceneIndex = scenes.findIndex(s => s.id === id);
       const imageUrls = await generateImageSequence(`${prompt} (alternative angle variation)`, styleInstruction, {
         characterRefs,
         backgroundImage: bg,
         frames: renderMode === 'draft' ? 3 : 5,
         projectId: projectId || undefined,
+        sceneIndex,
         forceUseApiKey
       });
       setScenes(prev => prev.map(s => s.id === id ? { ...s, status: 'success', variantImageUrls: imageUrls } : s));
