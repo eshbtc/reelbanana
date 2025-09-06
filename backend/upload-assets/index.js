@@ -65,7 +65,7 @@ const appCheckVerification = async (req, res, next) => {
 };
 
 const storage = new Storage();
-const bucketName = process.env.INPUT_BUCKET_NAME || 'oneminute-movie-in';
+const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 
 /**
  * POST /upload-image
@@ -81,7 +81,7 @@ const bucketName = process.env.INPUT_BUCKET_NAME || 'oneminute-movie-in';
  * Response:
  * {
  *   "message": "Image uploaded successfully."
- *   "gcsPath": "gs://oneminute-movie-in/projectId/fileName"
+ *   "gcsPath": "gs://reel-banana-35a54.firebasestorage.app/projectId/fileName"
  * }
  */
 app.post('/upload-image', appCheckVerification, async (req, res) => {
@@ -94,21 +94,28 @@ app.post('/upload-image', appCheckVerification, async (req, res) => {
   try {
     const bucket = storage.bucket(bucketName);
     
-    const fullPath = `${projectId}/${fileName}`;
+    // Parse data URI
+    const match = String(base64Image).match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+    if (!match) return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Invalid base64 image data URI');
+    const mime = match[1];
+    const data = match[2];
+    const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpeg';
+
+    const safeName = fileName.replace(/\.[a-zA-Z0-9]+$/, `.${ext}`);
+    const fullPath = `${projectId}/${safeName}`;
     const file = bucket.file(fullPath);
-    
-    const base64Data = base64Image.replace(/^data:image\/jpeg;base64,/, "");
-    const imageBuffer = Buffer.from(base64Data, 'base64');
-    
-    await file.save(imageBuffer, {
-      metadata: { contentType: 'image/jpeg' },
-    });
+
+    const imageBuffer = Buffer.from(data, 'base64');
+    await file.save(imageBuffer, { metadata: { contentType: mime } });
+    await file.makePublic();
 
     const gcsPath = `gs://${bucketName}/${fullPath}`;
-    console.log(`Successfully uploaded ${fileName} for ${projectId}.`);
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${fullPath}`;
+    console.log(`Successfully uploaded ${safeName} for ${projectId}.`);
     res.status(200).json({ 
         message: 'Image uploaded successfully.',
-        gcsPath: gcsPath
+        gcsPath,
+        publicUrl
     });
 
   } catch (error) {
