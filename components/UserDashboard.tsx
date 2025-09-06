@@ -13,6 +13,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
     freeCredits: 0,
     totalUsage: 0,
     hasCustomApiKey: false,
+    tokenAnalytics: undefined as {
+      totalTokens: number;
+      totalCost: number;
+      tokensByOperation: { [key: string]: number };
+      costByOperation: { [key: string]: number };
+      tokensByService: { [key: string]: number };
+      costByService: { [key: string]: number };
+    } | undefined,
   });
   const [customApiKey, setCustomApiKey] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
@@ -171,6 +179,78 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
             </div>
           </div>
         </div>
+
+        {/* Token Analytics */}
+        {usageStats.tokenAnalytics && (
+          <div className="mb-8">
+            <h3 className="text-xl font-semibold text-white mb-6 flex items-center gap-3">
+              <div className="p-2 bg-purple-500/20 rounded-lg">
+                <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              Token Analytics
+            </h3>
+            <div className="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="bg-gradient-to-br from-purple-900/30 to-purple-800/20 rounded-xl p-6 text-center border border-purple-500/30">
+                  <div className="text-3xl font-bold text-purple-400 mb-2">
+                    {usageStats.tokenAnalytics.totalTokens.toLocaleString()}
+                  </div>
+                  <div className="text-gray-300 font-medium">Total Tokens</div>
+                  <div className="text-sm text-gray-400 mt-1">AI tokens consumed</div>
+                </div>
+                <div className="bg-gradient-to-br from-indigo-900/30 to-indigo-800/20 rounded-xl p-6 text-center border border-indigo-500/30">
+                  <div className="text-3xl font-bold text-indigo-400 mb-2">
+                    ${usageStats.tokenAnalytics.totalCost.toFixed(4)}
+                  </div>
+                  <div className="text-gray-300 font-medium">Estimated Cost</div>
+                  <div className="text-sm text-gray-400 mt-1">USD value consumed</div>
+                </div>
+              </div>
+              
+              {/* Breakdown by Operation */}
+              <div className="mb-6">
+                <h4 className="text-lg font-semibold text-white mb-3">Usage by Operation</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {Object.entries(usageStats.tokenAnalytics.tokensByOperation).map(([operation, tokens]) => (
+                    <div key={operation} className="bg-gray-700/50 rounded-lg p-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-300 capitalize">{operation.replace('_', ' ')}</span>
+                        <div className="text-right">
+                          <div className="text-white font-semibold">{tokens.toLocaleString()} tokens</div>
+                          <div className="text-sm text-gray-400">
+                            ${usageStats.tokenAnalytics.costByOperation[operation]?.toFixed(4) || '0.0000'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Breakdown by Service */}
+              <div>
+                <h4 className="text-lg font-semibold text-white mb-3">Usage by Service</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {Object.entries(usageStats.tokenAnalytics.tokensByService).map(([service, tokens]) => (
+                    <div key={service} className="bg-gray-700/50 rounded-lg p-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-300 capitalize">{service === 'firebase' ? 'Firebase AI Logic' : 'Custom API'}</span>
+                        <div className="text-right">
+                          <div className="text-white font-semibold">{tokens.toLocaleString()} tokens</div>
+                          <div className="text-sm text-gray-400">
+                            ${usageStats.tokenAnalytics.costByService[service]?.toFixed(4) || '0.0000'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* API Key Management Section */}
         <div className="mb-8">

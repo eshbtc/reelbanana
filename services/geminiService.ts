@@ -2,7 +2,7 @@
 import { getAI, getGenerativeModel, VertexAIBackend, ResponseModality } from 'firebase/ai';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 import { firebaseApp } from '../lib/firebase';
-import { getCurrentUser, getUserProfile, recordUsage, checkUserCredits, hasUserApiKey } from './authService';
+import { getCurrentUser, getUserProfile, recordUsage, checkUserCredits, hasUserApiKey, TokenUsage } from './authService';
 import { API_ENDPOINTS } from '../config/apiConfig';
 import { authFetch } from '../lib/authFetch';
 import { getAppCheckToken } from '../lib/appCheck';
@@ -10,9 +10,54 @@ import { getAppCheckToken } from '../lib/appCheck';
 // Use centralized Firebase app
 const db = getFirestore(firebaseApp);
 
-
 // Initialize Firebase AI Logic with Vertex AI backend (global for nano-bana/gemini-2.5-flash-image-preview)
 const ai = getAI(firebaseApp, { backend: new VertexAIBackend('global') });
+
+// Helper function to extract token usage from API responses
+const extractTokenUsage = (response: any, model: string): TokenUsage | null => {
+  try {
+    // Firebase AI Logic response format
+    if (response.usageMetadata) {
+      const usage = response.usageMetadata;
+      return {
+        promptTokens: usage.promptTokenCount || 0,
+        completionTokens: usage.candidatesTokenCount || 0,
+        totalTokens: usage.totalTokenCount || 0,
+        estimatedCost: calculateCost(usage.totalTokenCount || 0, model),
+        model: model
+      };
+    }
+    
+    // Custom API response format (from our backend)
+    if (response.usage) {
+      const usage = response.usage;
+      return {
+        promptTokens: usage.prompt_tokens || 0,
+        completionTokens: usage.completion_tokens || 0,
+        totalTokens: usage.total_tokens || 0,
+        estimatedCost: calculateCost(usage.total_tokens || 0, model),
+        model: model
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    console.warn('Failed to extract token usage:', error);
+    return null;
+  }
+};
+
+// Helper function to calculate estimated cost based on tokens and model
+const calculateCost = (totalTokens: number, model: string): number => {
+  // Gemini 2.5 Flash pricing (approximate rates as of 2024)
+  const rates: { [key: string]: number } = {
+    'gemini-2.5-flash': 0.000075, // $0.075 per 1M tokens
+    'gemini-2.5-flash-image-preview': 0.000075, // Same rate for image preview
+  };
+  
+  const rate = rates[model] || 0.000075; // Default rate
+  return (totalTokens / 1000000) * rate;
+};
 
 // Helper function to determine which AI service to use
 const getAIService = async (): Promise<'firebase' | 'custom' | null> => {
@@ -40,9 +85,15 @@ const getAIService = async (): Promise<'firebase' | 'custom' | null> => {
 // Cache collection name
 const CACHE_COLLECTION = 'generated_images_cache';
 
-// Simple hash function for cache keys
-const generateCacheKey = (prompt: string, characterAndStyle: string): string => {
-  const combined = `${characterAndStyle}|||${prompt}`;
+// Simple hash function for cache keys (includes refs/background signals)
+const generateCacheKey = (
+  prompt: string,
+  characterAndStyle: string,
+  opts?: { characterRefs?: string[]; backgroundImage?: string }
+): string => {
+  const refsSig = (opts?.characterRefs || []).map((s) => s.length).join(',');
+  const bgSig = opts?.backgroundImage ? `bg:${opts.backgroundImage.length}` : 'bg:none';
+  const combined = `${characterAndStyle}|||${prompt}|||${refsSig}|||${bgSig}`;
   let hash = 0;
   for (let i = 0; i < combined.length; i++) {
     const char = combined.charCodeAt(i);
@@ -138,6 +189,12 @@ export const generateCharacterAndStyle = async (topic: string): Promise<string> 
             );
             console.log('Firebase AI Logic character response received');
             
+            // Extract token usage from response
+            const tokenUsage = extractTokenUsage(result, 'gemini-2.5-flash');
+            if (tokenUsage) {
+                console.log('Token usage:', tokenUsage);
+            }
+            
         } else {
             // Use custom API key via secure server-side service
             const response = await authFetch(API_ENDPOINTS.apiKey.use, {
@@ -169,7 +226,38 @@ export const generateCharacterAndStyle = async (topic: string): Promise<string> 
         
         // Only deduct credits after successful generation
         if (currentUser) {
-            await recordUsage(currentUser.uid, 'story_generation', 1, true);
+            let tokenUsage = extractTokenUsage(result, 'gemini-2.5-flash');
+            
+            // If no token usage from custom API, estimate it
+            if (!tokenUsage && aiService === 'custom') {
+                const promptLength = `Create a character and visual style description for a kid-friendly story about "${topic}". 
+                    Include:
+                    - Main character description (appearance, personality)
+                    - Visual style (art style, color palette, mood)
+                    - Keep it concise (2-3 sentences)
+                    - Make it suitable for children
+                    
+                    Example format: "A cute banana character with a tiny red cape, adventurous and curious, in a vibrant watercolor style with warm colors and soft edges."`.length;
+                
+                const estimatedTokens = Math.ceil(promptLength / 4) + 100; // Shorter response expected
+                tokenUsage = {
+                    promptTokens: Math.ceil(promptLength / 4),
+                    completionTokens: 100,
+                    totalTokens: estimatedTokens,
+                    estimatedCost: calculateCost(estimatedTokens, 'gemini-2.5-flash'),
+                    model: 'gemini-2.5-flash'
+                };
+                console.log('Custom API estimated token usage for character:', tokenUsage);
+            }
+            
+            await recordUsage(
+                currentUser.uid, 
+                'story_generation', 
+                1, // Legacy cost field
+                true, 
+                tokenUsage || undefined,
+                aiService
+            );
         }
         
         return characterStyle;
@@ -242,6 +330,12 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
             );
             console.log('Firebase AI Logic response received');
             
+            // Extract token usage from response
+            const tokenUsage = extractTokenUsage(result, 'gemini-2.5-flash');
+            if (tokenUsage) {
+                console.log('Story generation token usage:', tokenUsage);
+            }
+            
         } else {
             // Use custom API key via secure server-side service
             const response = await authFetch(API_ENDPOINTS.apiKey.use, {
@@ -298,20 +392,55 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
             }
 
             if (currentUser) {
-                await recordUsage(currentUser.uid, 'story_generation', 1, true);
+                // Estimate token usage for custom API path (Google's public API doesn't return usage metadata)
+                const promptLength = `Return ONLY JSON. Format: {"scenes":[{"prompt":"...","narration":"..."}]}.
+                             Create 4-8 scenes for a short, kid-friendly storyboard about "${topic}".
+                             Each scene must include:
+                             - prompt: a detailed, visually rich description for image generation
+                             - narration: 1-2 sentences to be spoken.
+                             Do not include any markdown or extra commentary. Only valid JSON.`.length;
+                
+                // Rough estimation: ~4 characters per token for English text
+                const estimatedTokens = Math.ceil(promptLength / 4) + 200; // Add buffer for response
+                const estimatedTokenUsage: TokenUsage = {
+                    promptTokens: Math.ceil(promptLength / 4),
+                    completionTokens: 200, // Estimated response tokens
+                    totalTokens: estimatedTokens,
+                    estimatedCost: calculateCost(estimatedTokens, 'gemini-2.5-flash'),
+                    model: 'gemini-2.5-flash'
+                };
+                
+                console.log('Custom API estimated token usage:', estimatedTokenUsage);
+                
+                await recordUsage(currentUser.uid, 'story_generation', 1, true, estimatedTokenUsage, 'custom');
             }
             return scenes;
         }
 
-        const rawText = result.response.text().trim();
+        let rawText = result.response.text().trim();
         console.log('Firebase AI Logic raw response:', rawText);
         let response: any;
         try {
             response = JSON.parse(rawText);
             console.log('Parsed Firebase AI response:', response);
         } catch (e) {
-            console.warn('Story JSON parse failed. Raw:', rawText);
-            throw new Error('Invalid story JSON received from AI.');
+            console.warn('Story JSON parse failed, retrying with stricter instruction...');
+            // Retry once with stricter instruction
+            const retryModel = getGenerativeModel(ai, {
+                model: "gemini-2.5-flash",
+                generationConfig: { responseMimeType: "application/json" }
+            });
+            const retry = await retryModel.generateContent(
+                `STRICT JSON ONLY. NO MARKDOWN. EXACT FORMAT: {"scenes":[{"prompt":"...","narration":"..."}]}
+                 4-8 scenes about "${topic}". Keep kid-friendly. No extra keys.`
+            );
+            rawText = retry.response.text().trim();
+            try {
+                response = JSON.parse(rawText);
+            } catch (e2) {
+                console.error('Retry parse failed. Raw:', rawText);
+                throw new Error('The story could not be parsed. Reword the topic slightly or add a character detail.');
+            }
         }
 
         const collectScenes = (obj: any): StoryScene[] => {
@@ -337,7 +466,15 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
             // Only deduct credits after successful story generation
             const currentUser = getCurrentUser();
             if (currentUser) {
-                await recordUsage(currentUser.uid, 'story_generation', 1, true);
+                const tokenUsage = extractTokenUsage(result, 'gemini-2.5-flash');
+                await recordUsage(
+                    currentUser.uid, 
+                    'story_generation', 
+                    1, // Legacy cost field
+                    true, 
+                    tokenUsage || undefined,
+                    aiService
+                );
             }
             return scenes;
         }
@@ -380,7 +517,11 @@ const sequentialPromptsSchema = {
  * @param characterAndStyle The character and style description
  * @returns An array of base64 encoded image strings
  */
-export const generateImageSequence = async (mainPrompt: string, characterAndStyle: string): Promise<string[]> => {
+export const generateImageSequence = async (
+    mainPrompt: string,
+    characterAndStyle: string,
+    opts?: { characterRefs?: string[]; backgroundImage?: string; frames?: number }
+): Promise<string[]> => {
     try {
         // Check user credits if authenticated
         const currentUser = getCurrentUser();
@@ -392,7 +533,7 @@ export const generateImageSequence = async (mainPrompt: string, characterAndStyl
         }
 
         // 1. Check cache first for cost control
-        const cacheKey = generateCacheKey(mainPrompt, characterAndStyle);
+        const cacheKey = generateCacheKey(mainPrompt, characterAndStyle, opts);
         const cacheDoc = doc(db, CACHE_COLLECTION, cacheKey);
         let cacheSnap: any = null;
         try {
@@ -442,9 +583,11 @@ Example Output:
 
         // 3. Generate an image for each of the 5 prompts sequentially to avoid rate limiting
         const base64Images: string[] = [];
-        for (const prompt of shotList.prompts) {
-            const finalPrompt = `${characterAndStyle}. Maintain this character and style consistently. A cinematic, high quality, professional photograph of: ${prompt}`;
-            
+        const desired = Math.min(Math.max(opts?.frames || 5, 1), 5);
+        const prompts = (shotList.prompts as string[]).slice(0, desired);
+        for (const prompt of prompts) {
+            const finalPrompt = `${characterAndStyle}. Maintain this character and style consistently. A cinematic, high quality, professional photograph of: ${prompt}` + (opts?.backgroundImage ? ' Compose the subject naturally into the provided background image with matching lighting and perspective.' : '');
+
             // Create a GenerativeModel instance using nano-bana (gemini-2.5-flash-image-preview) for contest
             const imagenModel = getGenerativeModel(ai, { 
                 model: 'gemini-2.5-flash-image-preview',
@@ -452,8 +595,26 @@ Example Output:
                     responseModalities: [ResponseModality.TEXT, ResponseModality.IMAGE],
                 }
             });
-            
-            const response = await imagenModel.generateContent(finalPrompt);
+
+            // Build parts: optional character refs and background image, then prompt text
+            const parts: any[] = [];
+            if (opts?.characterRefs && opts.characterRefs.length > 0) {
+                for (const ref of opts.characterRefs) {
+                    try { parts.push(fileToGenerativePart(ref)); } catch (e) { console.warn('Invalid character ref image skipped'); }
+                }
+            }
+            if (opts?.backgroundImage) {
+                try { parts.push(fileToGenerativePart(opts.backgroundImage)); } catch (e) { console.warn('Invalid background image skipped'); }
+            }
+            parts.push({ text: finalPrompt });
+
+            const response = await imagenModel.generateContent(parts);
+
+            // Extract token usage from response
+            const tokenUsage = extractTokenUsage(response, 'gemini-2.5-flash-image-preview');
+            if (tokenUsage) {
+                console.log('Image generation token usage:', tokenUsage);
+            }
 
             // Handle the generated image using Firebase AI Logic nano-bana API
             try {
@@ -492,7 +653,9 @@ Example Output:
                     characterAndStyle: characterAndStyle,
                     userId: currentUser.uid, // Required by security rules
                     createdAt: new Date().toISOString(),
-                    cacheKey: cacheKey
+                    cacheKey: cacheKey,
+                    hasBackground: !!opts?.backgroundImage,
+                    refCount: opts?.characterRefs?.length || 0
                 });
                 console.log(`Cached ${base64Images.length} images for future use`);
             } catch (cacheError) {
@@ -501,9 +664,32 @@ Example Output:
             }
         }
         
-        // Record successful usage
+        // Record successful usage with token tracking
         if (currentUser) {
-            await recordUsage(currentUser.uid, 'image_generation', 5, true);
+            // Calculate total token usage for all images generated
+            const totalTokenUsage: TokenUsage = {
+                promptTokens: 0,
+                completionTokens: 0,
+                totalTokens: 0,
+                estimatedCost: 0,
+                model: 'gemini-2.5-flash-image-preview'
+            };
+            
+            // Note: For image generation, we don't have individual token usage per image
+            // The API doesn't return detailed token breakdown for image generation
+            // We'll use a reasonable estimate based on the number of images and complexity
+            const estimatedTokensPerImage = 1000; // Rough estimate
+            totalTokenUsage.totalTokens = base64Images.length * estimatedTokensPerImage;
+            totalTokenUsage.estimatedCost = calculateCost(totalTokenUsage.totalTokens, 'gemini-2.5-flash-image-preview');
+            
+            await recordUsage(
+                currentUser.uid, 
+                'image_generation', 
+                5, // Legacy cost field
+                true, 
+                totalTokenUsage,
+                'firebase'
+            );
         }
         
         return base64Images;
@@ -511,10 +697,17 @@ Example Output:
     } catch (error) {
         console.error("Error generating image sequence:", error);
         
-        // Record failed usage
+        // Record failed usage (no token usage for failed calls)
         const currentUser = getCurrentUser();
         if (currentUser) {
-            await recordUsage(currentUser.uid, 'image_generation', 5, false);
+            await recordUsage(
+                currentUser.uid, 
+                'image_generation', 
+                5, // Legacy cost field
+                false, 
+                undefined, // No token usage for failed calls
+                'firebase'
+            );
         }
         
         if (error instanceof Error) {
@@ -559,6 +752,8 @@ const fileToGenerativePart = (base64Data: string) => {
 export const editImageSequence = async (base64Images: string[], editPrompt: string): Promise<string[]> => {
     try {
         const editedImages: string[] = [];
+        const allTokenUsage: TokenUsage[] = [];
+        
         for (const image of base64Images) {
             const imagePart = fileToGenerativePart(image);
             
@@ -574,6 +769,13 @@ export const editImageSequence = async (base64Images: string[], editPrompt: stri
                 imagePart,
                 { text: editPrompt }
             ]);
+            
+            // Extract token usage from response
+            const tokenUsage = extractTokenUsage(response, 'gemini-2.5-flash-image-preview');
+            if (tokenUsage) {
+                console.log('Image editing token usage:', tokenUsage);
+                allTokenUsage.push(tokenUsage);
+            }
 
             // Handle the edited image using Firebase AI Logic API
             try {
@@ -602,6 +804,32 @@ export const editImageSequence = async (base64Images: string[], editPrompt: stri
                 throw new Error("The AI could not edit one of the images. Please try a different prompt.");
             }
         }
+        
+        // Record usage for all image edits
+        const currentUser = getCurrentUser();
+        if (currentUser && allTokenUsage.length > 0) {
+            // Aggregate all token usage
+            const totalTokenUsage: TokenUsage = {
+                promptTokens: allTokenUsage.reduce((sum, usage) => sum + usage.promptTokens, 0),
+                completionTokens: allTokenUsage.reduce((sum, usage) => sum + usage.completionTokens, 0),
+                totalTokens: allTokenUsage.reduce((sum, usage) => sum + usage.totalTokens, 0),
+                estimatedCost: allTokenUsage.reduce((sum, usage) => sum + usage.estimatedCost, 0),
+                model: 'gemini-2.5-flash-image-preview'
+            };
+            
+            console.log('Total image editing token usage:', totalTokenUsage);
+            
+            // Record usage (using image_generation operation type)
+            await recordUsage(
+                currentUser.uid,
+                'image_generation',
+                1, // Legacy cost unit
+                true,
+                totalTokenUsage,
+                'firebase'
+            );
+        }
+        
         return editedImages;
     } catch (error) {
         console.error("Error editing image sequence:", error);
