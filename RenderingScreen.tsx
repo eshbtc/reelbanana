@@ -57,7 +57,16 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
   const [stage, setStage] = useState<RenderStage>('idle');
   const [progress, setProgress] = useState(0); // For uploads, 0 to 100
   const [useCachedMessage, setUseCachedMessage] = useState(false);
-  const { toast } = useToast();
+  // Defensive context usage to prevent null context errors
+  let toast: any = null;
+  
+  try {
+    const toastContext = useToast();
+    toast = toastContext.toast;
+  } catch (error) {
+    console.warn('Toast context not available:', error);
+    toast = { info: () => {}, success: () => {}, error: () => {} };
+  }
 
   useEffect(() => {
     const startRenderingProcess = async () => {
