@@ -66,29 +66,61 @@ app.post('/render', async (req, res) => {
         scenes.forEach((scene, sceneIndex) => {
             const imagePattern = path.join(tempDir, `scene-${sceneIndex}-%d.jpeg`);
             const sceneOutput = `scene_clip_${sceneIndex}`;
+            const duration = scene.duration || 3;
             
             command.input(imagePattern)
                 .inputOptions(['-framerate 1.5']) // Each image shows for ~0.66 seconds
-                .loop(4) // Duration of each scene clip in seconds
+                .loop(duration) // Dynamic duration based on user setting
                 .videoCodec('libx264');
 
-            // Add a Ken Burns (pan/zoom) effect to the clip
-            // Alternates between zooming in and zooming out for variety
-            const zoomEffect = sceneIndex % 2 === 0 
-                ? "zoompan=z='min(zoom+0.001,1.2)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1280x720"
-                : "zoompan=z='if(lte(zoom,1.0),1.2,max(1.001,zoom-0.001))':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1280x720";
+            // Dynamic camera movement based on user selection
+            let zoomEffect;
+            switch (scene.camera || 'static') {
+                case 'zoom-in':
+                    zoomEffect = "zoompan=z='min(zoom+0.001,1.3)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1280x720";
+                    break;
+                case 'zoom-out':
+                    zoomEffect = "zoompan=z='if(lte(zoom,1.0),1.3,max(1.001,zoom-0.001))':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1280x720";
+                    break;
+                case 'pan-left':
+                    zoomEffect = "zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)-50*sin(t)':y='ih/2-(ih/zoom/2)':s=1280x720";
+                    break;
+                case 'pan-right':
+                    zoomEffect = "zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)+50*sin(t)':y='ih/2-(ih/zoom/2)':s=1280x720";
+                    break;
+                default: // static
+                    zoomEffect = "scale=1280:720";
+                    break;
+            }
             
             complexFilter.push(`[${sceneIndex}:v]${zoomEffect},format=yuv420p[v${sceneIndex}]`);
             sceneOutputs.push(`[v${sceneIndex}]`);
         });
 
-        // Chain all scene clips together with crossfade transitions
+        // Chain all scene clips together with dynamic transitions
         let currentStream = sceneOutputs[0];
+        let totalDuration = 0;
+        
         for (let i = 1; i < sceneOutputs.length; i++) {
             const nextStream = sceneOutputs[i];
-            const fadeOutput = `fade_${i}`;
-            complexFilter.push(`${currentStream}${nextStream}xfade=transition=fade:duration=0.75:offset=${(i * 4) - 0.75}[${fadeOutput}]`);
-            currentStream = `[${fadeOutput}]`;
+            const transitionOutput = `transition_${i}`;
+            const currentScene = scenes[i - 1];
+            const nextScene = scenes[i];
+            const transition = nextScene.transition || 'fade';
+            const transitionDuration = 0.75;
+            
+            // Calculate offset based on actual scene durations
+            totalDuration += currentScene.duration || 3;
+            const offset = totalDuration - transitionDuration;
+            
+            if (transition === 'none') {
+                // No transition, just concatenate
+                complexFilter.push(`${currentStream}${nextStream}concat=n=2:v=1:a=0[${transitionOutput}]`);
+            } else {
+                // Apply the selected transition
+                complexFilter.push(`${currentStream}${nextStream}xfade=transition=${transition}:duration=${transitionDuration}:offset=${offset}[${transitionOutput}]`);
+            }
+            currentStream = `[${transitionOutput}]`;
         }
 
         // Add subtitles and define final output

@@ -83,6 +83,9 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderCompl
         const sceneDataForRender = scenes.map(scene => ({
             narration: scene.narration,
             imageCount: scene.imageUrls?.length || 0,
+            camera: scene.camera || 'static',
+            transition: scene.transition || 'fade',
+            duration: scene.duration || 3,
         }));
         // Assuming render service knows how to find assets by projectId and scene structure.
         const { videoUrl } = await apiCall(API_ENDPOINTS.render, 

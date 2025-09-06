@@ -170,7 +170,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
   }, [scenes, handleGenerateImageSequence, characterAndStyle]);
 
 
-  const handleUpdateScene = useCallback((id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration'>>) => {
+  const handleUpdateScene = useCallback((id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration'>>) => {
     setScenes(prevScenes =>
       prevScenes.map(s => s.id === id ? { ...s, ...updates } : s)
     );

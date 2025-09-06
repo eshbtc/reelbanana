@@ -1,6 +1,6 @@
 // Fix: Implement the SceneCard component. This file was previously invalid.
 import React, { useState, useEffect } from 'react';
-import { Scene } from '../types';
+import { Scene, CameraMovement, TransitionType } from '../types';
 import { TrashIcon, SparklesIcon, EditIcon } from './Icon';
 import Spinner from './Spinner';
 import EditSequenceModal from './EditSequenceModal';
@@ -10,7 +10,7 @@ interface SceneCardProps {
   index: number;
   onDelete: (id: string) => void;
   onGenerateImage: (id: string, prompt: string) => void;
-  onUpdateScene: (id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration'>>) => void;
+  onUpdateScene: (id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration'>>) => void;
   onUpdateSequence: (id: string, newImageUrls: string[]) => void;
 }
 
@@ -128,6 +128,58 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
                 <p className="text-gray-400 text-xs"><strong className="font-semibold">Prompt:</strong> {scene.prompt}</p>
               </div>
             )}
+
+          {/* Director Controls */}
+          {scene.status === 'success' && (
+            <div className="mt-4 p-3 bg-gray-900/50 rounded-lg border border-gray-600">
+              <h4 className="text-xs font-bold text-amber-400 mb-3 flex items-center gap-2">
+                🎬 Director Controls
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-400 block mb-1">Camera Movement</label>
+                  <select
+                    value={scene.camera || 'static'}
+                    onChange={(e) => onUpdateScene(scene.id, { camera: e.target.value as CameraMovement })}
+                    className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-amber-500 focus:border-amber-500"
+                  >
+                    <option value="static">Static</option>
+                    <option value="zoom-in">Zoom In</option>
+                    <option value="zoom-out">Zoom Out</option>
+                    <option value="pan-left">Pan Left</option>
+                    <option value="pan-right">Pan Right</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-400 block mb-1">Transition</label>
+                  <select
+                    value={scene.transition || 'fade'}
+                    onChange={(e) => onUpdateScene(scene.id, { transition: e.target.value as TransitionType })}
+                    className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-amber-500 focus:border-amber-500"
+                  >
+                    <option value="fade">Fade</option>
+                    <option value="wipeleft">Wipe Left</option>
+                    <option value="wiperight">Wipe Right</option>
+                    <option value="circleopen">Circle Open</option>
+                    <option value="dissolve">Dissolve</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+              </div>
+              <div className="mt-3">
+                <label className="text-xs font-semibold text-gray-400 block mb-1">Duration (seconds)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  step="0.5"
+                  value={scene.duration || 3}
+                  onChange={(e) => onUpdateScene(scene.id, { duration: parseFloat(e.target.value) })}
+                  className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-amber-500 focus:border-amber-500"
+                />
+              </div>
+            </div>
+          )}
 
           <div className="border-t border-gray-700 mt-4 pt-3 flex items-center justify-between">
             {isEditing ? (
