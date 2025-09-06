@@ -35,7 +35,7 @@ const PRODUCTION_CONFIG: ApiConfig = {
     apiKey: 'https://reel-banana-api-key-service-423229273041.us-central1.run.app',
   },
   firebase: {
-    projectId: 'reel-banana-35a54', // Can be hardcoded - not sensitive
+    projectId: 'reel-banana', // Can be hardcoded - not sensitive
     apiKey: 'AIzaSyCeZNdwsaZ_sBmOt8WY0FcUziq22-OVJjg',
     authDomain: 'reel-banana-35a54.firebaseapp.com',
     storageBucket: 'reel-banana-35a54.firebasestorage.app',
@@ -56,7 +56,7 @@ const DEVELOPMENT_CONFIG: ApiConfig = {
     apiKey: 'http://localhost:8085',
   },
   firebase: {
-    projectId: 'reel-banana-35a54', // Can be hardcoded - not sensitive
+    projectId: 'reel-banana', // Can be hardcoded - not sensitive
     apiKey: 'AIzaSyCeZNdwsaZ_sBmOt8WY0FcUziq22-OVJjg',
     authDomain: 'reel-banana-35a54.firebaseapp.com',
     storageBucket: 'reel-banana-35a54.firebasestorage.app',
@@ -77,7 +77,7 @@ const AI_STUDIO_CONFIG: ApiConfig = {
     apiKey: 'https://reel-banana-api-key-service-423229273041.us-central1.run.app',
   },
   firebase: {
-    projectId: 'reel-banana-35a54', // Can be hardcoded - not sensitive
+    projectId: 'reel-banana', // Can be hardcoded - not sensitive
     apiKey: 'AIzaSyCeZNdwsaZ_sBmOt8WY0FcUziq22-OVJjg',
     authDomain: 'reel-banana-35a54.firebaseapp.com',
     storageBucket: 'reel-banana-35a54.firebasestorage.app',
