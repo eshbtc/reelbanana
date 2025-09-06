@@ -405,3 +405,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - To avoid API calls in demos, seed Firestore collection `demo_characters`:
   - Run: `GOOGLE_APPLICATION_CREDENTIALS=service-account.json node scripts/seed-demo-characters.js`
   - Each doc: `name`, `description`, `images: [url]`, optional `templateId`.
+# CI/CD Test - Sat Sep  6 13:21:00 CDT 2025
