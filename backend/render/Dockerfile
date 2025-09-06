@@ -6,7 +6,7 @@ COPY package*.json ./
 
 RUN apt-get update && apt-get install -y ffmpeg
 
-RUN npm ci --only=production
+RUN npm install --only=production
 
 COPY . .
 
