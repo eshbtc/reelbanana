@@ -44,6 +44,10 @@ const MyProjectsPage: React.FC = () => {
   // Keyboard navigation
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = (target?.tagName || '').toLowerCase();
+      const editable = (target as any)?.isContentEditable;
+      if (tag === 'input' || tag === 'textarea' || editable) return;
       if (!filtered.length) return;
       if (e.key === 'ArrowDown') { 
         e.preventDefault(); 
@@ -54,6 +58,10 @@ const MyProjectsPage: React.FC = () => {
         setFocusedIndex(i => Math.max(i - 1, 0)); 
       }
       if (e.key === 'Enter' && focusedIndex >= 0) handleOpen(filtered[focusedIndex].id);
+      if (e.code === 'Space' && focusedIndex >= 0) {
+        e.preventDefault();
+        toggleSelect(filtered[focusedIndex].id);
+      }
       if ((e.key === 'Delete' || e.key === 'Backspace') && focusedIndex >= 0) setConfirmDeleteId(filtered[focusedIndex].id);
       if (e.key === 'F2' && focusedIndex >= 0) startRename(filtered[focusedIndex].id, filtered[focusedIndex].topic);
       if (e.key.toLowerCase() === 'd' && focusedIndex >= 0) handleDuplicate(filtered[focusedIndex].id);

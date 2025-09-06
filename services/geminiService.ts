@@ -83,9 +83,14 @@ const getAIService = async (): Promise<'firebase' | 'custom' | null> => {
     return 'firebase'; // Use Firebase AI Logic with free credits
   }
 
-  // Check if user has API key stored server-side
-  const hasApiKey = await hasUserApiKey(currentUser.uid);
-  console.log(`🔍 getAIService: User ${currentUser.uid} has API key: ${hasApiKey}`);
+  // Check if user has API key stored server-side (check both Google and FAL keys)
+  const hasGoogleApiKey = await hasUserApiKey(currentUser.uid, 'google');
+  const hasFalApiKey = await hasUserApiKey(currentUser.uid, 'fal');
+  const hasApiKey = hasGoogleApiKey || hasFalApiKey;
+  
+  console.log(`🔍 getAIService: User ${currentUser.uid} has Google API key: ${hasGoogleApiKey}`);
+  console.log(`🔍 getAIService: User ${currentUser.uid} has FAL API key: ${hasFalApiKey}`);
+  console.log(`🔍 getAIService: User ${currentUser.uid} has any API key: ${hasApiKey}`);
   
   if (hasApiKey) {
     console.log('✅ getAIService: Using custom API key (unlimited usage)');
