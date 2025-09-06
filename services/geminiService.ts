@@ -74,13 +74,14 @@ const getAIService = async (): Promise<'firebase' | 'custom' | null> => {
     return null;
   }
 
-  // Check if user has free credits remaining
+  // Check if user has any free credits remaining
   const hasCredits = await checkUserCredits(currentUser.uid, 1);
   console.log(`🔍 getAIService: User ${currentUser.uid} has credits: ${hasCredits}`);
   
   if (hasCredits) {
     console.log('✅ getAIService: Using Firebase AI Logic (free credits)');
     return 'firebase'; // Use Firebase AI Logic with free credits
+    // Note: Specific credit amount will be checked later in generateImageSequence after cache miss
   }
 
   // Check if user has API key stored server-side (check both Google and FAL keys)
@@ -563,13 +564,17 @@ export const generateImageSequence = async (
         // For Firebase AI Logic, check credits after cache miss
         if (aiService === 'firebase') {
             const requestedFrames = Math.min(Math.max(opts?.frames || 5, 1), 5);
+            console.log(`🔍 generateImageSequence: Checking ${requestedFrames} credits for user ${currentUser.uid}`);
             const hasCredits = await checkUserCredits(currentUser.uid, requestedFrames);
+            console.log(`🔍 generateImageSequence: User has ${requestedFrames} credits: ${hasCredits}`);
             if (!hasCredits) {
                 // Fetch profile to show a helpful message
                 const profile = await getUserProfile(currentUser.uid);
                 const available = profile?.freeCredits ?? 0;
+                console.log(`❌ generateImageSequence: Insufficient credits - need ${requestedFrames}, have ${available}`);
                 throw new Error(`Insufficient credits. This request needs ${requestedFrames} image credits, you have ${available}. Switch to Draft (3 frames) or add your Gemini API key.`);
             }
+            console.log(`✅ generateImageSequence: Credits sufficient, proceeding with generation`);
         }
         
         // 2. Use sophisticated "shot director" approach for cinematic quality
