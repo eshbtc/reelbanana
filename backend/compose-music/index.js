@@ -95,10 +95,6 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
     return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required fields: projectId and narrationScript');
   }
 
-  if (!process.env.GEMINI_API_KEY) {
-    console.error('Missing environment variable: GEMINI_API_KEY');
-    return sendError(req, res, 500, 'CONFIG', 'Missing GEMINI_API_KEY environment variable');
-  }
 
   console.log(`Received music composition request for projectId: ${projectId}`);
 
@@ -119,7 +115,7 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
         cached: true
       });
     }
-    // 1. Analyze narration mood with Gemini
+    // 1. Analyze narration mood with Gemini AI
     const prompt = `Analyze the following narration script and provide a short, descriptive musical prompt (e.g., "An upbeat, whimsical, adventurous orchestral score for a children's story, with a sense of wonder and a triumphant finish."). Only return the prompt text, nothing else. Script: "${narrationScript}"`;
     const result = await geminiModel.generateContent(prompt);
     const response = result.response;
@@ -157,7 +153,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'compose-music',
-    geminiConfigured: !!process.env.GEMINI_API_KEY,
+    aiConfigured: true, // Using Firebase AI Logic
     bucket: bucketName,
     time: new Date().toISOString()
   });
@@ -167,6 +163,7 @@ app.get('/health', (req, res) => {
  * Create a placeholder audio file based on mood analysis
  * In production, this would be replaced with actual music generation
  */
+
 function createPlaceholderAudio(musicPrompt) {
   // This is a simplified placeholder - in reality, you'd use a music generation API
   // For the hackathon demo, we'll create a simple tone sequence
