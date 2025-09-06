@@ -145,6 +145,10 @@ app.post('/render', appCheckVerification, async (req, res) => {
         
         console.log(`Found ${imageFiles.length} image files:`, imageFiles.map(f => f.name));
         
+        // Debug: Also check for any files in the project directory
+        const allProjectFiles = (await inputBucket.getFiles({ prefix: `${projectId}/` }))[0];
+        console.log(`All project files (${allProjectFiles.length}):`, allProjectFiles.map(f => f.name));
+        
         // Resolve the correct remote music filename if provided
         let musicLocalPath = null;
         const downloadPromises = [
@@ -188,8 +192,12 @@ app.post('/render', appCheckVerification, async (req, res) => {
             // Find the actual image files for this scene
             const sceneImages = imageFiles.filter(file => {
                 const fileName = path.basename(file.name);
-                return fileName.startsWith(`scene-${sceneIndex}-`);
+                const matches = fileName.startsWith(`scene-${sceneIndex}-`);
+                console.log(`Scene ${sceneIndex}: Checking file ${fileName}, matches: ${matches}`);
+                return matches;
             });
+            
+            console.log(`Scene ${sceneIndex}: Found ${sceneImages.length} images:`, sceneImages.map(f => path.basename(f.name)));
             
             if (sceneImages.length === 0) {
                 console.error(`No images found for scene ${sceneIndex}`);
