@@ -3,6 +3,9 @@ name: Deploy Firebase Functions
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - 'functions/**'
+      - '.github/workflows/firebase-functions-deploy.yml'
 
 jobs:
   deploy-functions:
