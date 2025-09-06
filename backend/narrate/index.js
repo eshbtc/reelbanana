@@ -105,6 +105,18 @@ app.post('/narrate', appCheckVerification, async (req, res) => {
   console.log(`Received narration request for projectId: ${projectId}`);
 
   try {
+    // Check if narration file already exists to avoid re-generating
+    const bucket = storage.bucket(bucketName);
+    const fileName = `${projectId}/narration.mp3`;
+    const file = bucket.file(fileName);
+    
+    const [exists] = await file.exists();
+    if (exists) {
+      const gcsPath = `gs://${bucketName}/${fileName}`;
+      console.log(`Narration already exists for ${projectId} at ${gcsPath}, skipping ElevenLabs API call`);
+      return res.status(200).json({ gsAudioPath: gcsPath });
+    }
+    
     // Map simple emotion tags to ElevenLabs settings
     const settingsByEmotion = {
       neutral: { stability: 0.5, similarity_boost: 0.75 },
@@ -138,17 +150,18 @@ app.post('/narrate', appCheckVerification, async (req, res) => {
       throw new Error(`ElevenLabs API error: ${response.status} ${response.statusText}`);
     }
 
-    const audioStream = response.body;
     console.log(`ElevenLabs TTS stream created successfully for ${projectId}`);
 
-    // 2. Stream the audio directly to Google Cloud Storage
-    const bucket = storage.bucket(bucketName);
-    const fileName = `${projectId}/narration.mp3`;
-    const file = bucket.file(fileName);
+    // 2. Stream the audio directly to Google Cloud Storage  
+    // Reuse the bucket, fileName, and file variables from the exists check above
     const writeStream = file.createWriteStream({
       metadata: { contentType: 'audio/mpeg' },
     });
 
+    // Convert fetch ReadableStream to Node.js stream and pipe to GCS
+    const { Readable } = require('stream');
+    const audioStream = Readable.fromWeb(response.body);
+    
     // Add error handling to the audio stream
     audioStream.on('error', (streamError) => {
       console.error(`ElevenLabs audio stream error for ${projectId}:`, streamError);
