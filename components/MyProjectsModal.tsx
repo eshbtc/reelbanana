@@ -19,6 +19,10 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState<string>('');
   const [filterText, setFilterText] = useState<string>('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [focusedIndex, setFocusedIndex] = useState<number>(-1);
 
   const load = async () => {
     const user = getCurrentUser();
@@ -43,6 +47,22 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
     if (isOpen) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!filtered.length) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); setFocusedIndex(i => Math.min(i + 1, filtered.length - 1)); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setFocusedIndex(i => Math.max(i - 1, 0)); }
+      if (e.key === 'Enter' && focusedIndex >= 0) handleOpen(filtered[focusedIndex].id);
+      if ((e.key === 'Delete' || e.key === 'Backspace') && focusedIndex >= 0) setConfirmDeleteId(filtered[focusedIndex].id);
+      if (e.key === 'F2' && focusedIndex >= 0) startRename(filtered[focusedIndex].id, filtered[focusedIndex].topic);
+      if (e.key.toLowerCase() === 'd' && focusedIndex >= 0) handleDuplicate(filtered[focusedIndex].id);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isOpen, filtered, focusedIndex]);
 
   const handleOpen = (id: string) => {
     // Reload the app with selected project; editor loads projectId on mount
@@ -91,6 +111,7 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
     setFilterText(value);
     const v = value.toLowerCase();
     setFiltered(projects.filter(p => (p.topic || '').toLowerCase().includes(v)));
+    setFocusedIndex(-1);
   };
 
   const handleDuplicate = async (id: string) => {
@@ -135,6 +156,39 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
     }
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(p => p.id)));
+    }
+  };
+
+  const bulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} selected project(s)?`)) return;
+    for (const id of Array.from(selectedIds)) {
+      await handleDelete(id);
+    }
+    setSelectedIds(new Set());
+  };
+
+  const bulkDuplicate = async () => {
+    if (selectedIds.size === 0) return;
+    for (const id of Array.from(selectedIds)) {
+      await handleDuplicate(id);
+    }
+    setSelectedIds(new Set());
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} panelClassName="bg-gray-850 bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl m-4 p-0 border border-gray-700">
       <div className="text-white">
@@ -159,6 +213,15 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
             className="flex-1 bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:ring-amber-500 focus:border-amber-500"
           />
           <button onClick={load} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">Refresh</button>
+          {filtered.length > 0 && (
+            <>
+              <button onClick={toggleSelectAll} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">
+                {selectedIds.size === filtered.length ? 'Clear All' : 'Select All'}
+              </button>
+              <button disabled={selectedIds.size === 0} onClick={bulkDuplicate} className="px-3 py-2 bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white rounded text-sm">Duplicate Selected</button>
+              <button disabled={selectedIds.size === 0} onClick={bulkDelete} className="px-3 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white rounded text-sm">Delete Selected</button>
+            </>
+          )}
         </div>
 
         {/* Content */}
@@ -173,9 +236,10 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
           ) : filtered.length === 0 ? (
             <div className="px-6 py-10 text-center text-gray-400">No projects found. Create a story to get started!</div>
           ) : (
-            filtered.map(p => (
-              <div key={p.id} className="group px-6 py-4 flex items-center justify-between hover:bg-gray-900/30 transition-colors">
+            filtered.map((p, idx) => (
+              <div key={p.id} className={`group px-6 py-4 flex items-center justify-between hover:bg-gray-900/30 transition-colors ${focusedIndex === idx ? 'bg-gray-900/40' : ''}`}>
                 <div className="min-w-0 flex items-center gap-3">
+                  <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelect(p.id)} className="accent-amber-500" />
                   {p.thumbnailUrl && (
                     <img src={p.thumbnailUrl} alt="thumb" className="w-16 h-10 object-cover rounded border border-gray-700 transition-transform group-hover:scale-105" />
                   )}

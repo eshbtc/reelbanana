@@ -113,6 +113,7 @@ export interface ProjectSummary {
     updatedAt?: string;
     sceneCount: number;
     thumbnailUrl?: string;
+    thumbs?: string[];
 }
 
 /**
@@ -130,6 +131,14 @@ export const listMyProjects = async (userId: string, limit: number = 20): Promis
         const snap = await getDocs(q);
         return snap.docs.map(d => {
             const data: any = d.data();
+            // Try to build up to 3 thumbs from the first images of the first few scenes
+            const thumbs: string[] = [];
+            if (Array.isArray(data.scenes)) {
+                for (let i = 0; i < data.scenes.length && thumbs.length < 3; i++) {
+                    const s = data.scenes[i];
+                    if (s?.imageUrls?.[0]) thumbs.push(s.imageUrls[0]);
+                }
+            }
             return {
                 id: d.id,
                 topic: data.topic || 'Untitled',
@@ -137,6 +146,7 @@ export const listMyProjects = async (userId: string, limit: number = 20): Promis
                 updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || undefined,
                 sceneCount: Array.isArray(data.scenes) ? data.scenes.length : 0,
                 thumbnailUrl: Array.isArray(data.scenes) && data.scenes[0]?.imageUrls?.[0] ? data.scenes[0].imageUrls[0] : undefined,
+                thumbs,
             } as ProjectSummary;
         });
     } catch (error) {
