@@ -563,13 +563,17 @@ export const generateImageSequence = async (
         
         // 2. Use sophisticated "shot director" approach for cinematic quality
         const directorSystemInstruction = `You are a film director planning a 2-second shot. Based on the following scene description, create a sequence of exactly 5 distinct, continuous camera shots that show a brief moment of action. Each shot should be a detailed visual prompt for an image generation model.
-            
-Example Output:
-1. A wide shot of a knight standing before a massive, ancient stone door in a dark cavern, torchlight flickering.
-2. The knight takes a deep breath, close up on his determined face, sweat beading on his brow.
-3. A shot of the knight's gauntleted hand reaching out and placing it firmly on the cold stone door.
-4. The knight pushes with all his might, muscles straining, the door beginning to grind open with a low rumble.
-5. A sliver of brilliant golden light spills from the opening, illuminating the knight's astonished eyes.`
+
+Return ONLY a JSON object with this exact format:
+{
+  "prompts": [
+    "A wide shot of a knight standing before a massive, ancient stone door in a dark cavern, torchlight flickering.",
+    "The knight takes a deep breath, close up on his determined face, sweat beading on his brow.",
+    "A shot of the knight's gauntleted hand reaching out and placing it firmly on the cold stone door.",
+    "The knight pushes with all his might, muscles straining, the door beginning to grind open with a low rumble.",
+    "A sliver of brilliant golden light spills from the opening, illuminating the knight's astonished eyes."
+  ]
+}`
 
         // Create a GenerativeModel instance for shot director
         const shotDirectorModel = getGenerativeModel(ai, { 

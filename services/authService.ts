@@ -228,15 +228,19 @@ export const recordUsage = async (
   try {
     // Record usage in usage collection
     const usageRef = doc(db, 'usage', `${userId}_${Date.now()}`);
-    const usageRecord: UsageRecord = {
+    const usageRecord: any = {
       userId,
       operation,
       timestamp: new Date().toISOString(),
       cost,
       success,
-      tokenUsage,
       apiService,
     };
+    
+    // Only add tokenUsage if it's defined (Firestore doesn't allow undefined values)
+    if (tokenUsage) {
+      usageRecord.tokenUsage = tokenUsage;
+    }
     
     await setDoc(usageRef, usageRecord);
     
