@@ -20,7 +20,16 @@ import { authFetch } from './lib/authFetch';
 type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects';
 
 const App: React.FC = () => {
-  const { toast } = useToast();
+  // Defensive context usage to prevent null context errors
+  let toast: any = null;
+  
+  try {
+    const toastContext = useToast();
+    toast = toastContext.toast;
+  } catch (error) {
+    console.warn('Toast context not available:', error);
+    toast = { info: () => {}, success: () => {}, error: () => {} };
+  }
   // Initialize view based on URL path
   const getInitialView = (): View => {
     const path = window.location.pathname;
@@ -156,6 +165,7 @@ const App: React.FC = () => {
             emotion={narrationEmotion} 
             proPolish={proPolish} 
             projectId={projectId || undefined} 
+            demoMode={demoMode}
             onRenderComplete={handleRenderComplete} 
             onRenderFail={handleRenderFail} 
           />;

@@ -61,8 +61,24 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   const [isGeneratingInspiration, setIsGeneratingInspiration] = useState(false);
   const [generatedInspiration, setGeneratedInspiration] = useState<string>('');
   
-  const { toast } = useToast();
-  const confirm = useConfirm();
+  // Defensive context usage to prevent null context errors
+  let toast: any = null;
+  let confirm: any = null;
+  
+  try {
+    const toastContext = useToast();
+    toast = toastContext.toast;
+  } catch (error) {
+    console.warn('Toast context not available:', error);
+    toast = { info: () => {}, success: () => {}, error: () => {} };
+  }
+  
+  try {
+    confirm = useConfirm();
+  } catch (error) {
+    console.warn('Confirm context not available:', error);
+    confirm = () => Promise.resolve(false);
+  }
 
   // Demo mode: automatically load simple demo content
   useEffect(() => {
@@ -182,7 +198,8 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         throw new Error("The AI couldn't generate a story for this topic. Please try a different one.");
       }
       
-      const initialScenes: Scene[] = storyScenes.map((s, index) => ({
+      const limitedScenes = demoMode ? storyScenes.slice(0, 4) : storyScenes;
+      const initialScenes: Scene[] = limitedScenes.map((s, index) => ({
         id: `${Date.now()}-${index}`,
         prompt: s.prompt,
         narration: s.narration,
@@ -375,7 +392,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       const imageUrls = await generateImageSequence(prompt, styleInstruction, {
         characterRefs,
         backgroundImage: bg,
-        frames: renderMode === 'draft' ? 3 : 5,
+        frames: demoMode ? 3 : (renderMode === 'draft' ? 3 : 5),
         projectId: projectId || undefined,
         sceneIndex,
         forceUseApiKey
@@ -450,7 +467,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       const imageUrls = await generateImageSequence(`${prompt} (alternative angle variation)`, styleInstruction, {
         characterRefs,
         backgroundImage: bg,
-        frames: renderMode === 'draft' ? 3 : 5,
+        frames: demoMode ? 3 : (renderMode === 'draft' ? 3 : 5),
         projectId: projectId || undefined,
         sceneIndex,
         forceUseApiKey

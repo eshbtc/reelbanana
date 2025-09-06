@@ -159,7 +159,15 @@ const MyProjectsPage: React.FC = () => {
     }
   };
 
-  const confirm = useConfirm();
+  // Defensive context usage to prevent null context errors
+  let confirm: any = null;
+  
+  try {
+    confirm = useConfirm();
+  } catch (error) {
+    console.warn('Confirm context not available:', error);
+    confirm = () => Promise.resolve(false);
+  }
   const bulkDelete = async () => {
     if (selectedIds.size === 0) return;
     const ok = await confirm({

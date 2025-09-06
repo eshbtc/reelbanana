@@ -9,6 +9,7 @@ interface RenderingScreenProps {
   emotion?: string;
   proPolish?: boolean;
   projectId?: string;
+  demoMode?: boolean;
   onRenderComplete: (url: string, projectId?: string) => void;
   onRenderFail: (errorMessage: string) => void;
 }
@@ -52,7 +53,7 @@ const cachedMessages: Record<RenderStage, string> = {
 import { API_ENDPOINTS, apiCall } from './config/apiConfig';
 import { useToast } from './components/ToastProvider';
 
-const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'neutral', proPolish = false, projectId: providedProjectId, onRenderComplete, onRenderFail }) => {
+const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'neutral', proPolish = false, projectId: providedProjectId, demoMode = false, onRenderComplete, onRenderFail }) => {
   const [stage, setStage] = useState<RenderStage>('idle');
   const [progress, setProgress] = useState(0); // For uploads, 0 to 100
   const [useCachedMessage, setUseCachedMessage] = useState(false);
@@ -67,49 +68,15 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
       try {
         // 2. Upload all images
         setStage('uploading');
-        // Convert HTTP URLs to data URIs and prepare all images for upload
-        const convertHttpUrlToDataUri = async (url: string): Promise<string> => {
-          try {
-            const response = await fetch(url);
-            const blob = await response.blob();
-            return new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = reject;
-              reader.readAsDataURL(blob);
-            });
-          } catch (error) {
-            console.error('Failed to convert HTTP URL to data URI:', error);
-            throw error;
-          }
-        };
-
-        const allImageUrls = await Promise.all(
-          scenes.flatMap((scene, sceneIndex) =>
-            (scene.imageUrls || [])
-              .filter(url => typeof url === 'string' && url.trim() !== '')
-              .map(async (url, imageIndex) => {
-                let base64Image: string;
-                
-                if (url.startsWith('data:image/')) {
-                  // Already a data URI
-                  base64Image = url;
-                } else if (url.startsWith('http://') || url.startsWith('https://')) {
-                  // Convert HTTP URL to data URI
-                  console.log(`🎬 Converting HTTP URL to data URI: ${url.substring(0, 100)}...`);
-                  base64Image = await convertHttpUrlToDataUri(url);
-                } else {
-                  console.warn(`🎬 Skipping invalid image URL: ${url}`);
-                  return null;
-                }
-
-                return {
-                  base64Image,
-                  fileName: `scene-${sceneIndex}-${imageIndex}.png`, // Use .png to match upload service logs
-                };
-              })
-          )
-        ).then(results => results.filter(result => result !== null));
+        // Only upload inline data URIs; HTTPS images are assumed persisted already
+        const allImageUrls = scenes.flatMap((scene, sceneIndex) =>
+          (scene.imageUrls || [])
+            .filter(url => typeof url === 'string' && url.startsWith('data:image/'))
+            .map((url, imageIndex) => ({
+              base64Image: url,
+              fileName: `scene-${sceneIndex}-${imageIndex}.jpeg`,
+            }))
+        );
 
         const totalSceneImages = scenes.flatMap(scene => scene.imageUrls || []).length;
         console.log('🎬 Upload debug - Total scene images found:', totalSceneImages);
@@ -124,31 +91,31 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
           });
         }
 
-        if (allImageUrls.length === 0) {
-          throw new Error('No valid images found to upload. Make sure all scenes have generated images.');
+        if (allImageUrls.length > 0) {
+          // Upload all images to Google Cloud Storage
+          let uploadedCount = 0;
+          await Promise.all(
+            allImageUrls.map(async (image, index) => {
+              console.log(`🎬 Upload debug - Uploading image ${index + 1}:`, {
+                fileName: image.fileName,
+                isValidDataUri: image.base64Image.startsWith('data:image/'),
+                dataUriPrefix: image.base64Image.substring(0, 50)
+              });
+              await apiCall(API_ENDPOINTS.upload, 
+                { projectId, ...image }, 
+                'Failed to upload image'
+              );
+              uploadedCount++;
+              setProgress(Math.round((uploadedCount / allImageUrls.length) * 100));
+              console.log(`🎬 Upload debug - Successfully uploaded image ${index + 1}`);
+            })
+          );
+          console.log(`🎬 Upload complete - ${uploadedCount} images uploaded successfully`);
+          setProgress(100);
+        } else {
+          console.log('🎬 No data URIs to upload. Assuming images are already persisted.');
+          setProgress(100);
         }
-
-        // Upload all images to Google Cloud Storage
-        let uploadedCount = 0;
-        await Promise.all(
-          allImageUrls.map(async (image, index) => {
-            console.log(`🎬 Upload debug - Uploading image ${index + 1}:`, {
-              fileName: image.fileName,
-              isValidDataUri: image.base64Image.startsWith('data:image/'),
-              dataUriPrefix: image.base64Image.substring(0, 50)
-            });
-            await apiCall(API_ENDPOINTS.upload, 
-              { projectId, ...image }, 
-              'Failed to upload image'
-            );
-            uploadedCount++;
-            setProgress(Math.round((uploadedCount / allImageUrls.length) * 100));
-            console.log(`🎬 Upload debug - Successfully uploaded image ${index + 1}`);
-          })
-        );
-        
-        console.log(`🎬 Upload complete - ${uploadedCount} images uploaded successfully`);
-        setProgress(100);
         
         // 3. Generate narration
         setStage('narrating');
@@ -178,17 +145,19 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
           setUseCachedMessage(true);
         }
 
-        // 5. Compose musical score
-        setStage('composing');
-        setUseCachedMessage(false); // Reset for new stage
-        const composeResponse = await apiCall(API_ENDPOINTS.compose, 
-          { projectId, narrationScript }, 
-          'Failed to compose music'
-        );
-        const { gsMusicPath } = composeResponse;
-        
-        if (composeResponse.cached) {
-          setUseCachedMessage(true);
+        // 5. Compose musical score (skip in demo mode)
+        let gsMusicPath: string | undefined = undefined;
+        if (!demoMode) {
+          setStage('composing');
+          setUseCachedMessage(false); // Reset for new stage
+          const composeResponse = await apiCall(API_ENDPOINTS.compose, 
+            { projectId, narrationScript }, 
+            'Failed to compose music'
+          );
+          gsMusicPath = composeResponse?.gsMusicPath;
+          if (composeResponse.cached) {
+            setUseCachedMessage(true);
+          }
         }
 
         // 6. Render video
@@ -215,7 +184,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
         let finalUrl = videoUrl;
         try { sessionStorage.setItem('lastRenderOriginalUrl', videoUrl); } catch {}
         const polishEnabledFlag = (import.meta as any)?.env?.VITE_ENABLE_POLISH === 'true';
-        if (proPolish && polishEnabledFlag) {
+        if (!demoMode && proPolish && polishEnabledFlag) {
           setStage('polishing');
           setUseCachedMessage(false); // Reset for new stage
           try {
