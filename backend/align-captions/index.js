@@ -160,6 +160,17 @@ app.post('/align', appCheckVerification, async (req, res) => {
     console.log(`Received caption alignment request for projectId: ${projectId}`);
 
     try {
+        // Check if captions file already exists to avoid re-processing
+        const bucket = storage.bucket(bucketName);
+        const fileName = `${projectId}/captions.srt`;
+        const file = bucket.file(fileName);
+        
+        const [exists] = await file.exists();
+        if (exists) {
+            const gcsPath = `gs://${bucketName}/${fileName}`;
+            console.log(`Captions already exist for ${projectId} at ${gcsPath}, skipping Speech-to-Text processing`);
+            return res.status(200).json({ srtPath: gcsPath, requestId: req.requestId });
+        }
     const request = {
             audio: { uri: gsAudioPath },
             config: {
@@ -182,9 +193,7 @@ app.post('/align', appCheckVerification, async (req, res) => {
         const srtContent = convertToSrt(words);
         
         // 3. Upload SRT file to Google Cloud Storage
-        const bucket = storage.bucket(bucketName);
-        const fileName = `${projectId}/captions.srt`;
-        const file = bucket.file(fileName);
+        // Reuse bucket, fileName, and file variables from the cache check above
         
         await file.save(srtContent, { metadata: { contentType: 'text/plain' } });
 

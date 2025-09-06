@@ -37,11 +37,24 @@ const STAGE_MESSAGES: Record<RenderStage, string> = {
   done: 'Your movie is ready!',
 };
 
+const cachedMessages: Record<RenderStage, string> = {
+  idle: 'Preparing to start...',
+  initializing: 'Initializing movie project...',
+  uploading: 'Using uploaded image assets...',
+  narrating: 'Using cached narration...',
+  aligning: 'Using cached captions...',
+  composing: 'Using cached musical score...',
+  rendering: 'Using cached video...',
+  polishing: 'Using cached polished video...',
+  done: 'Your movie is ready!',
+};
+
 import { API_ENDPOINTS, apiCall } from './config/apiConfig';
 
 const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'neutral', proPolish = false, projectId: providedProjectId, onRenderComplete, onRenderFail }) => {
   const [stage, setStage] = useState<RenderStage>('idle');
   const [progress, setProgress] = useState(0); // For uploads, 0 to 100
+  const [useCachedMessage, setUseCachedMessage] = useState(false);
 
   useEffect(() => {
     const startRenderingProcess = async () => {
@@ -101,24 +114,42 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
         // 3. Generate narration
         setStage('narrating');
         const narrationScript = scenes.map(s => s.narration).join(' ');
-        const { gsAudioPath } = await apiCall(API_ENDPOINTS.narrate, 
+        const narrationResponse = await apiCall(API_ENDPOINTS.narrate, 
           { projectId, narrationScript, emotion }, 
           'Failed to generate narration'
         );
+        const { gsAudioPath } = narrationResponse;
+        
+        // Show cached message if response indicates cached result
+        if (narrationResponse.cached) {
+          setUseCachedMessage(true);
+        }
 
         // 4. Align captions
         setStage('aligning');
-        const { srtPath } = await apiCall(API_ENDPOINTS.align, 
+        setUseCachedMessage(false); // Reset for new stage
+        const alignResponse = await apiCall(API_ENDPOINTS.align, 
           { projectId, gsAudioPath }, 
           'Failed to align captions'
         );
+        const { srtPath } = alignResponse;
+        
+        if (alignResponse.cached) {
+          setUseCachedMessage(true);
+        }
 
         // 5. Compose musical score
         setStage('composing');
-        const { gsMusicPath } = await apiCall(API_ENDPOINTS.compose, 
+        setUseCachedMessage(false); // Reset for new stage
+        const composeResponse = await apiCall(API_ENDPOINTS.compose, 
           { projectId, narrationScript }, 
           'Failed to compose music'
         );
+        const { gsMusicPath } = composeResponse;
+        
+        if (composeResponse.cached) {
+          setUseCachedMessage(true);
+        }
 
         // 6. Render video
         setStage('rendering');
@@ -198,7 +229,9 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
   return (
     <div className="flex flex-col items-center justify-center text-center h-[60vh]">
       <AnimatedLoader />
-      <h1 className="text-3xl font-bold mt-8 text-white tracking-wide">{STAGE_MESSAGES[stage]}</h1>
+      <h1 className="text-3xl font-bold mt-8 text-white tracking-wide">
+        {useCachedMessage ? cachedMessages[stage] : STAGE_MESSAGES[stage]}
+      </h1>
       {stage === 'uploading' && <p className="text-gray-400 mt-2">{progress}% complete</p>}
       {renderProgressIndicator()}
       <p className="text-gray-500 mt-12 max-w-lg">

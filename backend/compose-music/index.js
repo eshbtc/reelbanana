@@ -102,6 +102,22 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
   console.log(`Received music composition request for projectId: ${projectId}`);
 
   try {
+    // Check if music file already exists to avoid re-processing
+    const bucket = storage.bucket(bucketName);
+    const fileName = `${projectId}/music.mp3`;
+    const file = bucket.file(fileName);
+    
+    const [exists] = await file.exists();
+    if (exists) {
+      const gsMusicPath = `gs://${bucketName}/${fileName}`;
+      console.log(`Music already exists for ${projectId} at ${gsMusicPath}, skipping Gemini processing`);
+      return res.status(200).json({ 
+        gsMusicPath: gsMusicPath,
+        musicPrompt: "Previously generated",
+        requestId: req.requestId,
+        cached: true
+      });
+    }
     // 1. Analyze narration mood with Gemini
     const prompt = `Analyze the following narration script and provide a short, descriptive musical prompt (e.g., "An upbeat, whimsical, adventurous orchestral score for a children's story, with a sense of wonder and a triumphant finish."). Only return the prompt text, nothing else. Script: "${narrationScript}"`;
     const result = await geminiModel.generateContent(prompt);
@@ -111,9 +127,7 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
 
     // 2. For hackathon demo, create a placeholder audio file
     // In production, you would use a music generation API here
-    const bucket = storage.bucket(bucketName);
-    const fileName = `${projectId}/music.mp3`;
-    const file = bucket.file(fileName);
+    // Reuse bucket, fileName, and file variables from cache check above
     
     // Create a simple audio file (placeholder - in production, use actual music generation)
     const audioBuffer = createPlaceholderAudio(musicPrompt);

@@ -93,9 +93,28 @@ app.post('/render', appCheckVerification, async (req, res) => {
     }
 
     console.log(`Received render request for projectId: ${projectId}`);
-    const tempDir = path.join('/tmp', projectId);
-
+    
     try {
+        // Check if final video already exists to avoid re-processing
+        const outputBucket = storage.bucket(outputBucketName);
+        const finalVideoFile = outputBucket.file(`${projectId}/movie.mp4`);
+        
+        const [exists] = await finalVideoFile.exists();
+        if (exists) {
+            console.log(`Final video already exists for ${projectId}, skipping render processing`);
+            // Generate a V4 signed URL for the existing video
+            const [signedUrl] = await finalVideoFile.getSignedUrl({
+                version: 'v4',
+                action: 'read',
+                expires: Date.now() + 60 * 60 * 1000, // 1 hour
+            });
+            return res.status(200).json({ 
+                videoUrl: signedUrl,
+                cached: true 
+            });
+        }
+        
+        const tempDir = path.join('/tmp', projectId);
         // Determine plan (optional gating)
         let plan = 'free';
         try {
@@ -264,7 +283,7 @@ app.post('/render', appCheckVerification, async (req, res) => {
 
         // 4. Upload the final video to the output bucket
         console.log('Uploading final video...');
-        const outputBucket = storage.bucket(outputBucketName);
+        // Reuse outputBucket variable from cache check above
         const [uploadedFile] = await outputBucket.upload(outputVideoPath, {
             destination: `${projectId}/movie.mp4`,
             metadata: { contentType: 'video/mp4' },
