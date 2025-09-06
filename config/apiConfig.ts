@@ -27,7 +27,7 @@ const PRODUCTION_CONFIG: ApiConfig = {
     narrate: 'https://reel-banana-narrate-423229273041.us-central1.run.app',
     align: 'https://reel-banana-align-captions-423229273041.us-central1.run.app',
     render: 'https://reel-banana-render-423229273041.us-central1.run.app',
-    compose: 'https://reel-banana-compose-music-423229273041.us-central1.run.app',
+    compose: 'https://compose-music-423229273041.us-central1.run.app',
   },
   firebase: {
     projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || '',
@@ -65,7 +65,7 @@ const AI_STUDIO_CONFIG: ApiConfig = {
     narrate: 'https://reel-banana-narrate-423229273041.us-central1.run.app',
     align: 'https://reel-banana-align-captions-423229273041.us-central1.run.app',
     render: 'https://reel-banana-render-423229273041.us-central1.run.app',
-    compose: 'https://reel-banana-compose-music-423229273041.us-central1.run.app',
+    compose: 'https://compose-music-423229273041.us-central1.run.app',
   },
   firebase: {
     projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || '',
