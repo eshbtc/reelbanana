@@ -25,12 +25,12 @@ import { Scene } from '../types';
 // 5. Copy the `firebaseConfig` object and paste it here.
 // =================================================================================
 const firebaseConfig = {
-    apiKey: "PASTE_YOUR_API_KEY_HERE",
-    authDomain: "PASTE_YOUR_AUTH_DOMAIN_HERE",
-    projectId: "PASTE_YOUR_PROJECT_ID_HERE",
-    storageBucket: "PASTE_YOUR_STORAGE_BUCKET_HERE",
-    messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID_HERE",
-    appId: "PASTE_YOUR_APP_ID_HERE"
+    apiKey: "AIzaSyCeZNdwsaZ_sBmOt8WY0FcUziq22-OVJjg",
+    authDomain: "reel-banana-35a54.firebaseapp.com",
+    projectId: "reel-banana-35a54",
+    storageBucket: "reel-banana-35a54.firebasestorage.app",
+    messagingSenderId: "223097908182",
+    appId: "1:223097908182:web:982c634d6aaeb3c805d277"
 };
 
 // Initialize Firebase and Firestore
