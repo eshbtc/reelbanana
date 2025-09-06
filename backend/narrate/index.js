@@ -115,12 +115,14 @@ app.post('/narrate', appCheckVerification, async (req, res) => {
     const voice_settings = settingsByEmotion[(emotion || 'neutral')] || settingsByEmotion.neutral;
 
     // 1. Generate audio stream from ElevenLabs
+    console.log(`Starting ElevenLabs TTS for ${projectId}, text length: ${narrationScript.length} chars`);
     const audioStream = await elevenlabs.generate({
       voice: "Rachel", // You can parameterize this with voiceId if needed
       model_id: "eleven_multilingual_v2",
       text: narrationScript,
       voice_settings,
     });
+    console.log(`ElevenLabs TTS stream created successfully for ${projectId}`);
 
     // 2. Stream the audio directly to Google Cloud Storage
     const bucket = storage.bucket(bucketName);
@@ -130,13 +132,30 @@ app.post('/narrate', appCheckVerification, async (req, res) => {
       metadata: { contentType: 'audio/mpeg' },
     });
 
+    // Add error handling to the audio stream
+    audioStream.on('error', (streamError) => {
+      console.error(`ElevenLabs audio stream error for ${projectId}:`, streamError);
+      writeStream.destroy(streamError);
+    });
+
     // Pipe the audio stream to the GCS write stream
     audioStream.pipe(writeStream);
 
     // Wait for the stream to finish writing
     await new Promise((resolve, reject) => {
-      writeStream.on('finish', resolve);
-      writeStream.on('error', reject);
+      writeStream.on('finish', () => {
+        console.log(`Stream finished successfully for ${projectId}`);
+        resolve();
+      });
+      writeStream.on('error', (writeError) => {
+        console.error(`GCS write stream error for ${projectId}:`, writeError);
+        reject(writeError);
+      });
+      
+      // Add timeout to prevent hanging
+      setTimeout(() => {
+        reject(new Error('Stream timeout after 60 seconds'));
+      }, 60000);
     });
 
     const gcsPath = `gs://${bucketName}/${fileName}`;
