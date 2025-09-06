@@ -11,6 +11,13 @@ import CharacterPicker from './CharacterPicker';
 import { calculateTotalCost, formatCost } from '../utils/costCalculator';
 import { useUserCredits } from '../hooks/useUserCredits';
 import { getCurrentUser, hasUserApiKey } from '../services/authService';
+import { getAI, getGenerativeModel } from 'firebase/ai';
+import { firebaseApp } from '../lib/firebase';
+import { authFetch } from '../lib/authFetch';
+import { API_ENDPOINTS } from '../config/apiConfig';
+
+// Initialize Firebase AI
+const ai = getAI(firebaseApp);
 
 interface StoryboardEditorProps {
   onPlayMovie: (scenes: Scene[]) => void;
@@ -18,11 +25,21 @@ interface StoryboardEditorProps {
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
-const inspirationTopics = [
+const quickStartIdeas = [
     "The Lost Astronaut",
-    "Mystery in the Magical Forest",
+    "Mystery in the Magical Forest", 
     "Neon Noir Detective",
     "The Secret Recipe",
+];
+
+// AI-generated inspiration categories
+const inspirationCategories = [
+    "Adventure & Exploration",
+    "Mystery & Suspense", 
+    "Fantasy & Magic",
+    "Sci-Fi & Future",
+    "Comedy & Whimsy",
+    "Drama & Emotion"
 ];
 
 const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
@@ -42,6 +59,8 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
   const [renderMode, setRenderMode] = useState<'draft' | 'final'>('draft');
   const [forceUseApiKey, setForceUseApiKey] = useState(false);
   const [userHasApiKey, setUserHasApiKey] = useState(false);
+  const [isGeneratingInspiration, setIsGeneratingInspiration] = useState(false);
+  const [generatedInspiration, setGeneratedInspiration] = useState<string>('');
   
   // Use the real-time credits hook
   const { refreshCredits } = useUserCredits();
@@ -179,6 +198,49 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
   const handleInspirationClick = (inspirationTopic: string) => {
       handleGenerateStory(inspirationTopic);
   };
+
+  const handleGenerateInspiration = useCallback(async () => {
+    if (isGeneratingInspiration) return;
+    
+    setIsGeneratingInspiration(true);
+    setStoryError(null);
+    
+    try {
+      // Generate a random inspiration using AI
+      const randomCategory = inspirationCategories[Math.floor(Math.random() * inspirationCategories.length)];
+      const inspirationPrompt = `Generate a creative, engaging story idea in the "${randomCategory}" category. The story should be suitable for a 2-minute animated video with 5 scenes. Return only the story title/idea, nothing else. Make it unique and compelling.`;
+      
+      // Use the existing generateStory function with a simple prompt
+      const currentUser = getCurrentUser();
+      if (!currentUser) {
+        throw new Error("Please sign in to generate inspiration.");
+      }
+
+      // Use Firebase AI directly for inspiration generation
+      const model = getGenerativeModel(ai, { 
+        model: "gemini-2.5-flash",
+        generationConfig: {
+          maxOutputTokens: 100,
+          temperature: 0.9, // Higher creativity
+        }
+      });
+      
+      const result = await model.generateContent(inspirationPrompt);
+      const inspiration = result.response.text().trim();
+      
+      setGeneratedInspiration(inspiration);
+      setTopic(inspiration);
+      
+      // Refresh credits after successful generation
+      await refreshCredits();
+      
+    } catch (error) {
+      console.error('Error generating inspiration:', error);
+      setStoryError(error instanceof Error ? error.message : 'Failed to generate inspiration');
+    } finally {
+      setIsGeneratingInspiration(false);
+    }
+  }, [isGeneratingInspiration, refreshCredits]);
 
   const handleLoadTemplate = useCallback(async (templateId: string) => {
     const tpl = TEMPLATES.find(t => t.id === templateId);
@@ -376,13 +438,38 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
              <div className="bg-gray-800 p-6 rounded-lg shadow-xl border border-gray-700 mb-8">
                 <h2 className="text-2xl font-bold mb-4 text-amber-400">Create Your Story</h2>
                 <div className="mb-4">
-                    <h3 className="text-lg font-semibold text-gray-300 mb-2">Need Inspiration?</h3>
-                    <div className="flex flex-wrap gap-2">
-                        {inspirationTopics.map(idea => (
+                    <h3 className="text-lg font-semibold text-gray-300 mb-2">Quick Start Ideas</h3>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                        {quickStartIdeas.map(idea => (
                             <button key={idea} onClick={() => handleInspirationClick(idea)} disabled={isLoadingStory} className="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-wait">
                                 {idea}
                             </button>
                         ))}
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                        <button 
+                            onClick={handleGenerateInspiration} 
+                            disabled={isGeneratingInspiration || isLoadingStory}
+                            className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-wait flex items-center gap-2"
+                        >
+                            {isGeneratingInspiration ? (
+                                <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                    Generating...
+                                </>
+                            ) : (
+                                <>
+                                    <SparklesIcon />
+                                    Generate New Ideas
+                                </>
+                            )}
+                        </button>
+                        {generatedInspiration && (
+                            <div className="text-sm text-gray-400">
+                                Generated: <span className="text-amber-400 font-medium">{generatedInspiration}</span>
+                            </div>
+                        )}
                     </div>
                 </div>
                 <div className="flex flex-col gap-4">
@@ -390,7 +477,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                        type="text"
                        value={topic}
                        onChange={(e) => setTopic(e.target.value)}
-                       placeholder="Or write your own story topic, e.g., A banana who wants to be a superhero"
+                       placeholder="Or write your own story idea, e.g., A banana who wants to be a superhero"
                        className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition"
                        disabled={isLoadingStory}
                    />
@@ -420,7 +507,10 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                        {isLoadingStory ? 'Generating...' : 'Generate Story'}
                    </button>
                     <button
-                      onClick={() => setShowTemplates(true)}
+                      onClick={() => {
+                        console.log('📝 Opening templates modal');
+                        setShowTemplates(true);
+                      }}
                       className="w-full md:w-auto bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition-colors"
                     >
                       Start from Template
@@ -674,9 +764,10 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
 
 // Templates Modal (inline for simplicity)
 const TemplatesModal: React.FC<{ open: boolean; onClose: () => void; onPick: (id: string) => void }> = ({ open, onClose, onPick }) => {
+  console.log('📝 TemplatesModal render: open =', open);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
       <div className="bg-gray-900 border border-gray-700 rounded-lg max-w-3xl w-full overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
           <h3 className="text-white font-bold text-lg">Start from Template</h3>
