@@ -33,7 +33,7 @@ const PublicGallery: React.FC = () => {
             title: 'The Adventures of Banana Man',
             description: 'A thrilling tale of a banana superhero saving the world from fruit villains!',
             videoUrl: 'https://example.com/video1.mp4',
-            thumbnailUrl: 'https://via.placeholder.com/400x225/4F46E5/FFFFFF?text=Banana+Man',
+            thumbnailUrl: 'https://picsum.photos/400/225?random=1',
             createdAt: new Date().toISOString(),
             views: 1250,
             likes: 89
@@ -43,7 +43,7 @@ const PublicGallery: React.FC = () => {
             title: 'Space Banana Odyssey',
             description: 'Join our brave banana astronaut on an epic journey through the cosmos!',
             videoUrl: 'https://example.com/video2.mp4',
-            thumbnailUrl: 'https://via.placeholder.com/400x225/059669/FFFFFF?text=Space+Banana',
+            thumbnailUrl: 'https://picsum.photos/400/225?random=2',
             createdAt: new Date(Date.now() - 86400000).toISOString(),
             views: 2100,
             likes: 156
@@ -53,7 +53,7 @@ const PublicGallery: React.FC = () => {
             title: 'The Great Banana Heist',
             description: 'A comedic caper involving a gang of fruit thieves and their ultimate heist!',
             videoUrl: 'https://example.com/video3.mp4',
-            thumbnailUrl: 'https://via.placeholder.com/400x225/DC2626/FFFFFF?text=Banana+Heist',
+            thumbnailUrl: 'https://picsum.photos/400/225?random=3',
             createdAt: new Date(Date.now() - 172800000).toISOString(),
             views: 890,
             likes: 67
