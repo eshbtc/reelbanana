@@ -598,9 +598,9 @@ Example Output:
         for (const prompt of prompts) {
             const finalPrompt = `${characterAndStyle}. Maintain this character and style consistently. A cinematic, high quality, professional photograph of: ${prompt}` + (opts?.backgroundImage ? ' Compose the subject naturally into the provided background image with matching lighting and perspective.' : '');
 
-            // Create a GenerativeModel instance using nano-bana (gemini-2.5-flash-image-preview) for contest
+            // Create a GenerativeModel instance using gemini-2.5-flash for image generation
             const imagenModel = getGenerativeModel(ai, { 
-                model: 'gemini-2.5-flash-image-preview',
+                model: 'gemini-2.5-flash',
                 generationConfig: {
                     responseModalities: [ResponseModality.TEXT, ResponseModality.IMAGE],
                 }
@@ -621,7 +621,7 @@ Example Output:
             const response = await imagenModel.generateContent(parts);
 
             // Extract token usage from response
-            const tokenUsage = extractTokenUsage(response, 'gemini-2.5-flash-image-preview');
+            const tokenUsage = extractTokenUsage(response, 'gemini-2.5-flash');
             if (tokenUsage) {
                 console.log('Image generation token usage:', tokenUsage);
             }
