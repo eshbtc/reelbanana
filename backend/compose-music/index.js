@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const { Storage } = require('@google-cloud/storage');
-const { getVertexAI, getGenerativeModel } = require('firebase-admin/vertexai');
 const admin = require('firebase-admin');
 
 const app = express();
@@ -68,9 +67,24 @@ const appCheckVerification = async (req, res, next) => {
 const storage = new Storage();
 const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 
-// Initialize Firebase AI Logic with Vertex AI for free credits
-const vertexAI = getVertexAI(admin.app());
-const geminiModel = getGenerativeModel(vertexAI, { model: 'gemini-2.5-flash' });
+// Music prompt generation using keyword analysis
+function generateMusicPrompt(narrationScript) {
+  const script = narrationScript.toLowerCase();
+  
+  if (script.includes('adventure') || script.includes('journey') || script.includes('quest')) {
+    return "An epic, adventurous orchestral score with triumphant brass and driving percussion";
+  } else if (script.includes('mystery') || script.includes('secret') || script.includes('hidden')) {
+    return "A mysterious, atmospheric score with haunting strings and subtle percussion";
+  } else if (script.includes('happy') || script.includes('joy') || script.includes('celebration')) {
+    return "An upbeat, cheerful orchestral score with bright melodies and uplifting harmonies";
+  } else if (script.includes('sad') || script.includes('melancholy') || script.includes('tear')) {
+    return "A gentle, melancholic score with soft strings and emotional depth";
+  } else if (script.includes('magic') || script.includes('fantasy') || script.includes('wonder')) {
+    return "A whimsical, magical orchestral score with sparkling melodies and enchanting harmonies";
+  } else {
+    return "A balanced, cinematic orchestral score with emotional depth and dynamic range";
+  }
+}
 
 /**
  * POST /compose-music
@@ -114,11 +128,8 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
         cached: true
       });
     }
-    // 1. Analyze narration mood with Gemini AI
-    const prompt = `Analyze the following narration script and provide a short, descriptive musical prompt (e.g., "An upbeat, whimsical, adventurous orchestral score for a children's story, with a sense of wonder and a triumphant finish."). Only return the prompt text, nothing else. Script: "${narrationScript}"`;
-    const result = await geminiModel.generateContent(prompt);
-    const response = result.response;
-    const musicPrompt = response.text().trim();
+    // 1. Generate music prompt based on narration content analysis
+    const musicPrompt = generateMusicPrompt(narrationScript);
     console.log(`Generated music prompt: "${musicPrompt}"`);
 
     // 2. For hackathon demo, create a placeholder audio file
