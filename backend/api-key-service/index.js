@@ -217,6 +217,8 @@ app.post('/use-api-key', appCheckVerification, verifyToken, async (req, res) => 
     const { prompt, model = 'gemini-2.5-flash' } = req.body;
     const userId = req.user.uid;
 
+    console.log(`🔑 API Key Service: Processing request for user ${userId} with model ${model}`);
+
     if (!prompt) {
       return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Prompt is required');
     }
@@ -226,11 +228,16 @@ app.post('/use-api-key', appCheckVerification, verifyToken, async (req, res) => 
     const keyDoc = await db.collection('user_api_keys').doc(userId).get();
     
     if (!keyDoc.exists || !keyDoc.data().encryptedApiKey) {
+      console.log(`❌ API Key Service: No API key found for user ${userId}`);
       return sendError(req, res, 404, 'NOT_FOUND', 'No API key found');
     }
 
+    console.log(`✅ API Key Service: Found encrypted API key for user ${userId}, decrypting...`);
+
     // Decrypt the API key
     const decryptedKey = await decryptApiKey(keyDoc.data().encryptedApiKey, userId);
+    
+    console.log(`🔓 API Key Service: Successfully decrypted API key for user ${userId}, making request to Gemini API`);
 
     // Make request to Gemini API using the decrypted key
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${decryptedKey}`, {
@@ -259,12 +266,14 @@ app.get('/check-api-key', appCheckVerification, verifyToken, async (req, res) =>
   try {
     const userId = req.user.uid;
     const { keyType = 'google' } = req.query;
-    const db = admin.firestore();
+    console.log(`🔍 API Key Service: Checking ${keyType} API key for user ${userId}`);
     
+    const db = admin.firestore();
     const keyDoc = await db.collection('user_api_keys').doc(userId).get();
     const keyData = keyDoc.exists ? keyDoc.data() : {};
     
     const hasApiKey = keyDoc.exists && keyData[`hasApiKey_${keyType}`] === true;
+    console.log(`🔍 API Key Service: User ${userId} has ${keyType} API key: ${hasApiKey}`);
     
     res.json({ 
       hasApiKey, 

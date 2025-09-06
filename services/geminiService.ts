@@ -63,23 +63,36 @@ const calculateCost = (totalTokens: number, model: string): number => {
 // Helper function to determine which AI service to use
 const getAIService = async (): Promise<'firebase' | 'custom' | null> => {
   const currentUser = getCurrentUser();
-  if (!currentUser) return null;
+  if (!currentUser) {
+    console.log('🔍 getAIService: No current user');
+    return null;
+  }
 
   const userProfile = await getUserProfile(currentUser.uid);
-  if (!userProfile) return null;
+  if (!userProfile) {
+    console.log('🔍 getAIService: No user profile found');
+    return null;
+  }
 
   // Check if user has free credits remaining
   const hasCredits = await checkUserCredits(currentUser.uid, 1);
+  console.log(`🔍 getAIService: User ${currentUser.uid} has credits: ${hasCredits}`);
+  
   if (hasCredits) {
+    console.log('✅ getAIService: Using Firebase AI Logic (free credits)');
     return 'firebase'; // Use Firebase AI Logic with free credits
   }
 
   // Check if user has API key stored server-side
   const hasApiKey = await hasUserApiKey(currentUser.uid);
+  console.log(`🔍 getAIService: User ${currentUser.uid} has API key: ${hasApiKey}`);
+  
   if (hasApiKey) {
+    console.log('✅ getAIService: Using custom API key (unlimited usage)');
     return 'custom'; // Use custom API key for unlimited usage
   }
 
+  console.log('❌ getAIService: No credits and no API key available');
   return null; // No credits and no API key
 };
 
