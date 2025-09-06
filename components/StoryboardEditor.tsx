@@ -13,6 +13,7 @@ import { useUserCredits } from '../hooks/useUserCredits';
 import { getCurrentUser, hasUserApiKey } from '../services/authService';
 import { useToast } from './ToastProvider';
 import ReactDOM from 'react-dom';
+import { useConfirm } from './ConfirmProvider';
 
 interface StoryboardEditorProps {
   onPlayMovie: (scenes: Scene[]) => void;
@@ -61,6 +62,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   const [generatedInspiration, setGeneratedInspiration] = useState<string>('');
   
   const { toast } = useToast();
+  const confirm = useConfirm();
 
   // Demo mode: automatically load simple demo content
   useEffect(() => {
@@ -233,6 +235,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
     // Skip autosave while images are generating to reduce churn
     const generating = scenes.some(s => s.status === 'generating');
     if (generating) return;
+    const lastToastKey = 'rb_last_autosave_toast';
     const t = setTimeout(() => {
       updateProject(projectId, { topic, characterAndStyle, scenes })
         .then(() => {
@@ -247,17 +250,22 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
     return () => clearTimeout(t);
   }, [projectId, topic, characterAndStyle, scenes]);
 
-  const handleNewStory = () => {
-    if (window.confirm("Are you sure you want to start a new story? Any unsaved changes will be lost.")) {
-        setProjectId(null);
-        try { onProjectIdChange?.(null); } catch {}
-        setTopic('');
-        setCharacterAndStyle('');
-        setCharacterRefs([]);
-        setScenes([]);
-        setStoryError(null);
-        window.history.pushState({}, '', window.location.pathname);
-    }
+  const handleNewStory = async () => {
+    const ok = await confirm({
+      title: 'Start New Story?',
+      message: 'Any unsaved changes will be lost.',
+      confirmText: 'Start New',
+      cancelText: 'Cancel'
+    });
+    if (!ok) return;
+    setProjectId(null);
+    try { onProjectIdChange?.(null); } catch {}
+    setTopic('');
+    setCharacterAndStyle('');
+    setCharacterRefs([]);
+    setScenes([]);
+    setStoryError(null);
+    window.history.pushState({}, '', window.location.pathname);
   };
 
 
@@ -516,7 +524,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
           <div className="mb-4 p-3 bg-amber-900/50 border border-amber-600 rounded">
             <div className="flex items-center justify-between">
               <div className="text-amber-200 text-sm">
-                <strong>Demo Mode:</strong> Using placeholder scenes and images. No API usage.
+                <strong>Demo Mode:</strong> You can explore the editor with placeholder content. Generation and rendering are disabled until you upgrade.
               </div>
               <button
                 onClick={async () => {
@@ -827,12 +835,13 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                  <p className="text-gray-400 mb-6 max-w-2xl mx-auto">Once you have generated images for your scenes, you can assemble them into a short movie. The backend will narrate, add captions, and render your video.</p>
                 <button
                   onClick={() => onPlayMovie(scenes)}
-                  disabled={!hasGeneratedImages}
+                  disabled={!hasGeneratedImages || demoMode}
                   className="bg-green-600 hover:bg-green-700 text-white font-extrabold text-xl py-4 px-10 rounded-lg transition-all disabled:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Play My Movie!
                 </button>
                 {!hasGeneratedImages && <p className="text-sm text-gray-500 mt-2">Generate at least one image to enable this button.</p>}
+                {demoMode && <p className="text-sm text-amber-400 mt-1">Demo Mode: Upgrade to enable rendering.</p>}
               </div>
             </div>
             <TemplatesModal open={showTemplates} onClose={() => setShowTemplates(false)} onPick={handleLoadTemplate} />

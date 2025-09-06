@@ -7,6 +7,7 @@ import RenderingScreen from './RenderingScreen';
 import MovieWizard from './components/MovieWizard';
 import MoviePlayer from './components/MoviePlayer';
 import PublicGallery from './components/PublicGallery';
+import DemoWizardHelpModal from './components/DemoWizardHelpModal';
 import UserDashboard from './components/UserDashboard';
 import MyProjectsPage from './components/MyProjectsPage';
 import AdBlockerWarning from './components/AdBlockerWarning';
@@ -41,6 +42,7 @@ const App: React.FC = () => {
   const [useWizardMode, setUseWizardMode] = useState<boolean>(() => {
     try { return localStorage.getItem('rb_useWizardMode') === 'false' ? false : true; } catch { return true; }
   });
+  const [showHelp, setShowHelp] = useState<boolean>(false);
   const [demoMode, setDemoMode] = useState<boolean>(() => {
     try { return localStorage.getItem('rb_demoMode') === 'true'; } catch { return false; }
   });
@@ -144,6 +146,7 @@ const App: React.FC = () => {
             emotion={narrationEmotion} 
             proPolish={proPolish} 
             projectId={projectId || 'default-project'}
+            demoMode={demoMode}
             onComplete={handleRenderComplete} 
             onFail={handleRenderFail} 
           />;
@@ -224,13 +227,18 @@ const App: React.FC = () => {
                     Wizard Mode (Step-by-step control)
                   </label>
                 </div>
+                <button onClick={() => setShowHelp(true)} className="ml-2 text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded">
+                  Help
+                </button>
               </div>
             </div>
             <StoryboardEditor 
               onPlayMovie={handlePlayMovie} 
               onProjectIdChange={(id) => setProjectId(id || null)} 
               demoMode={demoMode}
+              onExitDemo={() => setDemoMode(false)}
             />
+            <DemoWizardHelpModal open={showHelp} onClose={() => setShowHelp(false)} />
           </>
         );
     }

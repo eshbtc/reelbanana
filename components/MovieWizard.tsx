@@ -1,4 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useConfirm } from './ConfirmProvider';
+import { getFirestore, collection, addDoc, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import { firebaseApp } from '../lib/firebase';
+import { getCurrentUser as getUser } from '../services/authService';
 import { Check, Play, Loader2, AlertCircle, SkipForward } from 'lucide-react';
 import { API_ENDPOINTS, apiCall } from '../config/apiConfig';
 import { getCurrentUser } from '../services/authService';
@@ -17,6 +21,7 @@ interface MovieWizardProps {
   emotion?: string;
   proPolish?: boolean;
   projectId: string;
+  demoMode?: boolean;
   onComplete: (result: { videoUrl: string; projectId: string }) => void;
   onFail: (error: string) => void;
 }
@@ -59,6 +64,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
   emotion = 'neutral', 
   proPolish = false, 
   projectId, 
+  demoMode = false,
   onComplete, 
   onFail 
 }) => {
@@ -71,25 +77,60 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [showDetails, setShowDetails] = useState(false);
 
-  // Estimated step durations (seconds)
-  const ETAS: Record<string, [number, number]> = useMemo(() => ({
+  // Estimated step durations (seconds) with rolling average override
+  const [etas, setEtas] = useState<Record<string, [number, number]>>({
     upload: [2, 10],
     narrate: [5, 15],
     align: [10, 25],
     compose: [2, 5],
     render: [20, 45],
     polish: [15, 60],
-  }), []);
+  });
+
+  const db = getFirestore(firebaseApp);
+
+  const loadMetrics = useCallback(async () => {
+    try {
+      const user = getUser();
+      if (!user) return;
+      const q = query(
+        collection(db, 'wizard_metrics'),
+        where('userId', '==', user.uid),
+        orderBy('ts', 'desc'),
+        limit(100)
+      );
+      const snap = await getDocs(q);
+      const data: Record<string, number[]> = {};
+      snap.forEach(doc => {
+        const d: any = doc.data();
+        const step: string = d.stepId;
+        const ms: number = d.ms;
+        if (!data[step]) data[step] = [];
+        data[step].push(ms);
+      });
+      const next: Record<string, [number, number]> = { ...etas };
+      Object.entries(data).forEach(([step, arr]) => {
+        if (arr.length) {
+          const avg = arr.reduce((a, b) => a + b, 0) / arr.length; // ms
+          const sec = Math.max(1, Math.round(avg / 1000));
+          next[step] = [Math.max(1, Math.floor(sec * 0.8)), Math.ceil(sec * 1.4)];
+        }
+      });
+      setEtas(next);
+    } catch {}
+  }, [db, etas]);
+
+  useEffect(() => { loadMetrics(); }, [loadMetrics]);
 
   const remainingEta = useMemo(() => {
     let totalMin = 0; let totalMax = 0;
     for (let i = currentStepIndex; i < steps.length; i++) {
       const s = steps[i];
-      const rng = ETAS[s.id] || [2, 5];
+      const rng = etas[s.id] || [2, 5];
       if (s.status === 'pending' || s.status === 'processing' || s.status === 'failed') { totalMin += rng[0]; totalMax += rng[1]; }
     }
     return `${totalMin}-${totalMax}s`;
-  }, [currentStepIndex, steps, ETAS]);
+  }, [currentStepIndex, steps, etas]);
 
   // Update step status
   const updateStep = (stepId: string, updates: Partial<WizardStep>) => {
@@ -109,22 +150,24 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
 
   // Resume wizard state
   useEffect(() => {
-    try {
-      const key = `wizard:${projectId}`;
-      const raw = sessionStorage.getItem(key);
-      if (!raw) return;
-      const saved = JSON.parse(raw);
-      if (saved && Array.isArray(saved.steps)) {
-        const ok = window.confirm('Resume previous wizard session?');
-        if (ok) {
-          setSteps(saved.steps);
-          if (typeof saved.currentStepIndex === 'number') setCurrentStepIndex(saved.currentStepIndex);
-        } else {
-          sessionStorage.removeItem(key);
+    (async () => {
+      try {
+        const key = `wizard:${projectId}`;
+        const raw = sessionStorage.getItem(key);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        if (saved && Array.isArray(saved.steps)) {
+          const ok = await confirm({ title: 'Resume Wizard?', message: 'Resume previous wizard session?', confirmText: 'Resume', cancelText: 'Start Fresh' });
+          if (ok) {
+            setSteps(saved.steps);
+            if (typeof saved.currentStepIndex === 'number') setCurrentStepIndex(saved.currentStepIndex);
+          } else {
+            sessionStorage.removeItem(key);
+          }
         }
-      }
-    } catch {}
-  }, [projectId]);
+      } catch {}
+    })();
+  }, [projectId, confirm]);
 
   // Execute a step
   const executeStep = async (stepId: string) => {
@@ -134,6 +177,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
     updateStep(stepId, { status: 'processing' });
 
     try {
+      const started = Date.now();
       let result;
       
       switch (stepId) {
@@ -161,6 +205,11 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
 
       const status = result?.cached ? 'skipped' : 'completed';
       updateStep(stepId, { status, result });
+      try {
+        const user = getUser();
+        const elapsed = Date.now() - started;
+        await addDoc(collection(db, 'wizard_metrics'), { userId: user?.uid || null, stepId, ms: elapsed, ts: new Date().toISOString() });
+      } catch {}
       
       // Move to next step if not at the end
       const nextIndex = steps.findIndex(s => s.id === stepId) + 1;
@@ -242,6 +291,9 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
   };
 
   const executeCompose = async () => {
+    if (demoMode) {
+      return { message: 'Compose skipped in demo mode', cached: true };
+    }
     const narrationScript = scenes.map((s: any) => s.narration).join(' ');
     return await apiCall(API_ENDPOINTS.compose,
       { projectId, narrationScript },
@@ -277,6 +329,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
   };
 
   const executePolish = async () => {
+    if (demoMode) return { message: 'Polish skipped in demo mode', cached: true };
     const polishEnabled = (import.meta as any)?.env?.VITE_ENABLE_POLISH === 'true';
     
     if (!proPolish || !polishEnabled) {
@@ -495,3 +548,4 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
 };
 
 export default MovieWizard;
+  const confirm = useConfirm();

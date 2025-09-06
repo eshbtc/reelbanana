@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { useConfirm } from './ConfirmProvider';
+import { useToast } from './ToastProvider';
 import Modal from './Modal';
 import { getCurrentUser } from '../services/authService';
 import { listMyProjects, deleteProject, ProjectSummary, renameProject, duplicateProject } from '../services/firebaseService';
@@ -21,6 +23,7 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
   const [filterText, setFilterText] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
+  const { toast } = useToast();
 
   const load = async () => {
     const user = getCurrentUser();
@@ -74,7 +77,7 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
       setProjects(prev => prev.filter(p => p.id !== id));
       setFiltered(prev => prev.filter(p => p.id !== id));
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Delete failed');
+      toast.error(e instanceof Error ? e.message : 'Delete failed');
     } finally {
       setDeletingId(null);
       setConfirmDeleteId(null);
@@ -94,7 +97,7 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
       setProjects(prev => prev.map(p => (p.id === id ? { ...p, topic: name } : p)));
       setFiltered(prev => prev.map(p => (p.id === id ? { ...p, topic: name } : p)));
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Rename failed');
+      toast.error(e instanceof Error ? e.message : 'Rename failed');
     } finally {
       setRenamingId(null);
     }
@@ -118,7 +121,7 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
       await duplicateProject(id);
       await load();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Duplicate failed');
+      toast.error(e instanceof Error ? e.message : 'Duplicate failed');
     } finally {
       setDuplicatingId(null);
     }
@@ -130,7 +133,7 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
       const newId = await duplicateProject(id);
       window.location.href = `/?projectId=${newId}`;
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Duplicate failed');
+      toast.error(e instanceof Error ? e.message : 'Duplicate failed');
     } finally {
       setDuplicatingId(null);
     }
@@ -170,9 +173,16 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
     }
   };
 
+  const confirm = useConfirm();
   const bulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    if (!confirm(`Delete ${selectedIds.size} selected project(s)?`)) return;
+    const ok = await confirm({
+      title: 'Delete Projects?',
+      message: `Delete ${selectedIds.size} selected project(s)? This cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel'
+    });
+    if (!ok) return;
     for (const id of Array.from(selectedIds)) {
       await handleDelete(id);
     }

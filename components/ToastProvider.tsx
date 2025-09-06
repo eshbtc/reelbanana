@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
 
 type ToastType = 'info' | 'success' | 'error';
 
@@ -46,6 +46,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <ToastContext.Provider value={value}>
       {children}
+      {/* Attach a global helper for non-React contexts (e.g., apiCall) */}
+      <GlobalToastBridge push={push} />
       <div className="fixed top-4 right-4 z-[10000] space-y-2">
         {toasts.map(t => (
           <div
@@ -70,3 +72,14 @@ export const useToast = () => {
   return ctx;
 };
 
+// Bridge component to expose a global toast function
+const GlobalToastBridge: React.FC<{ push: (type: ToastType, message: string, duration?: number) => void }> = ({ push }) => {
+  useEffect(() => {
+    (window as any).rbToast = (opts: { type?: ToastType; message: string; duration?: number }) => {
+      const type = opts.type || 'info';
+      push(type, opts.message, opts.duration);
+    };
+    return () => { try { delete (window as any).rbToast; } catch {} };
+  }, [push]);
+  return null;
+};

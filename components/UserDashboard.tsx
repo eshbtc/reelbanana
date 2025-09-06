@@ -1,6 +1,7 @@
 // User Dashboard component for managing profile, API keys, and usage
 import React, { useState, useEffect } from 'react';
 import { UserProfile, getUserProfile, updateUserApiKey, getUserUsageStats, resetCreditsForTesting } from '../services/authService';
+import { useConfirm } from './ConfirmProvider';
 import { getCurrentUser } from '../services/authService';
 import { API_ENDPOINTS } from '../config/apiConfig';
 import { authFetch } from '../lib/authFetch';
@@ -38,6 +39,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
   
   // Use the real-time credits hook
   const { freeCredits, totalUsage, refreshCredits, isLoading: creditsLoading } = useUserCredits();
+  const confirm = useConfirm();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -112,7 +114,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
     const currentUser = getCurrentUser();
     if (!currentUser) return;
 
-    if (!confirm('Are you sure you want to clear your API key? This action cannot be undone.')) return;
+    const ok = await confirm({
+      title: 'Clear API Key?',
+      message: 'Are you sure you want to clear your API key? This action cannot be undone.',
+      confirmText: 'Clear Key',
+      cancelText: 'Cancel'
+    });
+    if (!ok) return;
 
     setIsUpdating(true);
     try {
@@ -163,7 +171,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
     const currentUser = getCurrentUser();
     if (!currentUser) return;
 
-    if (!confirm('Are you sure you want to clear your FAL API key? This action cannot be undone.')) return;
+    const ok = await confirm({
+      title: 'Clear FAL API Key?',
+      message: 'Are you sure you want to clear your FAL API key? This action cannot be undone.',
+      confirmText: 'Clear FAL Key',
+      cancelText: 'Cancel'
+    });
+    if (!ok) return;
 
     setIsUpdating(true);
     try {

@@ -236,7 +236,9 @@ export const apiCall = async (url: string, body: object, errorMessage: string) =
       const code = errorData?.code || `HTTP_${response.status}`;
       const msg = errorData?.message || response.statusText;
       const reqId = errorData?.requestId ? ` (req: ${errorData.requestId})` : '';
-      throw new Error(`${errorMessage} [${code}] ${msg}${reqId}`);
+      const full = `${errorMessage} [${code}] ${msg}${reqId}`;
+      try { (window as any)?.rbToast?.({ type: 'error', message: full, duration: 5000 }); } catch {}
+      throw new Error(full);
     }
     
     return response.json();

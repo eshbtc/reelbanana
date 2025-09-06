@@ -67,20 +67,54 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
       try {
         // 2. Upload all images
         setStage('uploading');
-        // Only upload images that are data URIs; HTTPS images were already persisted during generation
-        const allImageUrls = scenes.flatMap((scene, sceneIndex) =>
-          (scene.imageUrls || [])
-            .filter(url => typeof url === 'string' && url.startsWith('data:image/'))
-            .map((url, imageIndex) => ({
-              base64Image: url,
-              fileName: `scene-${sceneIndex}-${imageIndex}.jpeg`,
-            }))
-        );
+        // Convert HTTP URLs to data URIs and prepare all images for upload
+        const convertHttpUrlToDataUri = async (url: string): Promise<string> => {
+          try {
+            const response = await fetch(url);
+            const blob = await response.blob();
+            return new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          } catch (error) {
+            console.error('Failed to convert HTTP URL to data URI:', error);
+            throw error;
+          }
+        };
+
+        const allImageUrls = await Promise.all(
+          scenes.flatMap((scene, sceneIndex) =>
+            (scene.imageUrls || [])
+              .filter(url => typeof url === 'string' && url.trim() !== '')
+              .map(async (url, imageIndex) => {
+                let base64Image: string;
+                
+                if (url.startsWith('data:image/')) {
+                  // Already a data URI
+                  base64Image = url;
+                } else if (url.startsWith('http://') || url.startsWith('https://')) {
+                  // Convert HTTP URL to data URI
+                  console.log(`🎬 Converting HTTP URL to data URI: ${url.substring(0, 100)}...`);
+                  base64Image = await convertHttpUrlToDataUri(url);
+                } else {
+                  console.warn(`🎬 Skipping invalid image URL: ${url}`);
+                  return null;
+                }
+
+                return {
+                  base64Image,
+                  fileName: `scene-${sceneIndex}-${imageIndex}.png`, // Use .png to match upload service logs
+                };
+              })
+          )
+        ).then(results => results.filter(result => result !== null));
 
         const totalSceneImages = scenes.flatMap(scene => scene.imageUrls || []).length;
         console.log('🎬 Upload debug - Total scene images found:', totalSceneImages);
-        console.log('🎬 Upload debug - Images needing upload (data URIs):', allImageUrls.length);
-        console.log('🎬 Upload debug - Images already persisted (HTTPS URLs):', totalSceneImages - allImageUrls.length);
+        console.log('🎬 Upload debug - Images prepared for upload:', allImageUrls.length);
+        console.log('🎬 Upload debug - All images will be uploaded to ensure they exist in storage');
         
         if (allImageUrls.length > 0) {
           console.log('🎬 Upload debug - First data URI sample:', {
@@ -90,28 +124,31 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
           });
         }
 
-        if (allImageUrls.length > 0) {
-          let uploadedCount = 0;
-          await Promise.all(
-            allImageUrls.map(async (image, index) => {
-              console.log(`🎬 Upload debug - Uploading image ${index + 1}:`, {
-                fileName: image.fileName,
-                isValidDataUri: image.base64Image.startsWith('data:image/'),
-                dataUriPrefix: image.base64Image.substring(0, 50)
-              });
-              await apiCall(API_ENDPOINTS.upload, 
-                { projectId, ...image }, 
-                'Failed to upload image'
-              );
-              uploadedCount++;
-              setProgress(Math.round((uploadedCount / allImageUrls.length) * 100));
-              console.log(`🎬 Upload debug - Successfully uploaded image ${index + 1}`);
-            })
-          );
-        } else {
-          // No inline images to upload; frames already persisted
-          setProgress(100);
+        if (allImageUrls.length === 0) {
+          throw new Error('No valid images found to upload. Make sure all scenes have generated images.');
         }
+
+        // Upload all images to Google Cloud Storage
+        let uploadedCount = 0;
+        await Promise.all(
+          allImageUrls.map(async (image, index) => {
+            console.log(`🎬 Upload debug - Uploading image ${index + 1}:`, {
+              fileName: image.fileName,
+              isValidDataUri: image.base64Image.startsWith('data:image/'),
+              dataUriPrefix: image.base64Image.substring(0, 50)
+            });
+            await apiCall(API_ENDPOINTS.upload, 
+              { projectId, ...image }, 
+              'Failed to upload image'
+            );
+            uploadedCount++;
+            setProgress(Math.round((uploadedCount / allImageUrls.length) * 100));
+            console.log(`🎬 Upload debug - Successfully uploaded image ${index + 1}`);
+          })
+        );
+        
+        console.log(`🎬 Upload complete - ${uploadedCount} images uploaded successfully`);
+        setProgress(100);
         
         // 3. Generate narration
         setStage('narrating');

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useConfirm } from './ConfirmProvider';
 import { getCurrentUser, onAuthStateChange } from '../services/authService';
 import { listMyProjects, deleteProject, ProjectSummary, renameProject, duplicateProject } from '../services/firebaseService';
 
@@ -158,9 +159,16 @@ const MyProjectsPage: React.FC = () => {
     }
   };
 
+  const confirm = useConfirm();
   const bulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    if (!confirm(`Delete ${selectedIds.size} selected project(s)?`)) return;
+    const ok = await confirm({
+      title: 'Delete Projects?',
+      message: `Delete ${selectedIds.size} selected project(s)? This cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel'
+    });
+    if (!ok) return;
     for (const id of Array.from(selectedIds) as string[]) {
       await handleDelete(id);
     }
