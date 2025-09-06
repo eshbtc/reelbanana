@@ -1,5 +1,4 @@
 
-// Fix: Implement the RenderingScreen component. This file was previously invalid.
 import React, { useState, useEffect } from 'react';
 import { Scene } from './types';
 import AnimatedLoader from './components/AnimatedLoader';
@@ -7,85 +6,88 @@ import AnimatedLoader from './components/AnimatedLoader';
 interface RenderingScreenProps {
   scenes: Scene[];
   onRenderComplete: (videoUrl: string) => void;
-  onRenderFail: () => void;
+  onRenderFail: (errorMessage: string) => void;
 }
 
-const renderingSteps = [
-  "Gathering creative energies...",
-  "Warming up the digital cameras...",
-  "Generating character narration...",
-  "Aligning captions with audio...",
-  "Assembling scene one...",
-  "Adding cinematic transitions...",
-  "Polishing the final cut...",
-  "Applying special effects...",
-  "Rendering high-definition video...",
-  "Almost there, preparing for premiere!"
-];
+// --- IMPORTANT ---
+// Replace these placeholder URLs with the actual Service URLs you received
+// after deploying your backend microservices in Phase 3.
+const NARRATE_SERVICE_URL = "https://your-narrate-service-url.a.run.app/narrate";
+const ALIGN_CAPTIONS_SERVICE_URL = "https://your-align-captions-service-url.a.run.app/align";
+const RENDER_SERVICE_URL = "https://your-render-service-url.a.run.app/render";
+// ---
 
 const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderComplete, onRenderFail }) => {
-  const [currentStep, setCurrentStep] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [progressMessage, setProgressMessage] = useState("Initializing render process...");
+  const [projectId] = useState(`project_${Date.now()}`); // Generate a unique ID for this movie
 
   useEffect(() => {
-    // This effect simulates a multi-step video rendering process.
-    // In a real application, this would involve multiple API calls to backend services
-    // for asset upload, narration, captioning, and video rendering.
-    // Due to project constraints (no asset upload service), this is a frontend simulation.
-    
-    if (scenes.length === 0) {
-        setError("No scenes were provided to render.");
-        onRenderFail();
-        return;
-    }
-
-    const totalDuration = 10000; // 10 seconds total simulation
-    const stepInterval = totalDuration / renderingSteps.length;
-
-    const intervalId = setInterval(() => {
-      setCurrentStep(prevStep => {
-        if (prevStep < renderingSteps.length - 1) {
-          return prevStep + 1;
-        } else {
-          // Last step, clear interval and complete
-          clearInterval(intervalId);
-          // Using a placeholder video for demonstration. In a real app, this URL
-          // would come from the final rendering service response.
-          onRenderComplete('https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4');
-          return prevStep;
+    const runFullRenderPipeline = async () => {
+      try {
+        if (scenes.length === 0) {
+            throw new Error("No scenes were provided to render.");
         }
-      });
-    }, stepInterval);
 
-    return () => {
-      clearInterval(intervalId);
+        // In a real production app, step 0 would be to upload the generated images
+        // from the browser to GCS. Since we are generating them with a backend-facing key,
+        // we'll assume they are accessible for this demo.
+        setProgressMessage("Uploading scene assets...");
+        await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate upload time
+
+        // Step 1: Generate Narration
+        setProgressMessage("Generating character narration...");
+        const narrationText = scenes.map(s => s.narration).join(' ');
+        
+        const narrateResponse = await fetch(NARRATE_SERVICE_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId, narrationText }),
+        });
+        if (!narrateResponse.ok) throw new Error(`Narration service failed: ${await narrateResponse.text()}`);
+        const { audioPath } = await narrateResponse.json();
+        console.log('Narration complete:', audioPath);
+
+        // Step 2: Align Captions
+        setProgressMessage("Aligning captions with audio...");
+        const alignResponse = await fetch(ALIGN_CAPTIONS_SERVICE_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId, gsAudioPath: audioPath }),
+        });
+        if (!alignResponse.ok) throw new Error(`Caption alignment failed: ${await alignResponse.text()}`);
+        const { srtPath } = await alignResponse.json();
+        console.log('Caption alignment complete:', srtPath);
+
+        // Step 3: Render the Final Video
+        setProgressMessage("Assembling scenes and rendering video...");
+        const renderResponse = await fetch(RENDER_SERVICE_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId }),
+        });
+        if (!renderResponse.ok) throw new Error(`Video rendering failed: ${await renderResponse.text()}`);
+        const { videoPath } = await renderResponse.json();
+        console.log('Rendering complete:', videoPath);
+
+        // Convert GCS path to public URL
+        const publicUrl = videoPath.replace('gs://', 'https://storage.googleapis.com/');
+        onRenderComplete(publicUrl);
+
+      } catch (error) {
+        console.error("Render pipeline failed:", error);
+        onRenderFail(error instanceof Error ? error.message : "An unknown error occurred.");
+      }
     };
-  }, [onRenderComplete, onRenderFail, scenes]);
 
-  if (error) {
-    return (
-      <div className="text-center p-8">
-          <h2 className="text-3xl font-bold mb-4 text-red-400">Render Failed</h2>
-          <p className="text-xl text-gray-300 mb-6">{error}</p>
-          <button onClick={onRenderFail} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-6 rounded-lg">
-              Return to Editor
-          </button>
-      </div>
-    );
-  }
+    runFullRenderPipeline();
+  }, [scenes, projectId, onRenderComplete, onRenderFail]);
 
   return (
     <div className="text-center p-8">
       <h2 className="text-4xl font-bold mb-4 text-amber-400">Creating Your Movie...</h2>
-      <p className="text-xl text-gray-300 mb-8 h-8">{renderingSteps[currentStep]}</p>
+      <p className="text-xl text-gray-300 mb-8 h-8">{progressMessage}</p>
       <div className="flex justify-center my-4">
         <AnimatedLoader />
-      </div>
-      <div className="w-full max-w-md mx-auto bg-gray-700 rounded-full h-2.5 mt-8">
-        <div 
-          className="bg-amber-500 h-2.5 rounded-full transition-all duration-500 ease-linear" 
-          style={{ width: `${((currentStep + 1) / renderingSteps.length) * 100}%` }}
-        ></div>
       </div>
     </div>
   );

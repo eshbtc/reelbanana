@@ -1,5 +1,4 @@
 
-// Fix: Implement the main App component. This file was previously invalid.
 import React, { useState, useCallback } from 'react';
 import Header from './components/Header';
 import StoryboardEditor from './components/StoryboardEditor';
@@ -20,7 +19,6 @@ const App: React.FC = () => {
       setScenes(scenesWithImages);
       setView('rendering');
     } else {
-      // In a real app, you might want to show a more integrated alert/modal.
       alert("Please generate images for your scenes before creating a movie.");
     }
   }, []);
@@ -30,16 +28,20 @@ const App: React.FC = () => {
     setView('player');
   }, []);
 
+  const handleRenderFail = useCallback((errorMessage: string) => {
+    alert(`Movie creation failed:\n\n${errorMessage}\n\nPlease check your backend service logs and configuration.`);
+    setView('editor');
+  }, []);
+  
   const handleBackToEditor = useCallback(() => {
     setView('editor');
     setVideoUrl(null);
-    // We don't clear scenes so the user can continue editing.
   }, []);
 
   const renderContent = () => {
     switch (view) {
       case 'rendering':
-        return <RenderingScreen scenes={scenes} onRenderComplete={handleRenderComplete} onRenderFail={handleBackToEditor} />;
+        return <RenderingScreen scenes={scenes} onRenderComplete={handleRenderComplete} onRenderFail={handleRenderFail} />;
       case 'player':
         return <MoviePlayer scenes={scenes} videoUrl={videoUrl} onBack={handleBackToEditor} />;
       case 'editor':
