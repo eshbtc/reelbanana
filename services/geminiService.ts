@@ -96,6 +96,7 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
 
         // Determine which AI service to use
         const aiService = await getAIService();
+        console.log('AI Service selected:', aiService);
         if (!aiService) {
             throw new Error("No credits remaining and no API key configured. Please add your Gemini API key or contact support for more credits.");
         }
@@ -104,6 +105,7 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
         
         if (aiService === 'firebase') {
             // Use Firebase AI Logic with free credits
+            console.log('Using Firebase AI Logic for story generation');
             const model = getGenerativeModel(ai, { 
                 model: "gemini-2.5-flash",
                 generationConfig: {
@@ -111,9 +113,11 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
                 }
             });
             
+            console.log('Generating content with Firebase AI Logic...');
             result = await model.generateContent(
                 `Create a short, creative, and kid-friendly storyboard script about "${topic}". The story should have a clear beginning, middle, and end.`
             );
+            console.log('Firebase AI Logic response received');
             
             // Record usage for free credits
             await recordUsage(currentUser.uid, 'story_generation', 1, true);
