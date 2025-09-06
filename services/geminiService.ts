@@ -1,6 +1,6 @@
 // Secure AI service: Firebase AI Logic (free credits) + Encrypted API keys (unlimited)
 import { getAI, getGenerativeModel, VertexAIBackend, ResponseModality } from 'firebase/ai';
-import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { firebaseApp } from '../lib/firebase';
 import type { CharacterOption } from '../types';
 import { getCurrentUser, getUserProfile, recordUsage, checkUserCredits, hasUserApiKey, TokenUsage } from './authService';
@@ -868,7 +868,7 @@ export const editImageSequence = async (base64Images: string[], editPrompt: stri
  */
 const CHAR_OPTIONS_CACHE = 'char_options_cache';
 const coalesce = (s: string) => s.trim().toLowerCase();
-const charOptionsCacheKey = (topic: string, count: number, styleHint?: string) => {
+export const charOptionsCacheKey = (topic: string, count: number, styleHint?: string) => {
   const base = `${coalesce(topic)}|${count}|${coalesce(styleHint || '')}`;
   let h = 0;
   for (let i = 0; i < base.length; i++) h = (h * 31 + base.charCodeAt(i)) | 0;
@@ -959,4 +959,14 @@ Example description: "A brave banana with a tiny red cape and bright eyes, paint
     await setDoc(doc(db, CHAR_OPTIONS_CACHE, cacheId), { options, topic, count, styleHint: styleHint || null, createdAt: new Date().toISOString() });
   } catch (_) {}
   return options;
+};
+
+export const clearCharacterOptionsCache = async (topic: string, count: number, styleHint?: string): Promise<void> => {
+  try {
+    const cacheId = charOptionsCacheKey(topic, count, styleHint);
+    const cacheDoc = doc(db, CHAR_OPTIONS_CACHE, cacheId);
+    await deleteDoc(cacheDoc);
+  } catch (_) {
+    // non-fatal
+  }
 };

@@ -8,9 +8,11 @@ interface CharacterPickerProps {
   open: boolean;
   onClose: () => void;
   onPick: (option: CharacterOption) => void;
+  currentDescription?: string;
+  currentImages?: string[];
 }
 
-const CharacterPicker: React.FC<CharacterPickerProps> = ({ topic, open, onClose, onPick }) => {
+const CharacterPicker: React.FC<CharacterPickerProps> = ({ topic, open, onClose, onPick, currentDescription, currentImages }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [options, setOptions] = useState<CharacterOption[]>([]);
@@ -52,6 +54,19 @@ const CharacterPicker: React.FC<CharacterPickerProps> = ({ topic, open, onClose,
     }
   };
 
+  const clearCacheAndRegenerate = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { clearCharacterOptionsCache } = await import('../services/geminiService');
+      await clearCharacterOptionsCache(topic, count, styleHint || undefined);
+      await regenerate();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to clear cache');
+      setLoading(false);
+    }
+  };
+
   if (!open) return null;
 
   return (
@@ -74,6 +89,9 @@ const CharacterPicker: React.FC<CharacterPickerProps> = ({ topic, open, onClose,
               </select>
             </div>
             <div className="flex-1"></div>
+            <button onClick={clearCacheAndRegenerate} disabled={loading} className="bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 text-white font-semibold px-4 py-2 rounded">
+              {loading ? 'Please wait…' : 'Clear cache'}
+            </button>
             <button onClick={regenerate} disabled={loading} className="bg-amber-600 hover:bg-amber-700 disabled:bg-gray-700 text-white font-semibold px-4 py-2 rounded">
               {loading ? 'Please wait…' : 'Regenerate'}
             </button>
@@ -81,8 +99,10 @@ const CharacterPicker: React.FC<CharacterPickerProps> = ({ topic, open, onClose,
           {loading && <div className="text-gray-300">Generating characters...</div>}
           {error && <div className="text-red-400 text-sm mb-3">{error}</div>}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {options.map(opt => (
-              <button key={opt.id} onClick={() => onPick(opt)} className="relative bg-gray-800 border border-gray-700 rounded-lg overflow-hidden text-left hover:bg-gray-700 transition-colors group">
+            {options.map(opt => {
+              const selected = (currentDescription && opt.description === currentDescription) || (currentImages && currentImages.length && opt.images?.some(u => currentImages?.includes(u)));
+              return (
+              <button key={opt.id} onClick={() => onPick(opt)} className={`relative bg-gray-800 border border-gray-700 rounded-lg overflow-hidden text-left hover:bg-gray-700 transition-colors group ${selected ? 'ring-2 ring-amber-500' : ''}`}>
                 {opt.images?.[0] && (
                   <img src={opt.images[0]} alt={opt.name} className="w-full h-40 object-cover" />
                 )}
@@ -90,9 +110,10 @@ const CharacterPicker: React.FC<CharacterPickerProps> = ({ topic, open, onClose,
                   <div className="text-white font-semibold text-sm">{opt.name}</div>
                   <div className="text-gray-400 text-xs mt-1 line-clamp-3">{opt.description}</div>
                 </div>
+                {selected && <div className="absolute top-2 left-2 bg-amber-600 text-white text-xs font-semibold px-2 py-1 rounded">Selected</div>}
                 <div className="absolute bottom-2 right-2 bg-amber-600 text-white text-xs font-semibold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">Use</div>
               </button>
-            ))}
+            )})}
           </div>
           <div className="text-xs text-gray-500 mt-3">Tip: We generate a few options using Gemini. For the demo, this step uses cached or low‑count generations.</div>
         </div>

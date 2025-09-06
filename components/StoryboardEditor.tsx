@@ -520,6 +520,8 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
               topic={topic || 'an adventurous banana'}
               open={showCharacterPicker}
               onClose={() => setShowCharacterPicker(false)}
+              currentDescription={characterAndStyle}
+              currentImages={characterRefs}
               onPick={(opt) => {
                 setCharacterAndStyle(opt.description);
                 setCharacterRefs(opt.images);
