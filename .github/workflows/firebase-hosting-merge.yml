@@ -18,3 +18,4 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_REEL_BANANA_35A54 }}
           channelId: live
           projectId: reel-banana-35a54
+          target: reelbanana-ai
