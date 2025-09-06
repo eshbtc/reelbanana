@@ -5,7 +5,7 @@ import AnimatedLoader from './components/AnimatedLoader';
 // Define the structure of the props
 interface RenderingScreenProps {
   scenes: Scene[];
-  onRenderComplete: (url: string, projectId?: string) => void;
+  onRenderComplete: (url: string) => void;
   onRenderFail: (errorMessage: string) => void;
 }
 
@@ -96,6 +96,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderCompl
             transition: scene.transition || 'fade',
             duration: scene.duration || 3,
         }));
+        // Assuming render service knows how to find assets by projectId and scene structure.
         const { videoUrl } = await apiCall(API_ENDPOINTS.render, 
           { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath }, 
           'Failed to render video'
@@ -103,7 +104,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderCompl
 
         // 7. Complete
         setStage('done');
-        onRenderComplete(videoUrl, projectId);
+        onRenderComplete(videoUrl);
 
       } catch (error) {
         if (error instanceof Error) {
@@ -120,7 +121,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderCompl
   }, [scenes, onRenderComplete, onRenderFail]);
 
   const renderProgressIndicator = () => {
-      const stages: RenderStage[] = ['uploading', 'narrating', 'aligning', 'composing', 'rendering'];
+      const stages: RenderStage[] = ['uploading', 'narrating', 'aligning', 'rendering'];
       const currentStageIndex = stages.indexOf(stage);
 
       return (

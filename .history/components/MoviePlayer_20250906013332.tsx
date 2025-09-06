@@ -101,40 +101,6 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, onBack, pro
           ))}
         </div>
       </div>
-
-      {/* Share Modal */}
-      {showShareModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-white mb-4">Share Your Movie</h3>
-            <p className="text-gray-300 mb-4">
-              Copy this link to share your movie with friends and family!
-            </p>
-            <div className="flex gap-2 mb-4">
-              <input
-                type="text"
-                value={shareUrl}
-                readOnly
-                className="flex-1 bg-gray-700 text-white px-3 py-2 rounded border border-gray-600"
-              />
-              <button
-                onClick={copyToClipboard}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition-colors"
-              >
-                Copy
-              </button>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowShareModal(false)}
-                className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-2 rounded transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -103,7 +103,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderCompl
 
         // 7. Complete
         setStage('done');
-        onRenderComplete(videoUrl, projectId);
+        onRenderComplete(videoUrl);
 
       } catch (error) {
         if (error instanceof Error) {

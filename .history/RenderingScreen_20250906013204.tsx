@@ -5,7 +5,7 @@ import AnimatedLoader from './components/AnimatedLoader';
 // Define the structure of the props
 interface RenderingScreenProps {
   scenes: Scene[];
-  onRenderComplete: (url: string, projectId?: string) => void;
+  onRenderComplete: (url: string) => void;
   onRenderFail: (errorMessage: string) => void;
 }
 
@@ -56,7 +56,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderCompl
         let uploadedCount = 0;
         await Promise.all(
           allImageUrls.map(async (image) => {
-            await apiCall(API_ENDPOINTS.upload, 
+            await apiCall(SERVICE_ENDPOINTS.upload, 
               { projectId, ...image }, 
               'Failed to upload image'
             );
@@ -68,14 +68,14 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderCompl
         // 3. Generate narration
         setStage('narrating');
         const narrationScript = scenes.map(s => s.narration).join(' ');
-        const { gsAudioPath } = await apiCall(API_ENDPOINTS.narrate, 
+        const { gsAudioPath } = await apiCall(SERVICE_ENDPOINTS.narrate, 
           { projectId, narrationScript }, 
           'Failed to generate narration'
         );
 
         // 4. Align captions
         setStage('aligning');
-        const { srtPath } = await apiCall(API_ENDPOINTS.align, 
+        const { srtPath } = await apiCall(SERVICE_ENDPOINTS.align, 
           { projectId, gsAudioPath }, 
           'Failed to align captions'
         );
@@ -96,14 +96,20 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderCompl
             transition: scene.transition || 'fade',
             duration: scene.duration || 3,
         }));
+        // Assuming render service knows how to find assets by projectId and scene structure.
+<<<<<<< HEAD
         const { videoUrl } = await apiCall(API_ENDPOINTS.render, 
           { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath }, 
+=======
+        const { videoUrl } = await apiCall(SERVICE_ENDPOINTS.render, 
+          { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath }, 
+>>>>>>> 525e7be8ee157e7a550ccb5e75f8fabb4e2b59bb
           'Failed to render video'
         );
 
         // 7. Complete
         setStage('done');
-        onRenderComplete(videoUrl, projectId);
+        onRenderComplete(videoUrl);
 
       } catch (error) {
         if (error instanceof Error) {

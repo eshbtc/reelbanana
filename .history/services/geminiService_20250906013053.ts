@@ -1,8 +1,6 @@
-// Gemini API service with hybrid security approach and caching
+
+// Gemini API service with hybrid security approach
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
-import { initializeApp } from 'firebase/app';
-import { apiConfig } from '../config/apiConfig';
 
 // Hybrid approach: Use environment variable with fallback
 // In production, this should be set via Google Cloud Secret Manager
@@ -15,25 +13,6 @@ if (!geminiApiKey) {
 }
 
 const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-
-// Initialize Firebase for caching
-const firebaseApp = initializeApp(apiConfig.firebase);
-const db = getFirestore(firebaseApp);
-
-// Cache collection name
-const CACHE_COLLECTION = 'generated_images_cache';
-
-// Simple hash function for cache keys
-const generateCacheKey = (prompt: string, characterAndStyle: string): string => {
-  const combined = `${characterAndStyle}|||${prompt}`;
-  let hash = 0;
-  for (let i = 0; i < combined.length; i++) {
-    const char = combined.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  return `cache_${Math.abs(hash).toString(36)}`;
-};
 
 const storyResponseSchema = {
     type: Type.OBJECT,
@@ -117,19 +96,6 @@ const sequentialPromptsSchema = {
 
 export const generateImageSequence = async (mainPrompt: string, characterAndStyle: string): Promise<string[]> => {
     try {
-        // 1. Check cache first
-        const cacheKey = generateCacheKey(mainPrompt, characterAndStyle);
-        const cacheDoc = doc(db, CACHE_COLLECTION, cacheKey);
-        const cacheSnap = await getDoc(cacheDoc);
-        
-        if (cacheSnap.exists()) {
-            const cachedData = cacheSnap.data();
-            console.log(`Cache hit for prompt: ${mainPrompt.substring(0, 50)}...`);
-            return cachedData.imageUrls;
-        }
-        
-        console.log(`Cache miss for prompt: ${mainPrompt.substring(0, 50)}...`);
-        
         // Step 1: Act as a "shot director" to generate 5 sequential prompts.
         const directorSystemInstruction = `You are a film director planning a 2-second shot. Based on the following scene description, create a sequence of exactly 5 distinct, continuous camera shots that show a brief moment of action. Each shot should be a detailed visual prompt for an image generation model.
             
@@ -179,21 +145,6 @@ Example Output:
                 // If one image fails, we'll stop the sequence for this scene.
                 throw new Error(`An image in the sequence failed to generate for prompt: "${prompt}"`);
             }
-        }
-        
-        // 3. Save to cache for future use
-        try {
-            await setDoc(cacheDoc, {
-                imageUrls: base64Images,
-                prompt: mainPrompt,
-                characterAndStyle: characterAndStyle,
-                createdAt: new Date().toISOString(),
-                cacheKey: cacheKey
-            });
-            console.log(`Cached ${base64Images.length} images for future use`);
-        } catch (cacheError) {
-            console.warn('Failed to cache images:', cacheError);
-            // Don't fail the whole operation if caching fails
         }
         
         return base64Images;
@@ -269,15 +220,6 @@ export const editImageSequence = async (base64Images: string[], editPrompt: stri
         return editedImages;
     } catch (error) {
         console.error("Error editing image sequence:", error);
-        if (error instanceof Error) {
-            if (error.message.includes('API key')) {
-                throw new Error("Authentication failed. Please check your API key configuration.");
-            } else if (error.message.includes('quota') || error.message.includes('limit')) {
-                throw new Error("API quota exceeded. Please try again later.");
-            } else if (error.message.includes('safety')) {
-                throw new Error("Content was blocked by safety filters. Please try a different edit prompt.");
-            }
-        }
-        throw new Error(error instanceof Error ? error.message : "Failed to apply edits to the image sequence.");
+        throw new Error(error instanceof Error ? error.message : "Failed to edit image sequence. Please try again.");
     }
 };

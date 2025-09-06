@@ -5,7 +5,7 @@ import AnimatedLoader from './components/AnimatedLoader';
 // Define the structure of the props
 interface RenderingScreenProps {
   scenes: Scene[];
-  onRenderComplete: (url: string, projectId?: string) => void;
+  onRenderComplete: (url: string) => void;
   onRenderFail: (errorMessage: string) => void;
 }
 
@@ -16,7 +16,6 @@ type RenderStage =
   | 'uploading'
   | 'narrating'
   | 'aligning'
-  | 'composing'
   | 'rendering'
   | 'done';
 
@@ -26,7 +25,6 @@ const STAGE_MESSAGES: Record<RenderStage, string> = {
   uploading: 'Uploading image assets...',
   narrating: 'Generating voiceover narration...',
   aligning: 'Generating synchronized captions...',
-  composing: 'Creating musical score...',
   rendering: 'Assembling the final movie...',
   done: 'Your movie is ready!',
 };
@@ -80,14 +78,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderCompl
           'Failed to align captions'
         );
 
-        // 5. Compose musical score
-        setStage('composing');
-        const { gsMusicPath } = await apiCall(API_ENDPOINTS.compose, 
-          { projectId, narrationScript }, 
-          'Failed to compose music'
-        );
-
-        // 6. Render video
+        // 5. Render video
         setStage('rendering');
         const sceneDataForRender = scenes.map(scene => ({
             narration: scene.narration,
@@ -96,14 +87,15 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderCompl
             transition: scene.transition || 'fade',
             duration: scene.duration || 3,
         }));
+        // Assuming render service knows how to find assets by projectId and scene structure.
         const { videoUrl } = await apiCall(API_ENDPOINTS.render, 
-          { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath }, 
+          { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath }, 
           'Failed to render video'
         );
 
-        // 7. Complete
+        // 6. Complete
         setStage('done');
-        onRenderComplete(videoUrl, projectId);
+        onRenderComplete(videoUrl);
 
       } catch (error) {
         if (error instanceof Error) {
@@ -120,7 +112,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderCompl
   }, [scenes, onRenderComplete, onRenderFail]);
 
   const renderProgressIndicator = () => {
-      const stages: RenderStage[] = ['uploading', 'narrating', 'aligning', 'composing', 'rendering'];
+      const stages: RenderStage[] = ['uploading', 'narrating', 'aligning', 'rendering'];
       const currentStageIndex = stages.indexOf(stage);
 
       return (

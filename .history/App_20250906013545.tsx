@@ -62,7 +62,7 @@ const App: React.FC = () => {
 
   return (
     <div className="bg-gray-900 text-white min-h-screen font-sans">
-      <Header onNavigate={handleNavigate} currentView={view === 'gallery' ? 'gallery' : 'editor'} />
+      <Header />
       <main className="container mx-auto p-4 md:p-8">
         {renderContent()}
       </main>

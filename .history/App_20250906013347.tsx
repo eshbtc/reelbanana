@@ -4,10 +4,9 @@ import Header from './components/Header';
 import StoryboardEditor from './components/StoryboardEditor';
 import RenderingScreen from './RenderingScreen';
 import MoviePlayer from './components/MoviePlayer';
-import PublicGallery from './components/PublicGallery';
 import { Scene } from './types';
 
-type View = 'editor' | 'rendering' | 'player' | 'gallery';
+type View = 'editor' | 'rendering' | 'player';
 
 const App: React.FC = () => {
   const [view, setView] = useState<View>('editor');
@@ -25,9 +24,8 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleRenderComplete = useCallback((url: string, projectId?: string) => {
+  const handleRenderComplete = useCallback((url: string) => {
     setVideoUrl(url);
-    setProjectId(projectId || null);
     setView('player');
   }, []);
 
@@ -39,11 +37,6 @@ const App: React.FC = () => {
   const handleBackToEditor = useCallback(() => {
     setView('editor');
     setVideoUrl(null);
-    setProjectId(null);
-  }, []);
-
-  const handleNavigate = useCallback((newView: 'editor' | 'gallery') => {
-    setView(newView);
   }, []);
 
   const renderContent = () => {
@@ -51,9 +44,7 @@ const App: React.FC = () => {
       case 'rendering':
         return <RenderingScreen scenes={scenes} onRenderComplete={handleRenderComplete} onRenderFail={handleRenderFail} />;
       case 'player':
-        return <MoviePlayer scenes={scenes} videoUrl={videoUrl} onBack={handleBackToEditor} projectId={projectId || undefined} />;
-      case 'gallery':
-        return <PublicGallery />;
+        return <MoviePlayer scenes={scenes} videoUrl={videoUrl} onBack={handleBackToEditor} />;
       case 'editor':
       default:
         return <StoryboardEditor onPlayMovie={handlePlayMovie} />;
@@ -62,7 +53,7 @@ const App: React.FC = () => {
 
   return (
     <div className="bg-gray-900 text-white min-h-screen font-sans">
-      <Header onNavigate={handleNavigate} currentView={view === 'gallery' ? 'gallery' : 'editor'} />
+      <Header />
       <main className="container mx-auto p-4 md:p-8">
         {renderContent()}
       </main>

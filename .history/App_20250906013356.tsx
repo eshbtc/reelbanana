@@ -4,10 +4,9 @@ import Header from './components/Header';
 import StoryboardEditor from './components/StoryboardEditor';
 import RenderingScreen from './RenderingScreen';
 import MoviePlayer from './components/MoviePlayer';
-import PublicGallery from './components/PublicGallery';
 import { Scene } from './types';
 
-type View = 'editor' | 'rendering' | 'player' | 'gallery';
+type View = 'editor' | 'rendering' | 'player';
 
 const App: React.FC = () => {
   const [view, setView] = useState<View>('editor');
@@ -42,18 +41,12 @@ const App: React.FC = () => {
     setProjectId(null);
   }, []);
 
-  const handleNavigate = useCallback((newView: 'editor' | 'gallery') => {
-    setView(newView);
-  }, []);
-
   const renderContent = () => {
     switch (view) {
       case 'rendering':
         return <RenderingScreen scenes={scenes} onRenderComplete={handleRenderComplete} onRenderFail={handleRenderFail} />;
       case 'player':
         return <MoviePlayer scenes={scenes} videoUrl={videoUrl} onBack={handleBackToEditor} projectId={projectId || undefined} />;
-      case 'gallery':
-        return <PublicGallery />;
       case 'editor':
       default:
         return <StoryboardEditor onPlayMovie={handlePlayMovie} />;
@@ -62,7 +55,7 @@ const App: React.FC = () => {
 
   return (
     <div className="bg-gray-900 text-white min-h-screen font-sans">
-      <Header onNavigate={handleNavigate} currentView={view === 'gallery' ? 'gallery' : 'editor'} />
+      <Header />
       <main className="container mx-auto p-4 md:p-8">
         {renderContent()}
       </main>
