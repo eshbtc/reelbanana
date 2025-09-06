@@ -537,7 +537,7 @@ export const generateImageSequence = async (
         }
 
         // Determine which AI service to use (text vs custom key path)
-        const aiService = await getAIService();
+        let aiService = await getAIService();
         if (!aiService) {
             throw new Error("No credits remaining and no API key configured. Please add your Gemini API key or contact support for more credits.");
         }
@@ -568,13 +568,25 @@ export const generateImageSequence = async (
             const hasCredits = await checkUserCredits(currentUser.uid, requestedFrames);
             console.log(`🔍 generateImageSequence: User has ${requestedFrames} credits: ${hasCredits}`);
             if (!hasCredits) {
-                // Fetch profile to show a helpful message
-                const profile = await getUserProfile(currentUser.uid);
-                const available = profile?.freeCredits ?? 0;
-                console.log(`❌ generateImageSequence: Insufficient credits - need ${requestedFrames}, have ${available}`);
-                throw new Error(`Insufficient credits. This request needs ${requestedFrames} image credits, you have ${available}. Switch to Draft (3 frames) or add your Gemini API key.`);
+                // Check if user has API key for fallback
+                const hasGoogleApiKey = await hasUserApiKey(currentUser.uid, 'google');
+                const hasFalApiKey = await hasUserApiKey(currentUser.uid, 'fal');
+                const hasApiKey = hasGoogleApiKey || hasFalApiKey;
+                
+                if (hasApiKey) {
+                    console.log(`🔄 generateImageSequence: Insufficient free credits, but user has API key - switching to BYO path`);
+                    // Switch to custom API key path
+                    aiService = 'custom';
+                } else {
+                    // Fetch profile to show a helpful message
+                    const profile = await getUserProfile(currentUser.uid);
+                    const available = profile?.freeCredits ?? 0;
+                    console.log(`❌ generateImageSequence: Insufficient credits - need ${requestedFrames}, have ${available}`);
+                    throw new Error(`Insufficient credits. This request needs ${requestedFrames} image credits, you have ${available}. Switch to Draft (3 frames) or add your Gemini API key.`);
+                }
+            } else {
+                console.log(`✅ generateImageSequence: Credits sufficient, proceeding with generation`);
             }
-            console.log(`✅ generateImageSequence: Credits sufficient, proceeding with generation`);
         }
         
         // 2. Use sophisticated "shot director" approach for cinematic quality
