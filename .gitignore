@@ -22,3 +22,22 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# AI Studio generated files
+.history/
+*.ai-studio-*
+
+# Environment variables and sensitive data
+.env
+.env.local
+.env.production
+.env.ai-studio
+.env.*.local
+*.env
+
+# API keys and secrets
+**/secrets/
+**/keys/
+**/*.key
+**/*.pem
+**/*.p12
