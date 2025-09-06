@@ -96,6 +96,7 @@ app.post('/render', appCheckVerification, async (req, res) => {
     
     // Declare tempDir outside try block so it's accessible in finally
     let tempDir;
+    console.log('🔧 Render service: tempDir scope fix applied');
     
     try {
         // Check if final video already exists to avoid re-processing
