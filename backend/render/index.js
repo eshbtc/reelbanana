@@ -94,6 +94,9 @@ app.post('/render', appCheckVerification, async (req, res) => {
 
     console.log(`Received render request for projectId: ${projectId}`);
     
+    // Declare tempDir outside try block so it's accessible in finally
+    let tempDir;
+    
     try {
         // Check if final video already exists to avoid re-processing
         const outputBucket = storage.bucket(outputBucketName);
@@ -114,7 +117,7 @@ app.post('/render', appCheckVerification, async (req, res) => {
             });
         }
         
-        const tempDir = path.join('/tmp', projectId);
+        tempDir = path.join('/tmp', projectId);
         // Determine plan (optional gating)
         let plan = 'free';
         try {
@@ -138,6 +141,8 @@ app.post('/render', appCheckVerification, async (req, res) => {
         console.log('Downloading assets...');
         const inputBucket = storage.bucket(inputBucketName);
         const imageFiles = (await inputBucket.getFiles({ prefix: `${projectId}/scene-` }))[0];
+        
+        console.log(`Found ${imageFiles.length} image files:`, imageFiles.map(f => f.name));
         
         // Resolve the correct remote music filename if provided
         let musicLocalPath = null;
@@ -179,13 +184,28 @@ app.post('/render', appCheckVerification, async (req, res) => {
 
         // For each scene, create a short video clip from its image sequence
         scenes.forEach((scene, sceneIndex) => {
-            const imagePattern = path.join(tempDir, `scene-${sceneIndex}-%d.png`);
+            // Find the actual image files for this scene
+            const sceneImages = imageFiles.filter(file => {
+                const fileName = path.basename(file.name);
+                return fileName.startsWith(`scene-${sceneIndex}-`);
+            });
+            
+            if (sceneImages.length === 0) {
+                console.error(`No images found for scene ${sceneIndex}`);
+                return;
+            }
+            
+            // Use the first image for the scene (or we could create a sequence)
+            const firstImage = sceneImages[0];
+            const localImagePath = path.join(tempDir, path.basename(firstImage.name));
             const sceneOutput = `scene_clip_${sceneIndex}`;
             const duration = scene.duration || 3;
             
-            command.input(imagePattern)
-                .inputOptions(['-framerate 1.5']) // Each image shows for ~0.66 seconds
-                .loop(duration) // Dynamic duration based on user setting
+            console.log(`Processing scene ${sceneIndex} with image: ${localImagePath}`);
+            
+            command.input(localImagePath)
+                .inputOptions(['-loop 1']) // Loop the single image
+                .inputOptions([`-t ${duration}`]) // Duration in seconds
                 .videoCodec('libx264');
 
             // Dynamic camera movement based on user selection
@@ -324,8 +344,14 @@ app.post('/render', appCheckVerification, async (req, res) => {
         return sendError(req, res, 500, 'INTERNAL', 'Failed to render video.', error.message);
     } finally {
         // 5. Cleanup: Remove the temporary local directory
-        await fs.rm(tempDir, { recursive: true, force: true });
-        console.log(`Cleaned up temporary directory: ${tempDir}`);
+        if (tempDir) {
+            try {
+                await fs.rm(tempDir, { recursive: true, force: true });
+                console.log(`Cleaned up temporary directory: ${tempDir}`);
+            } catch (cleanupError) {
+                console.error(`Failed to cleanup temp directory ${tempDir}:`, cleanupError);
+            }
+        }
     }
 });
 
