@@ -8,6 +8,10 @@
     ],
     "rewrites": [
       {
+        "source": "/share/**",
+        "function": "shareHandler"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
@@ -15,5 +19,8 @@
   },
   "functions": {
     "source": "functions"
+  },
+  "firestore": {
+    "rules": "firestore.rules"
   }
 }

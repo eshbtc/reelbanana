@@ -1,11 +1,14 @@
-const {onRequest} = require('firebase-functions/v2/https');
+const {onRequest, onCall} = require('firebase-functions/v2/https');
 
 /**
  * Cloud Function to handle share links
  * Generates HTML with proper meta tags for social media sharing
+ * Note: This is a public endpoint, so we don't enforce App Check
+ * App Check is enforced on Firestore, Storage, and AI Logic instead
  */
 exports.shareHandler = onRequest(async (req, res) => {
-  const { shareId } = req.params;
+  // Extract shareId from the path since this is a raw onRequest
+  const shareId = req.path.split('/').pop();
   
   try {
     // For now, we'll create a simple share page
@@ -138,3 +141,24 @@ exports.shareHandler = onRequest(async (req, res) => {
     res.status(500).send('Error generating share page');
   }
 });
+
+/**
+ * Example callable function with App Check enforcement
+ * This demonstrates how to properly enforce App Check on callable functions
+ */
+exports.secureDataHandler = onCall(
+  {
+    enforceAppCheck: true, // Reject requests with missing or invalid App Check tokens
+  },
+  (request) => {
+    // request.app contains data from App Check, including the app ID
+    console.log('App Check verified for app:', request.app.appId);
+    
+    // Your secure function logic here
+    return {
+      message: 'This is a secure endpoint protected by App Check',
+      appId: request.app.appId,
+      timestamp: new Date().toISOString()
+    };
+  }
+);

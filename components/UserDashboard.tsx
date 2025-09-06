@@ -34,7 +34,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
 
       setUserProfile(profile);
       setUsageStats(stats);
-      setCustomApiKey(profile?.apiKey || '');
+      // Don't load API key for security - user must re-enter it
+      setCustomApiKey('');
     } catch (error) {
       console.error('Error loading user data:', error);
     }
@@ -46,12 +47,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
 
     setIsUpdating(true);
     try {
-      await updateUserApiKey(currentUser.uid, customApiKey.trim());
+      // Securely store API key with encryption
+      await updateUserApiKey(currentUser.uid, customApiKey.trim(), currentUser.email || '');
+      setCustomApiKey(''); // Clear the input for security
       await loadUserData(); // Reload to get updated data
-      alert('API key updated successfully!');
+      alert('API key securely stored!');
     } catch (error) {
       console.error('Error updating API key:', error);
-      alert('Failed to update API key. Please try again.');
+      alert('Failed to securely store API key. Please try again.');
     } finally {
       setIsUpdating(false);
     }
@@ -61,12 +64,15 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
     const currentUser = getCurrentUser();
     if (!currentUser) return;
 
+    if (!confirm('Are you sure you want to clear your API key? This action cannot be undone.')) return;
+
     setIsUpdating(true);
     try {
-      await updateUserApiKey(currentUser.uid, '');
+      // Securely clear API key
+      await updateUserApiKey(currentUser.uid, '', currentUser.email || '');
       setCustomApiKey('');
       await loadUserData();
-      alert('API key cleared successfully!');
+      alert('API key securely cleared!');
     } catch (error) {
       console.error('Error clearing API key:', error);
       alert('Failed to clear API key. Please try again.');
@@ -165,8 +171,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
           </h3>
           <div className="bg-gray-900 rounded-lg p-4">
             <p className="text-gray-300 mb-4">
-              Add your own Gemini API key to use your quota instead of our free credits. 
-              This allows unlimited usage with your own resources.
+              Add your own Gemini API key to use your quota after free credits expire. 
+              Your API key is encrypted and stored securely. This allows unlimited usage with your own resources.
             </p>
             
             <div className="space-y-4">
@@ -179,7 +185,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
                     type={showApiKey ? 'text' : 'password'}
                     value={customApiKey}
                     onChange={(e) => setCustomApiKey(e.target.value)}
-                    placeholder="Enter your Gemini API key..."
+                    placeholder="Enter your Gemini API key (will be encrypted)..."
                     className="flex-1 bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white focus:ring-amber-500 focus:border-amber-500"
                   />
                   <button
@@ -197,7 +203,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
                   disabled={isUpdating || !customApiKey.trim()}
                   className="bg-amber-500 hover:bg-amber-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-colors"
                 >
-                  {isUpdating ? 'Updating...' : 'Update API Key'}
+                  {isUpdating ? 'Encrypting...' : 'Store Securely'}
                 </button>
                 
                 {usageStats.hasCustomApiKey && (

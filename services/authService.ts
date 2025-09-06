@@ -7,19 +7,22 @@ import {
   onAuthStateChanged,
   User
 } from 'firebase/auth';
-import { 
-  getFirestore, 
-  doc, 
-  getDoc, 
-  setDoc, 
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
   updateDoc,
-  serverTimestamp 
+  serverTimestamp
 } from 'firebase/firestore';
 import { firebaseApp } from '../lib/firebase';
+import { API_ENDPOINTS, apiCall } from '../config/apiConfig';
+import { authFetch } from '../lib/authFetch';
 
 // Use centralized Firebase app
 const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
+
 
 // Google Auth Provider
 const googleProvider = new GoogleAuthProvider();
@@ -32,7 +35,7 @@ export interface UserProfile {
   email: string;
   displayName: string;
   photoURL?: string;
-  apiKey?: string; // User's custom Gemini API key
+  encryptedApiKey?: string; // Encrypted user's custom Gemini API key for unlimited usage
   freeCredits: number; // Free API calls remaining
   totalUsage: number; // Total API calls made
   createdAt: string;
@@ -152,17 +155,41 @@ export const getUserProfile = async (userId: string): Promise<UserProfile | null
 };
 
 /**
- * Update user's custom API key
+ * Securely store user's custom API key via server-side service
  */
-export const updateUserApiKey = async (userId: string, apiKey: string): Promise<void> => {
+export const updateUserApiKey = async (userId: string, apiKey: string, email: string): Promise<void> => {
   try {
-    const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, {
-      apiKey: apiKey,
+    const response = await authFetch(API_ENDPOINTS.apiKey.store, {
+      method: 'POST',
+      body: { apiKey }
     });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to store API key');
+    }
   } catch (error) {
     console.error('Error updating API key:', error);
-    throw new Error('Failed to update API key');
+    throw new Error('Failed to securely store API key');
+  }
+};
+
+/**
+ * Check if user has API key stored (server-side)
+ */
+export const hasUserApiKey = async (userId: string): Promise<boolean> => {
+  try {
+    const response = await authFetch(API_ENDPOINTS.apiKey.check, { method: 'GET' });
+
+    if (response.ok) {
+      const data = await response.json();
+      return data.hasApiKey || false;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Error checking API key:', error);
+    return false;
   }
 };
 
@@ -232,10 +259,13 @@ export const getUserUsageStats = async (userId: string): Promise<{
       return { freeCredits: 0, totalUsage: 0, hasCustomApiKey: false };
     }
     
+    // Check if user has API key stored server-side
+    const hasApiKey = await hasUserApiKey(userId);
+    
     return {
       freeCredits: userProfile.freeCredits,
       totalUsage: userProfile.totalUsage,
-      hasCustomApiKey: !!userProfile.apiKey,
+      hasCustomApiKey: hasApiKey,
     };
   } catch (error) {
     console.error('Error getting usage stats:', error);

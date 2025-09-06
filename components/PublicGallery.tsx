@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, orderBy, limit, query } from 'firebase/firestore';
 import { getFirestore } from 'firebase/firestore';
-import { initializeApp } from 'firebase/app';
-import { apiConfig } from '../config/apiConfig';
+import { firebaseApp } from '../lib/firebase';
 
-// Initialize Firebase for gallery
-const firebaseApp = initializeApp(apiConfig.firebase);
+// Use centralized Firebase app for consistency and App Check
 const db = getFirestore(firebaseApp);
 
 interface GalleryMovie {

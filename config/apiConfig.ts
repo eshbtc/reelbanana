@@ -1,6 +1,7 @@
 // API Configuration for ReelBanana Backend Services
 // Hybrid approach: Secret Manager for production, env vars for development
 // This combines enterprise security with developer-friendly fallbacks
+import { getAppCheckToken } from '../lib/appCheck';
 
 export interface ApiConfig {
   baseUrls: {
@@ -9,6 +10,7 @@ export interface ApiConfig {
     align: string;
     render: string;
     compose: string;
+    apiKey: string;
   };
   firebase: {
     projectId: string;
@@ -27,15 +29,16 @@ const PRODUCTION_CONFIG: ApiConfig = {
     narrate: 'https://reel-banana-narrate-423229273041.us-central1.run.app',
     align: 'https://reel-banana-align-captions-423229273041.us-central1.run.app',
     render: 'https://reel-banana-render-423229273041.us-central1.run.app',
-    compose: 'https://compose-music-423229273041.us-central1.run.app',
+    compose: 'https://reel-banana-compose-music-423229273041.us-central1.run.app',
+    apiKey: 'https://reel-banana-api-key-service-423229273041.us-central1.run.app',
   },
   firebase: {
-    projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || '',
-    apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || '',
-    authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || '',
-    storageBucket: (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || '',
-    messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-    appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '',
+    projectId: 'reel-banana-35a54', // Can be hardcoded - not sensitive
+    apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || 'AIzaSyDummyKeyForAppCheck', // Placeholder for App Check
+    authDomain: 'reel-banana-35a54.firebaseapp.com',
+    storageBucket: 'reel-banana-35a54.appspot.com',
+    messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '123456789',
+    appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '1:123456789:web:abcdef123456',
   },
 };
 
@@ -47,14 +50,15 @@ const DEVELOPMENT_CONFIG: ApiConfig = {
     align: 'http://localhost:8081',
     render: 'http://localhost:8082',
     compose: 'http://localhost:8084',
+    apiKey: 'http://localhost:8085',
   },
   firebase: {
-    projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || '',
-    apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || '',
-    authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || '',
-    storageBucket: (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || '',
-    messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-    appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '',
+    projectId: 'reel-banana-35a54', // Can be hardcoded - not sensitive
+    apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || 'AIzaSyDummyKeyForAppCheck', // Placeholder for App Check
+    authDomain: 'reel-banana-35a54.firebaseapp.com',
+    storageBucket: 'reel-banana-35a54.appspot.com',
+    messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '123456789',
+    appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '1:123456789:web:abcdef123456',
   },
 };
 
@@ -65,15 +69,16 @@ const AI_STUDIO_CONFIG: ApiConfig = {
     narrate: 'https://reel-banana-narrate-423229273041.us-central1.run.app',
     align: 'https://reel-banana-align-captions-423229273041.us-central1.run.app',
     render: 'https://reel-banana-render-423229273041.us-central1.run.app',
-    compose: 'https://compose-music-423229273041.us-central1.run.app',
+    compose: 'https://reel-banana-compose-music-423229273041.us-central1.run.app',
+    apiKey: 'https://reel-banana-api-key-service-423229273041.us-central1.run.app',
   },
   firebase: {
-    projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || '',
-    apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || '',
-    authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || '',
-    storageBucket: (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || '',
-    messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-    appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '',
+    projectId: 'reel-banana-35a54', // Can be hardcoded - not sensitive
+    apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || 'AIzaSyDummyKeyForAppCheck', // Placeholder for App Check
+    authDomain: 'reel-banana-35a54.firebaseapp.com',
+    storageBucket: 'reel-banana-35a54.appspot.com',
+    messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '123456789',
+    appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '1:123456789:web:abcdef123456',
   },
 };
 
@@ -100,17 +105,33 @@ export const API_ENDPOINTS = {
   align: `${apiConfig.baseUrls.align}/align`,
   render: `${apiConfig.baseUrls.render}/render`,
   compose: `${apiConfig.baseUrls.compose}/compose-music`,
+  apiKey: {
+    store: `${apiConfig.baseUrls.apiKey}/store-api-key`,
+    use: `${apiConfig.baseUrls.apiKey}/use-api-key`,
+    check: `${apiConfig.baseUrls.apiKey}/check-api-key`,
+    remove: `${apiConfig.baseUrls.apiKey}/remove-api-key`,
+  },
 };
+
 
 // Helper function for making API calls with improved error handling
 export const apiCall = async (url: string, body: object, errorMessage: string) => {
   try {
+    // Get App Check token
+    const appCheckToken = await getAppCheckToken();
+    
+    const headers: Record<string, string> = { 
+      'Content-Type': 'application/json',
+      // Removed CORS header - configure on server side
+    };
+    
+    if (appCheckToken) {
+      headers['X-Firebase-AppCheck'] = appCheckToken;
+    }
+    
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
+      headers,
       body: JSON.stringify(body),
     });
     

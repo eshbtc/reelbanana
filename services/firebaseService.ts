@@ -1,5 +1,4 @@
-// New file: services/firebaseService.ts
-import { initializeApp } from 'firebase/app';
+// Firebase service using centralized Firebase app
 import { 
     getFirestore, 
     doc, 
@@ -10,13 +9,11 @@ import {
     serverTimestamp 
 } from 'firebase/firestore';
 import { Scene } from '../types';
-import { firebaseConfig } from './apiConfig';
+import { firebaseApp } from '../lib/firebase';
+import { getCurrentUser } from './authService';
 
-// Initialize Firebase and Firestore
-// The firebaseConfig is now securely sourced from environment variables via apiConfig.ts,
-// removing the need for placeholder values in the code.
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// Use centralized Firebase app for consistency and App Check
+const db = getFirestore(firebaseApp);
 
 const PROJECTS_COLLECTION = 'projects';
 
@@ -33,8 +30,14 @@ interface ProjectData {
  */
 export const createProject = async (data: ProjectData): Promise<string> => {
     try {
+        const currentUser = getCurrentUser();
+        if (!currentUser) {
+            throw new Error("User must be authenticated to create projects");
+        }
+
         const docRef = await addDoc(collection(db, PROJECTS_COLLECTION), {
             ...data,
+            userId: currentUser.uid, // Add userId for security rules
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
         });

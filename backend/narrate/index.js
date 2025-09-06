@@ -3,10 +3,39 @@ const express = require('express');
 const cors = require('cors');
 const { ElevenLabsClient } = require('elevenlabs');
 const { Storage } = require('@google-cloud/storage');
+const admin = require('firebase-admin');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+// Initialize Firebase Admin
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+    projectId: 'reel-banana-35a54'
+  });
+}
+
+// App Check verification middleware
+const appCheckVerification = async (req, res, next) => {
+  const appCheckToken = req.header('X-Firebase-AppCheck');
+
+  if (!appCheckToken) {
+    res.status(401);
+    return res.json({ error: 'App Check token required' });
+  }
+
+  try {
+    const appCheckClaims = await admin.appCheck().verifyToken(appCheckToken);
+    req.appCheckClaims = appCheckClaims;
+    return next();
+  } catch (err) {
+    console.error('App Check verification failed:', err);
+    res.status(401);
+    return res.json({ error: 'Invalid App Check token' });
+  }
+};
 
 // --- CLIENT INITIALIZATION ---
 // IMPORTANT: Set ELEVENLABS_API_KEY as an environment variable in your Cloud Run service
@@ -14,7 +43,7 @@ const elevenlabs = new ElevenLabsClient({
   apiKey: process.env.ELEVENLABS_API_KEY,
 });
 const storage = new Storage();
-const bucketName = 'oneminute-movie-in';
+const bucketName = process.env.INPUT_BUCKET_NAME || 'oneminute-movie-in';
 
 /**
  * POST /narrate
@@ -31,7 +60,7 @@ const bucketName = 'oneminute-movie-in';
  *   "gsAudioPath": "gs://bucket-name/project-id/narration.mp3"
  * }
  */
-app.post('/narrate', async (req, res) => {
+app.post('/narrate', appCheckVerification, async (req, res) => {
   const { projectId, narrationScript } = req.body;
 
   if (!projectId || !narrationScript) {

@@ -5,14 +5,43 @@ const { Storage } = require('@google-cloud/storage');
 const ffmpeg = require('fluent-ffmpeg');
 const fs = require('fs/promises');
 const path = require('path');
+const admin = require('firebase-admin');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
+// Initialize Firebase Admin
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+    projectId: 'reel-banana-35a54'
+  });
+}
+
+// App Check verification middleware
+const appCheckVerification = async (req, res, next) => {
+  const appCheckToken = req.header('X-Firebase-AppCheck');
+
+  if (!appCheckToken) {
+    res.status(401);
+    return res.json({ error: 'App Check token required' });
+  }
+
+  try {
+    const appCheckClaims = await admin.appCheck().verifyToken(appCheckToken);
+    req.appCheckClaims = appCheckClaims;
+    return next();
+  } catch (err) {
+    console.error('App Check verification failed:', err);
+    res.status(401);
+    return res.json({ error: 'Invalid App Check token' });
+  }
+};
+
 const storage = new Storage();
-const inputBucketName = 'oneminute-movie-in';
-const outputBucketName = 'oneminute-movie-out';
+const inputBucketName = process.env.INPUT_BUCKET_NAME || 'oneminute-movie-in';
+const outputBucketName = process.env.OUTPUT_BUCKET_NAME || 'oneminute-movie-out';
 
 /**
  * POST /render
@@ -30,7 +59,7 @@ const outputBucketName = 'oneminute-movie-out';
  *   "videoUrl": "https://storage.googleapis.com/..."
  * }
  */
-app.post('/render', async (req, res) => {
+app.post('/render', appCheckVerification, async (req, res) => {
     const { projectId, scenes, gsAudioPath, srtPath, gsMusicPath } = req.body;
 
     if (!projectId || !scenes || !gsAudioPath || !srtPath) {
@@ -135,12 +164,17 @@ app.post('/render', async (req, res) => {
         complexFilter.push(`${currentStream}subtitles=${path.join(tempDir, 'captions.srt')}:force_style='Fontsize=18,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,BorderStyle=3,Outline=1,Shadow=1,MarginV=25'${finalVideoOutput}`);
         
         // Add audio mixing if music is available
+        // Calculate correct audio input indices: images are added first, then audio
+        const imageInputs = scenes.length;
+        const narrationAudioIndex = imageInputs;
+        const musicAudioIndex = imageInputs + 1;
+        
         if (gsMusicPath) {
             // Mix narration and music with narration at higher volume
-            complexFilter.push('[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=2,volume=0.8[final_audio]');
+            complexFilter.push(`[${narrationAudioIndex}:a][${musicAudioIndex}:a]amix=inputs=2:duration=first:dropout_transition=2,volume=0.8[final_audio]`);
         } else {
             // Just use narration audio
-            complexFilter.push('[0:a]volume=0.8[final_audio]');
+            complexFilter.push(`[${narrationAudioIndex}:a]volume=0.8[final_audio]`);
         }
         
         const outputVideoPath = path.join(tempDir, 'final_movie.mp4');
@@ -185,10 +219,16 @@ app.post('/render', async (req, res) => {
             destination: `${projectId}/movie.mp4`,
             metadata: { contentType: 'video/mp4' },
         });
-        await uploadedFile.makePublic(); // Make the final video publicly accessible
         
-        console.log(`Video uploaded successfully to ${uploadedFile.publicUrl()}`);
-        res.status(200).json({ videoUrl: uploadedFile.publicUrl() });
+        // Generate a V4 signed URL instead of making the file public
+        const [signedUrl] = await uploadedFile.getSignedUrl({
+            version: 'v4',
+            action: 'read',
+            expires: Date.now() + 60 * 60 * 1000, // 1 hour
+        });
+        
+        console.log(`Video uploaded successfully with signed URL`);
+        res.status(200).json({ videoUrl: signedUrl });
 
     } catch (error) {
         console.error(`Error rendering video for projectId ${projectId}:`, error);

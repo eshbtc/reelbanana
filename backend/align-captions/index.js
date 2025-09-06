@@ -2,15 +2,44 @@ const express = require('express');
 const cors = require('cors');
 const { SpeechClient } = require('@google-cloud/speech');
 const { Storage } = require('@google-cloud/storage');
+const admin = require('firebase-admin');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
+// Initialize Firebase Admin
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+    projectId: 'reel-banana-35a54'
+  });
+}
+
+// App Check verification middleware
+const appCheckVerification = async (req, res, next) => {
+  const appCheckToken = req.header('X-Firebase-AppCheck');
+
+  if (!appCheckToken) {
+    res.status(401);
+    return res.json({ error: 'App Check token required' });
+  }
+
+  try {
+    const appCheckClaims = await admin.appCheck().verifyToken(appCheckToken);
+    req.appCheckClaims = appCheckClaims;
+    return next();
+  } catch (err) {
+    console.error('App Check verification failed:', err);
+    res.status(401);
+    return res.json({ error: 'Invalid App Check token' });
+  }
+};
+
 // --- CLIENT INITIALIZATION ---
 const speechClient = new SpeechClient();
 const storage = new Storage();
-const bucketName = 'oneminute-movie-in';
+const bucketName = process.env.INPUT_BUCKET_NAME || 'oneminute-movie-in';
 
 // --- HELPER FUNCTIONS ---
 
@@ -92,7 +121,7 @@ const convertToSrt = (words) => {
  *   "srtPath": "gs://bucket-name/project-id/captions.srt"
  * }
  */
-app.post('/align', async (req, res) => {
+app.post('/align', appCheckVerification, async (req, res) => {
     const { projectId, gsAudioPath } = req.body;
 
     if (!projectId || !gsAudioPath) {

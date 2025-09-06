@@ -1,14 +1,41 @@
-// Firebase AI Logic service with native Gemini and nano-bana integration
+// Secure AI service: Firebase AI Logic (free credits) + Encrypted API keys (unlimited)
 import { getAI, getGenerativeModel, VertexAIBackend, ResponseModality } from 'firebase/ai';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 import { firebaseApp } from '../lib/firebase';
-import { getCurrentUser, getUserProfile, recordUsage, checkUserCredits } from './authService';
+import { getCurrentUser, getUserProfile, recordUsage, checkUserCredits, hasUserApiKey } from './authService';
+import { API_ENDPOINTS } from '../config/apiConfig';
+import { authFetch } from '../lib/authFetch';
+import { getAppCheckToken } from '../lib/appCheck';
 
 // Use centralized Firebase app
 const db = getFirestore(firebaseApp);
 
+
 // Initialize Firebase AI Logic with Vertex AI backend (global for nano-bana/gemini-2.5-flash-image-preview)
 const ai = getAI(firebaseApp, { backend: new VertexAIBackend('global') });
+
+// Helper function to determine which AI service to use
+const getAIService = async (): Promise<'firebase' | 'custom' | null> => {
+  const currentUser = getCurrentUser();
+  if (!currentUser) return null;
+
+  const userProfile = await getUserProfile(currentUser.uid);
+  if (!userProfile) return null;
+
+  // Check if user has free credits remaining
+  const hasCredits = await checkUserCredits(currentUser.uid, 1);
+  if (hasCredits) {
+    return 'firebase'; // Use Firebase AI Logic with free credits
+  }
+
+  // Check if user has API key stored server-side
+  const hasApiKey = await hasUserApiKey(currentUser.uid);
+  if (hasApiKey) {
+    return 'custom'; // Use custom API key for unlimited usage
+  }
+
+  return null; // No credits and no API key
+};
 
 // Cache collection name
 const CACHE_COLLECTION = 'generated_images_cache';
@@ -62,26 +89,54 @@ type StoryScene = {
  */
 export const generateStory = async (topic: string): Promise<StoryScene[]> => {
     try {
-        // Check user credits if authenticated
         const currentUser = getCurrentUser();
-        if (currentUser) {
-            const hasCredits = await checkUserCredits(currentUser.uid, 1);
-            if (!hasCredits) {
-                throw new Error("Insufficient credits. Please contact support for more credits.");
-            }
+        if (!currentUser) {
+            throw new Error("Please sign in to generate stories.");
         }
 
-        // Create a GenerativeModel instance with Firebase AI Logic
-        const model = getGenerativeModel(ai, { 
-            model: "gemini-2.5-flash",
-            generationConfig: {
-                responseMimeType: "application/json",
-            }
-        });
+        // Determine which AI service to use
+        const aiService = await getAIService();
+        if (!aiService) {
+            throw new Error("No credits remaining and no API key configured. Please add your Gemini API key or contact support for more credits.");
+        }
+
+        let result;
         
-        const result = await model.generateContent(
-            `Create a short, creative, and kid-friendly storyboard script about "${topic}". The story should have a clear beginning, middle, and end.`
-        );
+        if (aiService === 'firebase') {
+            // Use Firebase AI Logic with free credits
+            const model = getGenerativeModel(ai, { 
+                model: "gemini-2.5-flash",
+                generationConfig: {
+                    responseMimeType: "application/json",
+                }
+            });
+            
+            result = await model.generateContent(
+                `Create a short, creative, and kid-friendly storyboard script about "${topic}". The story should have a clear beginning, middle, and end.`
+            );
+            
+            // Record usage for free credits
+            await recordUsage(currentUser.uid, 'generate_story', 1, true);
+            
+        } else {
+            // Use custom API key via secure server-side service
+            const response = await authFetch(API_ENDPOINTS.apiKey.use, {
+                method: 'POST',
+                body: {
+                    prompt: `Create a short, creative, and kid-friendly storyboard script about "${topic}". The story should have a clear beginning, middle, and end.`,
+                    model: 'gemini-2.5-flash'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to generate story with custom API key');
+            }
+            
+            const result = await response.json();
+            const jsonStr = result.candidates[0].content.parts[0].text.trim();
+            const responseData = JSON.parse(jsonStr);
+            return responseData.scenes;
+        }
 
         const jsonStr = result.response.text().trim();
         const response = JSON.parse(jsonStr);
@@ -159,9 +214,15 @@ export const generateImageSequence = async (mainPrompt: string, characterAndStyl
         // 1. Check cache first for cost control
         const cacheKey = generateCacheKey(mainPrompt, characterAndStyle);
         const cacheDoc = doc(db, CACHE_COLLECTION, cacheKey);
-        const cacheSnap = await getDoc(cacheDoc);
+        let cacheSnap: any = null;
+        try {
+            cacheSnap = await getDoc(cacheDoc);
+        } catch (e) {
+            // Ignore permission errors; treat as cache miss
+            cacheSnap = null;
+        }
         
-        if (cacheSnap.exists()) {
+        if (cacheSnap && cacheSnap.exists()) {
             const cachedData = cacheSnap.data();
             console.log(`Cache hit for prompt: ${mainPrompt.substring(0, 50)}...`);
             return cachedData.imageUrls;
@@ -243,18 +304,21 @@ Example Output:
         }
         
         // 4. Save to cache for future use (cost control)
-        try {
-            await setDoc(cacheDoc, {
-                imageUrls: base64Images,
-                prompt: mainPrompt,
-                characterAndStyle: characterAndStyle,
-                createdAt: new Date().toISOString(),
-                cacheKey: cacheKey
-            });
-            console.log(`Cached ${base64Images.length} images for future use`);
-        } catch (cacheError) {
-            console.warn('Failed to cache images:', cacheError);
-            // Don't fail the whole operation if caching fails
+        if (currentUser) {
+            try {
+                await setDoc(cacheDoc, {
+                    imageUrls: base64Images,
+                    prompt: mainPrompt,
+                    characterAndStyle: characterAndStyle,
+                    userId: currentUser.uid, // Required by security rules
+                    createdAt: new Date().toISOString(),
+                    cacheKey: cacheKey
+                });
+                console.log(`Cached ${base64Images.length} images for future use`);
+            } catch (cacheError) {
+                console.warn('Failed to cache images:', cacheError);
+                // Don't fail the whole operation if caching fails
+            }
         }
         
         // Record successful usage
