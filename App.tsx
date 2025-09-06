@@ -8,6 +8,7 @@ import PublicGallery from './components/PublicGallery';
 import UserDashboard from './components/UserDashboard';
 import MyProjectsPage from './components/MyProjectsPage';
 import PricingPage from './components/PricingPage';
+import AdBlockerWarning from './components/AdBlockerWarning';
 import { Scene } from './types';
 import { getCurrentUser } from './services/authService';
 import { API_ENDPOINTS } from './config/apiConfig';
@@ -161,6 +162,7 @@ const App: React.FC = () => {
 
   return (
     <div className="bg-gray-900 text-white min-h-screen font-sans">
+      <AdBlockerWarning />
       <Header onNavigate={handleNavigate} currentView={view} />
       <main className="container mx-auto p-4 md:p-8">
         {renderContent()}
