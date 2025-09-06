@@ -185,3 +185,4 @@ exports.secureDataHandler = onCall(
   }
 );
 // CI/CD test - Sat Sep  6 13:34:57 CDT 2025
+// CI/CD test with fixed permissions - Sat Sep  6 13:39:53 CDT 2025
