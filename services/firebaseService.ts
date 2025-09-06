@@ -155,14 +155,15 @@ export interface ProjectSummary {
 export const listMyProjects = async (userId: string, limit: number = 20): Promise<ProjectSummary[]> => {
     try {
         const col = collection(db, PROJECTS_COLLECTION);
+        // Use a simpler query that doesn't require a composite index
+        // We'll sort in memory instead of using orderBy to avoid index requirement
         const q = query(
             col,
             where('userId', '==', userId),
-            orderBy('updatedAt', 'desc'),
-            fsLimit(limit)
+            fsLimit(limit * 2) // Get more docs to sort in memory
         );
         const snap = await getDocs(q);
-        return snap.docs.map(d => {
+        const projects = snap.docs.map(d => {
             const data: any = d.data();
             // Try to build up to 3 thumbs from the first images of the first few scenes
             const thumbs: string[] = [];
@@ -182,6 +183,16 @@ export const listMyProjects = async (userId: string, limit: number = 20): Promis
                 thumbs,
             } as ProjectSummary;
         });
+        
+        // Sort by updatedAt in memory (most recent first)
+        projects.sort((a, b) => {
+            const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+            const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+            return bTime - aTime; // Descending order
+        });
+        
+        // Return only the requested limit
+        return projects.slice(0, limit);
     } catch (error) {
         console.error('Error listing projects:', error);
         throw new Error('Could not load your projects.');
