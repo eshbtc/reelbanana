@@ -19,6 +19,7 @@ const inspirationTopics = [
 
 const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
   const [topic, setTopic] = useState('');
+  const [characterAndStyle, setCharacterAndStyle] = useState('');
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [isLoadingStory, setIsLoadingStory] = useState(false);
   const [storyError, setStoryError] = useState<string | null>(null);
@@ -62,11 +63,15 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
   };
 
   const handleGenerateImageSequence = useCallback(async (id: string, prompt: string) => {
+    if (!characterAndStyle.trim()) {
+        alert("Please describe your character and style before generating images.");
+        return;
+    }
     setScenes(prevScenes =>
       prevScenes.map(s => s.id === id ? { ...s, status: 'generating', error: undefined } : s)
     );
     try {
-      const imageUrls = await generateImageSequence(prompt);
+      const imageUrls = await generateImageSequence(prompt, characterAndStyle);
       setScenes(prevScenes =>
         prevScenes.map(s => s.id === id ? { ...s, status: 'success', imageUrls } : s)
       );
@@ -76,9 +81,13 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
         prevScenes.map(s => s.id === id ? { ...s, status: 'error', error: errorMessage } : s)
       );
     }
-  }, []);
+  }, [characterAndStyle]);
   
   const handleGenerateAllImages = useCallback(async () => {
+    if (!characterAndStyle.trim()) {
+        alert("Please describe your character and style before generating images.");
+        return;
+    }
     setIsGeneratingAll(true);
     const promises = scenes
       .filter(s => s.status === 'idle' || s.status === 'error')
@@ -86,7 +95,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
     
     await Promise.allSettled(promises);
     setIsGeneratingAll(false);
-  }, [scenes, handleGenerateImageSequence]);
+  }, [scenes, handleGenerateImageSequence, characterAndStyle]);
 
 
   const handleUpdateScene = useCallback((id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration'>>) => {
@@ -115,7 +124,17 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
   return (
     <div>
         <div className="bg-gray-800 p-6 rounded-lg shadow-xl border border-gray-700 mb-8">
-            <h2 className="text-2xl font-bold mb-4 text-amber-400">1. Create Your Story</h2>
+            <h2 className="text-2xl font-bold mb-4 text-amber-400">1. Describe Your Character & Style</h2>
+            <textarea
+                value={characterAndStyle}
+                onChange={(e) => setCharacterAndStyle(e.target.value)}
+                placeholder="e.g., A cute banana character with a tiny red cape, in a vibrant watercolor style"
+                className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition mb-6"
+                rows={2}
+                disabled={isLoadingStory || isLoadingInspiration}
+            />
+
+            <h2 className="text-2xl font-bold mb-4 text-amber-400">2. Create Your Story</h2>
             <div className="mb-4">
                 <h3 className="text-lg font-semibold text-gray-300 mb-2">Need Inspiration?</h3>
                 <div className="flex flex-wrap gap-2">
@@ -151,7 +170,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
       {scenes.length > 0 && (
         <div>
           <div className="flex flex-wrap justify-between items-center mb-4 gap-4">
-            <h2 className="text-2xl font-bold text-amber-400">2. Edit & Generate Images</h2>
+            <h2 className="text-2xl font-bold text-amber-400">3. Edit & Generate Images</h2>
             <div className="flex items-center gap-2">
                 <button
                     onClick={handleGenerateAllImages}
@@ -183,7 +202,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
           </div>
 
           <div className="text-center">
-             <h2 className="text-2xl font-bold text-amber-400 mb-4">3. Create Your Movie</h2>
+             <h2 className="text-2xl font-bold text-amber-400 mb-4">4. Create Your Movie</h2>
              <p className="text-gray-400 mb-6 max-w-2xl mx-auto">Once you have generated images for your scenes, you can assemble them into a short movie. The backend will narrate, add captions, and render your video.</p>
             <button
               onClick={() => onPlayMovie(scenes)}
