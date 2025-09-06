@@ -96,7 +96,6 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderCompl
             transition: scene.transition || 'fade',
             duration: scene.duration || 3,
         }));
-        // Assuming render service knows how to find assets by projectId and scene structure.
         const { videoUrl } = await apiCall(API_ENDPOINTS.render, 
           { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath }, 
           'Failed to render video'

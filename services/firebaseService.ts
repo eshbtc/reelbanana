@@ -10,13 +10,11 @@ import {
     serverTimestamp 
 } from 'firebase/firestore';
 import { Scene } from '../types';
-
-import { apiConfig } from '../config/apiConfig';
-
-// Use centralized Firebase configuration
-const firebaseConfig = apiConfig.firebase;
+import { firebaseConfig } from './apiConfig';
 
 // Initialize Firebase and Firestore
+// The firebaseConfig is now securely sourced from environment variables via apiConfig.ts,
+// removing the need for placeholder values in the code.
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
