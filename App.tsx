@@ -67,7 +67,7 @@ const App: React.FC = () => {
         {renderContent()}
       </main>
       <footer className="text-center py-4 text-gray-500 text-sm border-t border-gray-800 mt-8">
-        <p>Powered by Google Gemini &amp; Banana Tech</p>
+        <p>Powered by Google Gemini &amp; ReelBanana AI</p>
       </footer>
     </div>
   );
