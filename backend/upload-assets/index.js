@@ -65,7 +65,36 @@ const appCheckVerification = async (req, res, next) => {
 };
 
 const storage = new Storage();
-const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
+// Use the same default input bucket as other services to ensure the render pipeline works out of the box
+const bucketName = process.env.INPUT_BUCKET_NAME || 'oneminute-movie-in';
+
+// Validate bucket exists and is accessible
+const validateBucket = async () => {
+  try {
+    const bucket = storage.bucket(bucketName);
+    const [exists] = await bucket.exists();
+    if (!exists) {
+      console.error(`❌ Bucket ${bucketName} does not exist or is not accessible`);
+      throw new Error(`Bucket ${bucketName} not found`);
+    }
+    
+    // Test write permissions
+    const testFile = bucket.file(`test-${Date.now()}.txt`);
+    await testFile.save('test', { metadata: { contentType: 'text/plain' } });
+    await testFile.delete();
+    
+    console.log(`✅ Bucket ${bucketName} validated successfully`);
+  } catch (error) {
+    console.error(`❌ Bucket validation failed for ${bucketName}:`, error);
+    throw new Error(`Bucket validation failed: ${error.message}`);
+  }
+};
+
+// Validate bucket on startup
+validateBucket().catch(error => {
+  console.error('Failed to validate bucket on startup:', error);
+  process.exit(1);
+});
 
 /**
  * POST /upload-image
@@ -91,6 +120,17 @@ app.post('/upload-image', appCheckVerification, async (req, res) => {
     return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required fields: projectId, fileName, and base64Image.');
   }
 
+  // Validate input parameters
+  if (typeof projectId !== 'string' || projectId.length === 0) {
+    return sendError(req, res, 400, 'INVALID_ARGUMENT', 'projectId must be a non-empty string');
+  }
+  if (typeof fileName !== 'string' || fileName.length === 0) {
+    return sendError(req, res, 400, 'INVALID_ARGUMENT', 'fileName must be a non-empty string');
+  }
+  if (typeof base64Image !== 'string' || !base64Image.startsWith('data:image/')) {
+    return sendError(req, res, 400, 'INVALID_ARGUMENT', 'base64Image must be a valid data URI');
+  }
+
   try {
     const bucket = storage.bucket(bucketName);
     
@@ -101,27 +141,56 @@ app.post('/upload-image', appCheckVerification, async (req, res) => {
     const data = match[2];
     const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpeg';
 
-    const safeName = fileName.replace(/\.[a-zA-Z0-9]+$/, `.${ext}`);
-    const fullPath = `${projectId}/${safeName}`;
+    // Sanitize filename and project ID
+    const safeProjectId = projectId.replace(/[^a-zA-Z0-9-_]/g, '_');
+    const safeName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_').replace(/\.[a-zA-Z0-9]+$/, `.${ext}`);
+    const fullPath = `${safeProjectId}/${safeName}`;
     const file = bucket.file(fullPath);
 
     const imageBuffer = Buffer.from(data, 'base64');
+    
+    // Validate image size (max 10MB)
+    if (imageBuffer.length > 10 * 1024 * 1024) {
+      return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Image size exceeds 10MB limit');
+    }
+    
+    console.log(`📤 Uploading image: ${safeName} (${(imageBuffer.length / 1024).toFixed(1)}KB) for project ${safeProjectId}`);
+    
     await file.save(imageBuffer, { metadata: { contentType: mime } });
     await file.makePublic();
 
     const gcsPath = `gs://${bucketName}/${fullPath}`;
     const publicUrl = `https://storage.googleapis.com/${bucketName}/${fullPath}`;
-    console.log(`Successfully uploaded ${safeName} for ${projectId}.`);
+    
+    console.log(`✅ Successfully uploaded ${safeName} for project ${safeProjectId} to ${gcsPath}`);
+    
     res.status(200).json({ 
         message: 'Image uploaded successfully.',
         gcsPath,
-        publicUrl
+        publicUrl,
+        size: imageBuffer.length,
+        contentType: mime
     });
 
   } catch (error) {
-    console.error(`Error uploading image for projectId ${projectId}:`, error);
-    return sendError(req, res, 500, 'INTERNAL', 'Failed to upload image.', error.message);
+    console.error(`❌ Error uploading image for projectId ${projectId}:`, error);
+    
+    // Provide more specific error messages
+    if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+      return sendError(req, res, 503, 'SERVICE_UNAVAILABLE', 'Storage service unavailable', error.message);
+    } else if (error.code === 'PERMISSION_DENIED') {
+      return sendError(req, res, 403, 'PERMISSION_DENIED', 'Insufficient permissions to upload to bucket', error.message);
+    } else if (error.code === 'NOT_FOUND') {
+      return sendError(req, res, 404, 'NOT_FOUND', 'Bucket not found', error.message);
+    }
+    
+    return sendError(req, res, 500, 'INTERNAL', 'Failed to upload image', error.message);
   }
+});
+
+// Lightweight health check (no App Check required)
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', service: 'upload-assets', bucket: bucketName, time: new Date().toISOString() });
 });
 
 const PORT = process.env.PORT || 8083;

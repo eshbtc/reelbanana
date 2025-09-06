@@ -35,10 +35,10 @@ const PRODUCTION_CONFIG: ApiConfig = {
     apiKey: 'https://reel-banana-api-key-service-223097908182.us-central1.run.app',
   },
   firebase: {
-    projectId: 'reel-banana-35a54', // Can be hardcoded - not sensitive
+    projectId: 'reel-banana-35a54', // Not sensitive
     apiKey: 'AIzaSyCeZNdwsaZ_sBmOt8WY0FcUziq22-OVJjg',
     authDomain: 'reel-banana-35a54.firebaseapp.com',
-    storageBucket: 'reel-banana-35a54.firebasestorage.app',
+    storageBucket: 'reel-banana-35a54.appspot.com',
     messagingSenderId: '223097908182',
     appId: '1:223097908182:web:982c634d6aaeb3c805d277',
   },
@@ -56,10 +56,10 @@ const DEVELOPMENT_CONFIG: ApiConfig = {
     apiKey: 'http://localhost:8085',
   },
   firebase: {
-    projectId: 'reel-banana-35a54', // Can be hardcoded - not sensitive
+    projectId: 'reel-banana-35a54',
     apiKey: 'AIzaSyCeZNdwsaZ_sBmOt8WY0FcUziq22-OVJjg',
     authDomain: 'reel-banana-35a54.firebaseapp.com',
-    storageBucket: 'reel-banana-35a54.firebasestorage.app',
+    storageBucket: 'reel-banana-35a54.appspot.com',
     messagingSenderId: '223097908182',
     appId: '1:223097908182:web:982c634d6aaeb3c805d277',
   },
@@ -77,29 +77,90 @@ const AI_STUDIO_CONFIG: ApiConfig = {
     apiKey: 'https://reel-banana-api-key-service-423229273041.us-central1.run.app',
   },
   firebase: {
-    projectId: 'reel-banana-35a54', // Can be hardcoded - not sensitive
+    projectId: 'reel-banana-35a54',
     apiKey: 'AIzaSyCeZNdwsaZ_sBmOt8WY0FcUziq22-OVJjg',
     authDomain: 'reel-banana-35a54.firebaseapp.com',
-    storageBucket: 'reel-banana-35a54.firebasestorage.app',
+    storageBucket: 'reel-banana-35a54.appspot.com',
     messagingSenderId: '223097908182',
     appId: '1:223097908182:web:982c634d6aaeb3c805d277',
   },
 };
 
+// Runtime configuration validation
+const validateConfig = (config: ApiConfig, envName: string): void => {
+  const errors: string[] = [];
+  
+  // Validate base URLs
+  Object.entries(config.baseUrls).forEach(([service, url]) => {
+    if (!url || typeof url !== 'string') {
+      errors.push(`Invalid ${service} URL: ${url}`);
+    } else if (!url.startsWith('http')) {
+      errors.push(`${service} URL must start with http/https: ${url}`);
+    }
+  });
+  
+  // Validate Firebase config
+  const { firebase } = config;
+  if (!firebase.projectId || !firebase.apiKey || !firebase.authDomain) {
+    errors.push('Missing required Firebase configuration fields');
+  }
+  
+  if (!firebase.storageBucket.endsWith('.appspot.com')) {
+    errors.push(`Storage bucket should end with .appspot.com: ${firebase.storageBucket}`);
+  }
+  
+  if (errors.length > 0) {
+    console.error(`❌ Configuration validation failed for ${envName}:`, errors);
+    throw new Error(`Invalid configuration for ${envName}: ${errors.join(', ')}`);
+  }
+  
+  console.log(`✅ Configuration validated for ${envName}`);
+};
+
 // Determine which configuration to use based on environment
 const getConfig = (): ApiConfig => {
-  // In production (Firebase Hosting), always use production config
+  let selectedConfig: ApiConfig;
+  let envName: string;
+  
+  // Production builds (Firebase Hosting, etc.)
   if (import.meta.env.PROD) {
-    return PRODUCTION_CONFIG;
+    selectedConfig = PRODUCTION_CONFIG;
+    envName = 'PRODUCTION';
+  }
+  // Explicit AI Studio target via env flag
+  else if ((import.meta as any)?.env?.VITE_TARGET_ENV === 'ai-studio') {
+    selectedConfig = AI_STUDIO_CONFIG;
+    envName = 'AI_STUDIO';
+  }
+  // Local development: localhost/127.0.0.1
+  else if (typeof window !== 'undefined' && 
+           (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    selectedConfig = DEVELOPMENT_CONFIG;
+    envName = 'DEVELOPMENT';
+  }
+  // Fallback to production
+  else {
+    selectedConfig = PRODUCTION_CONFIG;
+    envName = 'PRODUCTION (fallback)';
   }
   
-  // For development, check if we're on the live domain
-  if (typeof window !== 'undefined' && window.location.hostname === 'reelbanana.ai') {
-    return PRODUCTION_CONFIG;
+  // Log environment selection
+  console.log(`🔧 API Config: Using ${envName} environment`);
+  console.log(`📡 Base URLs:`, selectedConfig.baseUrls);
+  console.log(`🔥 Firebase Project: ${selectedConfig.firebase.projectId}`);
+  
+  // Validate configuration at runtime
+  try {
+    validateConfig(selectedConfig, envName);
+  } catch (error) {
+    console.error('Configuration validation failed:', error);
+    // In production, we might want to throw, but for development, log and continue
+    if (import.meta.env.PROD) {
+      throw error;
+    }
   }
   
-  // Default to production config for deployed environments
-  return PRODUCTION_CONFIG;
+  return selectedConfig;
 };
 
 export const apiConfig = getConfig();

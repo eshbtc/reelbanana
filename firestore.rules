@@ -26,10 +26,31 @@ service cloud.firestore {
       allow write: if request.auth != null; // Only authenticated users can write
     }
     
-    // Public gallery - read-only for authenticated users
-    match /public_gallery/{movieId} {
-      allow read: if request.auth != null;
-      allow write: if false; // Only server-side can write
+    // Public movies (gallery)
+    // - Allow public reads so the gallery is visible without auth
+    // - Allow authenticated users to create/update/delete their own entries
+    match /public_movies/{movieId} {
+      allow read: if true;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId &&
+        // Validate required fields
+        request.resource.data.keys().hasAll(['userId', 'title', 'createdAt']) &&
+        request.resource.data.userId is string &&
+        request.resource.data.title is string &&
+        request.resource.data.createdAt is timestamp &&
+        // Validate optional fields if present
+        (!request.resource.data.keys().hasAny(['thumbnailUrl']) || request.resource.data.thumbnailUrl is string) &&
+        (!request.resource.data.keys().hasAny(['description']) || request.resource.data.description is string) &&
+        (!request.resource.data.keys().hasAny(['tags']) || request.resource.data.tags is list);
+      allow update: if request.auth != null && 
+        request.auth.uid == resource.data.userId &&
+        // Prevent userId changes
+        request.resource.data.userId == resource.data.userId &&
+        // Validate field types if being updated
+        (!request.resource.data.keys().hasAny(['title']) || request.resource.data.title is string) &&
+        (!request.resource.data.keys().hasAny(['description']) || request.resource.data.description is string) &&
+        (!request.resource.data.keys().hasAny(['tags']) || request.resource.data.tags is list);
+      allow delete: if request.auth != null && request.auth.uid == resource.data.userId;
     }
     
     // Usage records - users can only access their own records (collection name is 'usage')
