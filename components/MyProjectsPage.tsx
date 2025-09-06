@@ -147,7 +147,7 @@ const MyProjectsPage: React.FC = () => {
   const bulkDelete = async () => {
     if (selectedIds.size === 0) return;
     if (!confirm(`Delete ${selectedIds.size} selected project(s)?`)) return;
-    for (const id of Array.from(selectedIds)) {
+    for (const id of Array.from(selectedIds) as string[]) {
       await handleDelete(id);
     }
     setSelectedIds(new Set());
@@ -155,7 +155,7 @@ const MyProjectsPage: React.FC = () => {
 
   const bulkDuplicate = async () => {
     if (selectedIds.size === 0) return;
-    for (const id of Array.from(selectedIds)) {
+    for (const id of Array.from(selectedIds) as string[]) {
       await handleDuplicate(id);
     }
     setSelectedIds(new Set());
