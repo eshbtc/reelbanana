@@ -527,7 +527,7 @@ const sequentialPromptsSchema = {
 export const generateImageSequence = async (
     mainPrompt: string,
     characterAndStyle: string,
-    opts?: { characterRefs?: string[]; backgroundImage?: string; frames?: number }
+    opts?: { characterRefs?: string[]; backgroundImage?: string; frames?: number; projectId?: string }
 ): Promise<string[]> => {
     try {
         const currentUser = getCurrentUser();
@@ -559,6 +559,18 @@ export const generateImageSequence = async (
         }
         
         console.log(`Cache miss for prompt: ${mainPrompt.substring(0, 50)}...`);
+        
+        // For Firebase AI Logic, check credits after cache miss
+        if (aiService === 'firebase') {
+            const requestedFrames = Math.min(Math.max(opts?.frames || 5, 1), 5);
+            const hasCredits = await checkUserCredits(currentUser.uid, requestedFrames);
+            if (!hasCredits) {
+                // Fetch profile to show a helpful message
+                const profile = await getUserProfile(currentUser.uid);
+                const available = profile?.freeCredits ?? 0;
+                throw new Error(`Insufficient credits. This request needs ${requestedFrames} image credits, you have ${available}. Switch to Draft (3 frames) or add your Gemini API key.`);
+            }
+        }
         
         // 2. Use sophisticated "shot director" approach for cinematic quality
         const directorSystemInstruction = `You are a film director planning a 2-second shot. Based on the following scene description, create a sequence of exactly 5 distinct, continuous camera shots that show a brief moment of action. Each shot should be a detailed visual prompt for an image generation model.
@@ -762,13 +774,14 @@ Return ONLY a JSON object with this exact format:
         // Record failed usage (no token usage for failed calls)
         const currentUser = getCurrentUser();
         if (currentUser) {
+            const failedAiService = await getAIService();
             await recordUsage(
                 currentUser.uid, 
                 'image_generation', 
                 Math.min(Math.max(opts?.frames || 5, 1), 5),
                 false, 
                 undefined, // No token usage for failed calls
-                aiService
+                failedAiService || 'firebase'
             );
         }
         
@@ -1017,14 +1030,3 @@ export const clearCharacterOptionsCache = async (topic: string, count: number, s
     // non-fatal
     }
 };
-        // For Firebase AI Logic, check credits after cache miss
-        if (aiService === 'firebase') {
-            const requestedFrames = Math.min(Math.max(opts?.frames || 5, 1), 5);
-            const hasCredits = await checkUserCredits(currentUser.uid, requestedFrames);
-            if (!hasCredits) {
-                // Fetch profile to show a helpful message
-                const profile = await getUserProfile(currentUser.uid);
-                const available = profile?.freeCredits ?? 0;
-                throw new Error(`Insufficient credits. This request needs ${requestedFrames} image credits, you have ${available}. Switch to Draft (3 frames) or add your Gemini API key.`);
-            }
-        }
