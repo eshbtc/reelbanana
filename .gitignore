@@ -34,3 +34,31 @@ dist-ssr
 .env.production
 .env.development
 .env.*.local
+
+# AI Assistant changelog and session files
+.claude-changelog/
+.claude-sessions/
+*.claude-session
+
+# Firebase cache and build files
+.firebase/
+.firebaserc.local
+
+# Package lock files for backend services (keep main one)
+backend/*/package-lock.json
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Backup files
+*.bak
+*.backup
+*~

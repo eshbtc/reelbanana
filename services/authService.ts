@@ -16,7 +16,7 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { firebaseApp } from '../lib/firebase';
-import { API_ENDPOINTS, apiCall } from '../config/apiConfig';
+import { API_ENDPOINTS } from '../config/apiConfig';
 import { authFetch } from '../lib/authFetch';
 
 // Use centralized Firebase app
