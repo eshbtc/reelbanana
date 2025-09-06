@@ -62,9 +62,13 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
             }))
         );
 
-        console.log('🎬 Upload debug - Total images to upload:', allImageUrls.length);
+        const totalSceneImages = scenes.flatMap(scene => scene.imageUrls || []).length;
+        console.log('🎬 Upload debug - Total scene images found:', totalSceneImages);
+        console.log('🎬 Upload debug - Images needing upload (data URIs):', allImageUrls.length);
+        console.log('🎬 Upload debug - Images already persisted (HTTPS URLs):', totalSceneImages - allImageUrls.length);
+        
         if (allImageUrls.length > 0) {
-          console.log('🎬 Upload debug - First image sample:', {
+          console.log('🎬 Upload debug - First data URI sample:', {
             fileName: allImageUrls[0].fileName,
             base64Preview: allImageUrls[0].base64Image.substring(0, 100) + '...',
             isValidDataUri: allImageUrls[0].base64Image.startsWith('data:image/')
