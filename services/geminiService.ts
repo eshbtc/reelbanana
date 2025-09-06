@@ -523,12 +523,22 @@ export const generateImageSequence = async (
     opts?: { characterRefs?: string[]; backgroundImage?: string; frames?: number }
 ): Promise<string[]> => {
     try {
-        // Check user credits if authenticated
         const currentUser = getCurrentUser();
-        if (currentUser) {
+        if (!currentUser) {
+            throw new Error("Please sign in to generate images.");
+        }
+
+        // Determine which AI service to use
+        const aiService = await getAIService();
+        if (!aiService) {
+            throw new Error("No credits remaining and no API key configured. Please add your Gemini API key or contact support for more credits.");
+        }
+
+        // For Firebase AI Logic, check credits before making the API call
+        if (aiService === 'firebase') {
             const hasCredits = await checkUserCredits(currentUser.uid, 5); // 5 images = 5 credits
             if (!hasCredits) {
-                throw new Error("Insufficient credits. Please add your own API key or contact support.");
+                throw new Error("Insufficient credits. Please add your Gemini API key or contact support for more credits.");
             }
         }
 
