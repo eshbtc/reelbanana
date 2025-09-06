@@ -7,6 +7,7 @@ import { authFetch } from '../lib/authFetch';
 import { useUserCredits } from '../hooks/useUserCredits';
 import AdminHealth from './AdminHealth';
 import { apiConfig } from '../config/apiConfig';
+import { useToast } from './ToastProvider';
 
 interface UserDashboardProps {
   onClose: () => void;
@@ -37,6 +38,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
   
   // Use the real-time credits hook
   const { freeCredits, totalUsage, refreshCredits, isLoading: creditsLoading } = useUserCredits();
+  const { toast } = useToast();
 
   useEffect(() => {
     loadUserData();
@@ -97,10 +99,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
       await updateUserApiKey(currentUser.uid, customApiKey.trim(), currentUser.email || '');
       setCustomApiKey(''); // Clear the input for security
       await loadUserData(); // Reload to get updated data
-      alert('API key securely stored!');
+      toast.success('API key securely stored!');
     } catch (error) {
       console.error('Error updating API key:', error);
-      alert('Failed to securely store API key. Please try again.');
+      toast.error('Failed to securely store API key. Please try again.');
     } finally {
       setIsUpdating(false);
     }
@@ -118,10 +120,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
       await updateUserApiKey(currentUser.uid, '', currentUser.email || '');
       setCustomApiKey('');
       await loadUserData();
-      alert('API key securely cleared!');
+      toast.success('API key securely cleared!');
     } catch (error) {
       console.error('Error clearing API key:', error);
-      alert('Failed to clear API key. Please try again.');
+      toast.error('Failed to clear API key. Please try again.');
     } finally {
       setIsUpdating(false);
     }
@@ -148,10 +150,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
 
       setFalApiKey('');
       setHasFalApiKey(true);
-      alert('FAL API key stored securely! You can now use Pro Polish features.');
+      toast.success('FAL API key stored securely! Pro Polish will use it.');
     } catch (error) {
       console.error('Error storing FAL API key:', error);
-      alert('Failed to store FAL API key. Please check the format and try again.');
+      toast.error('Failed to store FAL API key. Please check the format and try again.');
     } finally {
       setIsUpdating(false);
     }
@@ -177,10 +179,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
 
       setFalApiKey('');
       setHasFalApiKey(false);
-      alert('FAL API key securely cleared!');
+      toast.success('FAL API key securely cleared!');
     } catch (error) {
       console.error('Error clearing FAL API key:', error);
-      alert('Failed to clear FAL API key. Please try again.');
+      toast.error('Failed to clear FAL API key. Please try again.');
     } finally {
       setIsUpdating(false);
     }
@@ -303,10 +305,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
                   try {
                     await resetCreditsForTesting(currentUser.uid);
                     await loadUserData(); // Reload data
-                    alert('Credits updated to 100!');
+                    toast.success('Credits updated to 100!');
                   } catch (error) {
                     console.error('Error updating credits:', error);
-                    alert('Failed to update credits. Check console for details.');
+                    toast.error('Failed to update credits. Check console for details.');
                   }
                 }
               }}
