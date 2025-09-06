@@ -1,10 +1,12 @@
 // Authentication button component with Google Sign-In
 import React, { useState, useEffect } from 'react';
 import { signInWithGoogle, signOutUser, getCurrentUser, onAuthStateChange, UserProfile, getUserProfile } from '../services/authService';
+import { useUserCredits } from '../hooks/useUserCredits';
 
 const AuthButton: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const { freeCredits, refreshCredits } = useUserCredits();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChange(async (firebaseUser) => {
@@ -73,7 +75,7 @@ const AuthButton: React.FC = () => {
             )}
             <div className="hidden md:block">
               <div className="text-sm text-white font-medium">{user.displayName}</div>
-              <div className="text-xs text-gray-400">{user.freeCredits} credits</div>
+              <div className="text-xs text-gray-400">{freeCredits} credits</div>
             </div>
           </div>
 

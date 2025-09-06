@@ -9,6 +9,7 @@ import { PlusIcon, SparklesIcon, SaveIcon, DocumentAddIcon } from './Icon';
 import { TEMPLATES } from '../lib/templates';
 import CharacterPicker from './CharacterPicker';
 import { calculateTotalCost, formatCost } from '../utils/costCalculator';
+import { useUserCredits } from '../hooks/useUserCredits';
 
 interface StoryboardEditorProps {
   onPlayMovie: (scenes: Scene[]) => void;
@@ -38,6 +39,9 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
   const [showTemplates, setShowTemplates] = useState(false);
   const [showCharacterPicker, setShowCharacterPicker] = useState(false);
   const [renderMode, setRenderMode] = useState<'draft' | 'final'>('draft');
+  
+  // Use the real-time credits hook
+  const { refreshCredits } = useUserCredits();
 
   // Effect to load project from URL on initial mount
   useEffect(() => {
@@ -104,6 +108,9 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
       setCharacterAndStyle(characterStyle); // Auto-generated
       setScenes(initialScenes);
       setSaveStatus('saved');
+      
+      // Refresh credits after successful story generation
+      await refreshCredits();
       
       // Update URL without reloading the page
       window.history.pushState({}, '', `?projectId=${newProjectId}`);
@@ -199,10 +206,14 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
         characterRefs,
         backgroundImage: bg,
         frames: renderMode === 'draft' ? 3 : 5,
+        projectId: projectId || undefined,
       });
       setScenes(prevScenes =>
         prevScenes.map(s => s.id === id ? { ...s, status: 'success', imageUrls } : s)
       );
+      
+      // Refresh credits after successful image generation
+      await refreshCredits();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
       setScenes(prevScenes =>
@@ -263,6 +274,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
         characterRefs,
         backgroundImage: bg,
         frames: renderMode === 'draft' ? 3 : 5,
+        projectId: projectId || undefined,
       });
       setScenes(prev => prev.map(s => s.id === id ? { ...s, status: 'success', variantImageUrls: imageUrls } : s));
     } catch (e) {
@@ -448,6 +460,13 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
             <div>
               <div className="flex flex-wrap justify-between items-center mb-4 gap-4">
                 <h2 className="text-2xl font-bold text-amber-400">Storyboard & Image Generation</h2>
+                <div className="text-sm text-gray-300">
+                  Est. image credits total: {
+                    scenes
+                      .filter(s => s.status === 'idle' || s.status === 'error')
+                      .reduce((sum) => sum + (renderMode === 'draft' ? 3 : 5), 0)
+                  }
+                </div>
                 <div className="flex items-center gap-2">
                     <div className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200">
                       <span>Mode</span>
@@ -534,6 +553,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                     onGenerateVariant={handleGenerateVariant}
                     onUpdateScene={handleUpdateScene}
                     onUpdateSequence={handleUpdateSequence}
+                    framesPerScene={renderMode === 'draft' ? 3 : 5}
                   />
                 ))}
               </div>

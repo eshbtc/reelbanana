@@ -4,6 +4,7 @@ import { UserProfile, getUserProfile, updateUserApiKey, getUserUsageStats, reset
 import { getCurrentUser } from '../services/authService';
 import { API_ENDPOINTS } from '../config/apiConfig';
 import { authFetch } from '../lib/authFetch';
+import { useUserCredits } from '../hooks/useUserCredits';
 
 interface UserDashboardProps {
   onClose: () => void;
@@ -30,6 +31,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [showFalApiKey, setShowFalApiKey] = useState(false);
   const [hasFalApiKey, setHasFalApiKey] = useState(false);
+  
+  // Use the real-time credits hook
+  const { freeCredits, totalUsage, refreshCredits, isLoading: creditsLoading } = useUserCredits();
 
   useEffect(() => {
     loadUserData();
@@ -63,6 +67,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
     } catch (error) {
       console.error('Error loading user data:', error);
     }
+  };
+
+  // Enhanced refresh function that updates both local data and credits
+  const handleRefresh = async () => {
+    await Promise.all([
+      loadUserData(),
+      refreshCredits()
+    ]);
   };
 
   const handleUpdateApiKey = async () => {
@@ -180,15 +192,27 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
       <div className="mb-8">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-3xl font-bold text-white">User Dashboard</h2>
-          <button
-            onClick={onClose}
-            className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Back to Editor
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleRefresh}
+              className="flex items-center gap-2 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors duration-200 text-sm"
+              title="Refresh credits and data"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh
+            </button>
+            <button
+              onClick={onClose}
+              className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Back to Editor
+            </button>
+          </div>
         </div>
       </div>
 
@@ -234,7 +258,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-gradient-to-br from-green-900/30 to-green-800/20 rounded-xl p-6 text-center border border-green-500/30">
-              <div className="text-4xl font-bold text-green-400 mb-2">{usageStats.freeCredits}</div>
+              <div className="text-4xl font-bold text-green-400 mb-2">
+                {creditsLoading ? (
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-400"></div>
+                ) : (
+                  freeCredits
+                )}
+              </div>
               <div className="text-gray-300 font-medium">Free Credits</div>
               <div className="text-sm text-gray-400 mt-1">Available for use</div>
             </div>
@@ -497,7 +527,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
               </div>
               <div className="flex-1">
                 <p className="text-cyan-300 text-lg mb-3">
-                  <strong>Free Credits:</strong> You have {usageStats.freeCredits} free API calls remaining. 
+                  <strong>Free Credits:</strong> You have {freeCredits} free API calls remaining. 
                   Each movie creation uses approximately 3-5 credits (story + images + music + rendering).
                 </p>
                 <p className="text-cyan-300">
