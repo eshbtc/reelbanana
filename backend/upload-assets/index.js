@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { Storage } = require('@google-cloud/storage');
+// Trigger Cloud Run deployment after rendering pipeline fixes
 const admin = require('firebase-admin');
 
 const app = express();
