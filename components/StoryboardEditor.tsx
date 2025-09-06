@@ -8,6 +8,7 @@ import Spinner from './Spinner';
 import { PlusIcon, SparklesIcon, SaveIcon, DocumentAddIcon } from './Icon';
 import { TEMPLATES } from '../lib/templates';
 import CharacterPicker from './CharacterPicker';
+import { calculateTotalCost, formatCost } from '../utils/costCalculator';
 
 interface StoryboardEditorProps {
   onPlayMovie: (scenes: Scene[]) => void;
@@ -486,6 +487,41 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                     </button>
                 </div>
               </div>
+              
+              {/* Total Cost Display */}
+              {scenes.length > 0 && (
+                <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-gray-700">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold text-white">Story Cost Summary</h3>
+                      <p className="text-sm text-gray-400">Estimated cost for all scenes</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-amber-400">
+                        {formatCost(calculateTotalCost(scenes).total)}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {scenes.length} scene{scenes.length !== 1 ? 's' : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-gray-700">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Image Generation:</span>
+                        <span className="text-white">{formatCost(calculateTotalCost(scenes).breakdown.imageGeneration)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Narration:</span>
+                        <span className="text-white">{formatCost(calculateTotalCost(scenes).breakdown.narration)}</span>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-600 mt-2">
+                      *Costs are estimates based on token usage. Actual costs may vary.
+                    </div>
+                  </div>
+                </div>
+              )}
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                 {scenes.map((scene, index) => (

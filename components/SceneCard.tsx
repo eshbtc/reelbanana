@@ -5,6 +5,7 @@ import { TrashIcon, SparklesIcon, EditIcon } from './Icon';
 import Spinner from './Spinner';
 import EditSequenceModal from './EditSequenceModal';
 import CompareModal from './CompareModal';
+import { calculateSceneCost, formatCost, getCostTier } from '../utils/costCalculator';
 
 interface SceneCardProps {
   scene: Scene;
@@ -23,6 +24,10 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isCompareOpen, setIsCompareOpen] = useState(false);
+
+  // Calculate scene cost
+  const sceneCost = calculateSceneCost(scene);
+  const costTier = getCostTier(sceneCost.total);
 
   useEffect(() => {
     if (scene.status === 'success' && scene.imageUrls && scene.imageUrls.length > 1) {
@@ -125,6 +130,10 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
           <div className="absolute top-2 left-2 bg-black/60 text-white text-sm font-bold px-3 py-1 rounded-full">
             Scene {index + 1}
           </div>
+          {/* Cost Badge */}
+          <div className={`absolute bottom-2 right-2 bg-black/80 text-white text-xs font-bold px-2 py-1 rounded ${costTier.color}`}>
+            {formatCost(sceneCost.total)}
+          </div>
         </div>
         <div className="p-4 flex-grow flex flex-col">
             {isEditing ? (
@@ -147,7 +156,32 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
             ) : (
               <div className="flex-grow">
                 <p className="text-gray-300 text-sm mb-2"><strong className="text-gray-400 font-semibold">Narration:</strong> {scene.narration}</p>
-                <p className="text-gray-400 text-xs"><strong className="font-semibold">Prompt:</strong> {scene.prompt}</p>
+                <p className="text-gray-400 text-xs mb-3"><strong className="font-semibold">Prompt:</strong> {scene.prompt}</p>
+                
+                {/* Cost Breakdown */}
+                <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-gray-400">Estimated Cost</span>
+                    <span className={`text-sm font-bold ${costTier.color}`}>
+                      {formatCost(sceneCost.total)}
+                    </span>
+                  </div>
+                  <div className="space-y-1 text-xs text-gray-500">
+                    <div className="flex justify-between">
+                      <span>Image Generation (5 frames):</span>
+                      <span>{formatCost(sceneCost.imageGeneration)}</span>
+                    </div>
+                    {scene.narration && (
+                      <div className="flex justify-between">
+                        <span>Narration:</span>
+                        <span>{formatCost(sceneCost.narration)}</span>
+                      </div>
+                    )}
+                    <div className="text-[10px] text-gray-600 mt-2">
+                      *Costs are estimates based on token usage
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
