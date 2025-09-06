@@ -29,7 +29,28 @@ const STAGE_MESSAGES: Record<RenderStage, string> = {
   done: 'Your movie is ready!',
 };
 
-import { API_ENDPOINTS, apiCall } from './config/apiConfig';
+// --- Backend Service Endpoints ---
+// These URLs are from your gcloud deployment logs.
+const SERVICE_ENDPOINTS = {
+    narrate: 'https://reel-banana-narrate-423229273041.us-central1.run.app/narrate',
+    align: 'https://reel-banana-align-captions-423229273041.us-central1.run.app/align',
+    render: 'https://reel-banana-render-423229273041.us-central1.run.app/render',
+    upload: 'https://reel-banana-upload-assets-423229273041.us-central1.run.app/upload-image'
+};
+
+// Helper function for API calls
+const apiCall = async (url: string, body: object, errorMessage: string) => {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ details: 'Could not parse error response.' }));
+    throw new Error(`${errorMessage}: ${errorData.details || response.statusText}`);
+  }
+  return response.json();
+};
 
 const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderComplete, onRenderFail }) => {
   const [stage, setStage] = useState<RenderStage>('idle');
@@ -54,7 +75,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderCompl
         let uploadedCount = 0;
         await Promise.all(
           allImageUrls.map(async (image) => {
-            await apiCall(API_ENDPOINTS.upload, 
+            await apiCall(SERVICE_ENDPOINTS.upload, 
               { projectId, ...image }, 
               'Failed to upload image'
             );
@@ -66,14 +87,14 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderCompl
         // 3. Generate narration
         setStage('narrating');
         const narrationScript = scenes.map(s => s.narration).join(' ');
-        const { gsAudioPath } = await apiCall(API_ENDPOINTS.narrate, 
+        const { gsAudioPath } = await apiCall(SERVICE_ENDPOINTS.narrate, 
           { projectId, narrationScript }, 
           'Failed to generate narration'
         );
 
         // 4. Align captions
         setStage('aligning');
-        const { srtPath } = await apiCall(API_ENDPOINTS.align, 
+        const { srtPath } = await apiCall(SERVICE_ENDPOINTS.align, 
           { projectId, gsAudioPath }, 
           'Failed to align captions'
         );
@@ -85,7 +106,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderCompl
             imageCount: scene.imageUrls?.length || 0,
         }));
         // Assuming render service knows how to find assets by projectId and scene structure.
-        const { videoUrl } = await apiCall(API_ENDPOINTS.render, 
+        const { videoUrl } = await apiCall(SERVICE_ENDPOINTS.render, 
           { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath }, 
           'Failed to render video'
         );
