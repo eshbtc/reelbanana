@@ -530,8 +530,19 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                 // Persist to project if available
                 if (projectId) {
                   try {
-                    updateProject(projectId, { topic, characterAndStyle: opt.description, scenes, characterRefs: opt.images } as any);
-                  } catch {}
+                    const updateData: any = { 
+                      topic, 
+                      characterAndStyle: opt.description, 
+                      scenes 
+                    };
+                    // Only add characterRefs if opt.images exists and is not empty
+                    if (opt.images && opt.images.length > 0) {
+                      updateData.characterRefs = opt.images;
+                    }
+                    updateProject(projectId, updateData);
+                  } catch (error) {
+                    console.error('Error updating project with character selection:', error);
+                  }
                 }
               }}
             />

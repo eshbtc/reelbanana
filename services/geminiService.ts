@@ -662,17 +662,20 @@ Return ONLY a JSON object with this exact format:
         // 4. Save to cache for future use (cost control)
         if (currentUser) {
             try {
+                // Store only metadata, not the actual base64 images to avoid size limits
                 await setDoc(cacheDoc, {
-                    imageUrls: base64Images,
+                    imageCount: base64Images.length,
                     prompt: mainPrompt,
                     characterAndStyle: characterAndStyle,
                     userId: currentUser.uid, // Required by security rules
                     createdAt: new Date().toISOString(),
                     cacheKey: cacheKey,
                     hasBackground: !!opts?.backgroundImage,
-                    refCount: opts?.characterRefs?.length || 0
+                    refCount: opts?.characterRefs?.length || 0,
+                    // Store a hash or identifier instead of full images
+                    imageHash: btoa(mainPrompt + characterAndStyle).substring(0, 50)
                 });
-                console.log(`Cached ${base64Images.length} images for future use`);
+                console.log(`Cached metadata for ${base64Images.length} images for future use`);
             } catch (cacheError) {
                 console.warn('Failed to cache images:', cacheError);
                 // Don't fail the whole operation if caching fails

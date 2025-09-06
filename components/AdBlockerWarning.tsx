@@ -30,7 +30,10 @@ const AdBlockerWarning: React.FC = () => {
     const originalConsoleError = console.error;
     console.error = (...args) => {
       const message = args.join(' ');
-      if (message.includes('ERR_BLOCKED_BY_CLIENT') || message.includes('Failed to load resource')) {
+      if (message.includes('ERR_BLOCKED_BY_CLIENT') || 
+          message.includes('Failed to load resource') ||
+          message.includes('firestore.googleapis.com') ||
+          message.includes('net::ERR_BLOCKED_BY_CLIENT')) {
         setShowWarning(true);
       }
       originalConsoleError.apply(console, args);

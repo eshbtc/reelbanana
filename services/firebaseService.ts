@@ -94,10 +94,43 @@ export const getProject = async (projectId: string): Promise<ProjectData | null>
 export const updateProject = async (projectId: string, data: ProjectData): Promise<void> => {
     try {
         const docRef = doc(db, PROJECTS_COLLECTION, projectId);
-        await setDoc(docRef, { 
-            ...data, 
-            updatedAt: serverTimestamp() 
-        }, { merge: true }); // Use merge to avoid overwriting createdAt
+        
+        // Clean the data to remove undefined values and limit size
+        const cleanData: any = {
+            topic: data.topic,
+            characterAndStyle: data.characterAndStyle,
+            updatedAt: serverTimestamp()
+        };
+        
+        // Only include characterRefs if it exists and is not empty
+        if (data.characterRefs && data.characterRefs.length > 0) {
+            cleanData.characterRefs = data.characterRefs;
+        }
+        
+        // Only include characterOption if it exists
+        if (data.characterOption) {
+            cleanData.characterOption = data.characterOption;
+        }
+        
+        // For scenes, we'll store a lightweight version to avoid size limits
+        // Store only essential scene data, not full image URLs
+        if (data.scenes && data.scenes.length > 0) {
+            cleanData.scenes = data.scenes.map(scene => ({
+                id: scene.id,
+                prompt: scene.prompt,
+                narration: scene.narration,
+                imageUrls: scene.imageUrls ? scene.imageUrls.slice(0, 1) : [], // Only keep first image URL
+                status: scene.status,
+                duration: scene.duration,
+                backgroundImage: scene.backgroundImage,
+                stylePreset: scene.stylePreset,
+                camera: scene.camera,
+                transition: scene.transition
+            }));
+            cleanData.sceneCount = data.scenes.length;
+        }
+        
+        await setDoc(docRef, cleanData, { merge: true });
     } catch (error) {
         console.error("Error updating project in Firestore:", error);
         throw new Error("Could not save the project.");
