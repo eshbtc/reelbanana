@@ -195,6 +195,7 @@ export interface ProjectSummary {
  */
 export const listMyProjects = async (userId: string, limit: number = 20): Promise<ProjectSummary[]> => {
     try {
+        console.log('🔍 listMyProjects: Fetching projects for user:', userId);
         const col = collection(db, PROJECTS_COLLECTION);
         // Use a simpler query that doesn't require a composite index
         // We'll sort in memory instead of using orderBy to avoid index requirement
@@ -203,7 +204,9 @@ export const listMyProjects = async (userId: string, limit: number = 20): Promis
             where('userId', '==', userId),
             fsLimit(limit * 2) // Get more docs to sort in memory
         );
+        console.log('🔍 listMyProjects: Executing query...');
         const snap = await getDocs(q);
+        console.log('🔍 listMyProjects: Query successful, found', snap.docs.length, 'documents');
         const projects = snap.docs.map(d => {
             const data: any = d.data();
             // Try to build up to 3 thumbs from the first images of the first few scenes
@@ -235,7 +238,12 @@ export const listMyProjects = async (userId: string, limit: number = 20): Promis
         // Return only the requested limit
         return projects.slice(0, limit);
     } catch (error) {
-        console.error('Error listing projects:', error);
+        console.error('❌ Error listing projects:', error);
+        console.error('❌ Error details:', {
+            message: error instanceof Error ? error.message : 'Unknown error',
+            code: (error as any)?.code,
+            userId: userId
+        });
         throw new Error('Could not load your projects.');
     }
 };
