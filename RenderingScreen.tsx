@@ -113,6 +113,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
         
         // 3. Generate narration
         setStage('narrating');
+        setUseCachedMessage(false); // Reset for new stage
         const narrationScript = scenes.map(s => s.narration).join(' ');
         const narrationResponse = await apiCall(API_ENDPOINTS.narrate, 
           { projectId, narrationScript, emotion }, 
@@ -153,6 +154,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
 
         // 6. Render video
         setStage('rendering');
+        setUseCachedMessage(false); // Reset for new stage
         const sceneDataForRender = scenes.map(scene => ({
             narration: scene.narration,
             imageCount: scene.imageUrls?.length || 0,
@@ -160,10 +162,15 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
             transition: scene.transition || 'fade',
             duration: scene.duration || 3,
         }));
-        const { videoUrl } = await apiCall(API_ENDPOINTS.render, 
+        const renderResponse = await apiCall(API_ENDPOINTS.render, 
           { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath }, 
           'Failed to render video'
         );
+        const { videoUrl } = renderResponse;
+        
+        if (renderResponse.cached) {
+          setUseCachedMessage(true);
+        }
 
         // 7. Optional polish
         let finalUrl = videoUrl;
@@ -171,13 +178,19 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
         const polishEnabledFlag = (import.meta as any)?.env?.VITE_ENABLE_POLISH === 'true';
         if (proPolish && polishEnabledFlag) {
           setStage('polishing');
+          setUseCachedMessage(false); // Reset for new stage
           try {
             const currentUser = getCurrentUser();
-            const { polishedUrl } = await apiCall(API_ENDPOINTS.polish, { 
+            const polishResponse = await apiCall(API_ENDPOINTS.polish, { 
               projectId, 
               videoUrl, 
               userId: currentUser?.uid 
             }, 'Failed to polish video');
+            const { polishedUrl } = polishResponse;
+            
+            if (polishResponse.cached) {
+              setUseCachedMessage(true);
+            }
             if (polishedUrl) finalUrl = polishedUrl;
           } catch (e) {
             console.warn('Polish failed, using original video');
