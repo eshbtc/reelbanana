@@ -1,5 +1,6 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
+import { useToast } from './components/ToastProvider';
 import Header from './components/Header';
 import StoryboardEditor from './components/StoryboardEditor';
 import RenderingScreen from './RenderingScreen';
@@ -18,6 +19,7 @@ import { authFetch } from './lib/authFetch';
 type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects';
 
 const App: React.FC = () => {
+  const { toast } = useToast();
   // Initialize view based on URL path
   const getInitialView = (): View => {
     const path = window.location.pathname;
@@ -36,8 +38,12 @@ const App: React.FC = () => {
   const [narrationEmotion, setNarrationEmotion] = useState<string>('neutral');
   const [proPolish, setProPolish] = useState<boolean>(false);
   const [hasFalApiKey, setHasFalApiKey] = useState<boolean>(false);
-  const [useWizardMode, setUseWizardMode] = useState<boolean>(true);
-  const [demoMode, setDemoMode] = useState<boolean>(false);
+  const [useWizardMode, setUseWizardMode] = useState<boolean>(() => {
+    try { return localStorage.getItem('rb_useWizardMode') === 'false' ? false : true; } catch { return true; }
+  });
+  const [demoMode, setDemoMode] = useState<boolean>(() => {
+    try { return localStorage.getItem('rb_demoMode') === 'true'; } catch { return false; }
+  });
   
   // Show Polish toggle if VITE_SHOW_POLISH is true OR user has FAL API key
   const showPolish = (import.meta as any)?.env?.VITE_SHOW_POLISH === 'true' || hasFalApiKey;
@@ -70,7 +76,7 @@ const App: React.FC = () => {
       setScenes(scenesWithImages);
       setView('rendering');
     } else {
-      alert("Please generate images for your scenes before creating a movie.");
+      toast.info('Please generate images for your scenes before creating a movie.', 3000);
     }
   }, []);
 
@@ -86,10 +92,14 @@ const App: React.FC = () => {
     setView('player');
   }, [scenes]);
 
+  // Persist preferences
+  useEffect(() => { try { localStorage.setItem('rb_useWizardMode', String(useWizardMode)); } catch {} }, [useWizardMode]);
+  useEffect(() => { try { localStorage.setItem('rb_demoMode', String(demoMode)); } catch {} }, [demoMode]);
+
   const handleRenderFail = useCallback((errorMessage: string) => {
-    alert(`Movie creation failed:\n\n${errorMessage}\n\nPlease check your backend service logs and configuration.`);
+    toast.error(`Movie creation failed: ${errorMessage}`);
     setView('editor');
-  }, []);
+  }, [toast]);
   
   const handleBackToEditor = useCallback(() => {
     setView('editor');
@@ -110,6 +120,19 @@ const App: React.FC = () => {
       setVideoUrlPolished(null);
       setProjectId(null);
     }
+  }, []);
+
+  // Sync with browser back/forward
+  useEffect(() => {
+    const onPopState = () => {
+      const path = window.location.pathname;
+      if (path === '/projects') setView('projects');
+      else if (path === '/gallery') setView('gallery');
+      else if (path === '/dashboard') setView('dashboard');
+      else setView('editor');
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
   const renderContent = () => {

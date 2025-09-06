@@ -1,5 +1,6 @@
 // MoviePlayer component with social sharing capabilities
 import React, { useState, useMemo } from 'react';
+import { useToast } from './ToastProvider';
 import { Scene } from '../types';
 import { publishMovie } from '../services/firebaseService';
 
@@ -22,6 +23,7 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
   const [description, setDescription] = useState('');
   const [published, setPublished] = useState(false);
   const [usePolished, setUsePolished] = useState<boolean>(true);
+  const { toast } = useToast();
 
   const styleBadges = useMemo(() => {
     const styles = Array.from(new Set((scenes || [])
@@ -60,9 +62,10 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
   const copyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(shareUrl);
-      // Could add a toast notification here
+      toast.success('Link copied to clipboard');
     } catch (err) {
       console.error('Failed to copy to clipboard:', err);
+      toast.error('Failed to copy link');
     }
   };
 
@@ -86,7 +89,7 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
       setShowShareModal(true);
     } catch (e) {
       console.error('Publish failed:', e);
-      alert('Publish failed. Please try again.');
+      toast.error('Publish failed. Please try again.');
     } finally {
       setPublishing(false);
     }

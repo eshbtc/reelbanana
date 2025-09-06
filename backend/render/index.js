@@ -139,15 +139,33 @@ app.post('/render', appCheckVerification, async (req, res) => {
         const inputBucket = storage.bucket(inputBucketName);
         const imageFiles = (await inputBucket.getFiles({ prefix: `${projectId}/scene-` }))[0];
         
+        // Resolve the correct remote music filename if provided
+        let musicLocalPath = null;
         const downloadPromises = [
             ...imageFiles.map(file => file.download({ destination: path.join(tempDir, path.basename(file.name)) })),
             inputBucket.file(`${projectId}/narration.mp3`).download({ destination: path.join(tempDir, 'narration.mp3') }),
             inputBucket.file(`${projectId}/captions.srt`).download({ destination: path.join(tempDir, 'captions.srt') }),
         ];
         
-        // Download music file if provided
         if (gsMusicPath) {
-            downloadPromises.push(inputBucket.file(`${projectId}/music.mp3`).download({ destination: path.join(tempDir, 'music.mp3') }));
+            try {
+                const prefix = `gs://${inputBucketName}/`;
+                let remoteMusic = `${projectId}/music.mp3`;
+                if (gsMusicPath.startsWith(prefix)) {
+                    const rel = gsMusicPath.substring(prefix.length);
+                    if (rel && rel.includes(projectId + '/')) {
+                        remoteMusic = rel;
+                    }
+                }
+                const ext = path.extname(remoteMusic) || '.mp3';
+                const localName = `music${ext}`;
+                musicLocalPath = path.join(tempDir, localName);
+                downloadPromises.push(inputBucket.file(remoteMusic).download({ destination: musicLocalPath }));
+            } catch (_) {
+                // Fallback: try default mp3 name
+                musicLocalPath = path.join(tempDir, 'music.mp3');
+                downloadPromises.push(inputBucket.file(`${projectId}/music.mp3`).download({ destination: musicLocalPath }));
+            }
         }
         
         await Promise.all(downloadPromises);
@@ -161,7 +179,7 @@ app.post('/render', appCheckVerification, async (req, res) => {
 
         // For each scene, create a short video clip from its image sequence
         scenes.forEach((scene, sceneIndex) => {
-            const imagePattern = path.join(tempDir, `scene-${sceneIndex}-%d.jpeg`);
+            const imagePattern = path.join(tempDir, `scene-${sceneIndex}-%d.png`);
             const sceneOutput = `scene_clip_${sceneIndex}`;
             const duration = scene.duration || 3;
             
@@ -250,11 +268,10 @@ app.post('/render', appCheckVerification, async (req, res) => {
 
         await new Promise((resolve, reject) => {
             command
-                .input(path.join(tempDir, 'narration.mp3')) // Add narration audio track
+                .input(path.join(tempDir, 'narration.mp3')) // narration audio track
             
-            // Add music track if available
-            if (gsMusicPath) {
-                command.input(path.join(tempDir, 'music.mp3')); // Add music track
+            if (musicLocalPath) {
+                command.input(musicLocalPath); // music track
             }
             
             command

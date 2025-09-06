@@ -11,11 +11,14 @@ import CharacterPicker from './CharacterPicker';
 import { calculateTotalCost, formatCost } from '../utils/costCalculator';
 import { useUserCredits } from '../hooks/useUserCredits';
 import { getCurrentUser, hasUserApiKey } from '../services/authService';
+import { useToast } from './ToastProvider';
+import ReactDOM from 'react-dom';
 
 interface StoryboardEditorProps {
   onPlayMovie: (scenes: Scene[]) => void;
   onProjectIdChange?: (id: string | null) => void;
   demoMode?: boolean;
+  onExitDemo?: () => void;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -37,7 +40,7 @@ const inspirationCategories = [
     "Drama & Emotion"
 ];
 
-const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProjectIdChange, demoMode = false }) => {
+const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProjectIdChange, demoMode = false, onExitDemo }) => {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [topic, setTopic] = useState('');
   const [characterAndStyle, setCharacterAndStyle] = useState('');
@@ -57,6 +60,8 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   const [isGeneratingInspiration, setIsGeneratingInspiration] = useState(false);
   const [generatedInspiration, setGeneratedInspiration] = useState<string>('');
   
+  const { toast } = useToast();
+
   // Demo mode: automatically load simple demo content
   useEffect(() => {
     if (demoMode && scenes.length === 0) {
@@ -112,11 +117,12 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                     setCharacterAndStyle(projectData.characterAndStyle);
                     setScenes(projectData.scenes);
                 } else {
-                    alert("Project not found. You can start a new one.");
+                    toast.info('Project not found. You can start a new one.');
                     window.history.replaceState({}, '', window.location.pathname);
                 }
             } catch (error) {
                 setStoryError(error instanceof Error ? error.message : "Failed to load project.");
+                toast.error('Failed to load project.');
             }
         }
         setIsLoadingProject(false);
@@ -150,8 +156,13 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   }, []);
 
   const handleGenerateStory = useCallback(async (storyTopic: string) => {
+    if (demoMode) {
+      toast.info('Demo Mode is on. Click Upgrade Demo to generate real content.');
+      return;
+    }
     if (!storyTopic.trim()) {
       setStoryError("Please enter or select a topic for your story.");
+      toast.info('Enter or pick a topic to start your story.');
       return;
     }
     setIsLoadingStory(true);
@@ -214,6 +225,26 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         setSaveStatus('error');
         console.error("Failed to save project:", error);
     }
+  }, [projectId, topic, characterAndStyle, scenes]);
+
+  // Debounced autosave on changes (topic, character/style, scenes)
+  useEffect(() => {
+    if (!projectId) return;
+    // Skip autosave while images are generating to reduce churn
+    const generating = scenes.some(s => s.status === 'generating');
+    if (generating) return;
+    const t = setTimeout(() => {
+      updateProject(projectId, { topic, characterAndStyle, scenes })
+        .then(() => {
+          setSaveStatus('saved');
+          setTimeout(() => setSaveStatus('idle'), 1500);
+        })
+        .catch((e) => {
+          console.error('Autosave failed:', e);
+          setSaveStatus('error');
+        });
+    }, 1200);
+    return () => clearTimeout(t);
   }, [projectId, topic, characterAndStyle, scenes]);
 
   const handleNewStory = () => {
@@ -307,8 +338,12 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   }, []);
 
   const handleGenerateImageSequence = useCallback(async (id: string, prompt: string) => {
+    if (demoMode) {
+      toast.info('Demo Mode is on. Click Upgrade Demo to enable generation.');
+      return;
+    }
     if (!characterAndStyle.trim()) {
-        alert("Please describe your character and style before generating images.");
+        toast.info('Please describe your character and style before generating images.');
         return;
     }
     setScenes(prevScenes =>
@@ -378,6 +413,10 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   }, [scenes, handleGenerateImageSequence, characterAndStyle]);
 
   const handleGenerateVariant = useCallback(async (id: string, prompt: string) => {
+    if (demoMode) {
+      toast.info('Demo Mode is on. Click Upgrade Demo to enable generation.');
+      return;
+    }
     // reuse same options but nudge prompt for variation
     const sceneObj = scenes.find(s => s.id === id);
     if (!sceneObj) return;
@@ -473,6 +512,36 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
 
   return (
     <div>
+        {demoMode && (
+          <div className="mb-4 p-3 bg-amber-900/50 border border-amber-600 rounded">
+            <div className="flex items-center justify-between">
+              <div className="text-amber-200 text-sm">
+                <strong>Demo Mode:</strong> Using placeholder scenes and images. No API usage.
+              </div>
+              <button
+                onClick={async () => {
+                  try {
+                    // Create a real project from current demo content
+                    const newProjectId = await createProject({
+                      topic: topic || 'Demo Project',
+                      characterAndStyle: characterAndStyle || 'Demo style',
+                      scenes
+                    });
+                    setProjectId(newProjectId);
+                    onProjectIdChange?.(newProjectId);
+                    window.history.pushState({}, '', `?projectId=${newProjectId}`);
+                    onExitDemo?.();
+                  } catch (e) {
+                    toast.error('Failed to upgrade demo. Try again.');
+                  }
+                }}
+                className="bg-amber-600 hover:bg-amber-700 text-white text-xs px-3 py-1 rounded"
+              >
+                Upgrade Demo → Real Project
+              </button>
+            </div>
+          </div>
+        )}
         {/* Step 1 & 2: Project Creation */}
         {!projectId && (
              <div className="bg-gray-800 p-6 rounded-lg shadow-xl border border-gray-700 mb-8">
@@ -739,21 +808,19 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                 </div>
               )}
               
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                {scenes.map((scene, index) => (
-                  <SceneCard
-                    key={scene.id}
-                    scene={scene}
-                    index={index}
-                    onDelete={handleDeleteScene}
-                    onGenerateImage={handleGenerateImageSequence}
-                    onGenerateVariant={handleGenerateVariant}
-                    onUpdateScene={handleUpdateScene}
-                    onUpdateSequence={handleUpdateSequence}
-                    framesPerScene={renderMode === 'draft' ? 3 : 5}
-                  />
-                ))}
-              </div>
+              <DragGrid
+                scenes={scenes}
+                renderMode={renderMode}
+                onReorder={(newOrder) => {
+                  setScenes(newOrder);
+                  setSaveStatus('idle');
+                }}
+                onDelete={handleDeleteScene}
+                onGenerate={handleGenerateImageSequence}
+                onVariant={handleGenerateVariant}
+                onUpdateScene={handleUpdateScene}
+                onUpdateSequence={handleUpdateSequence}
+              />
 
               <div className="text-center">
                  <h2 className="text-2xl font-bold text-amber-400 mb-4">Create Your Movie</h2>
@@ -846,3 +913,59 @@ const TemplatesModal: React.FC<{ open: boolean; onClose: () => void; onPick: (id
 
 
 export default StoryboardEditor;
+
+// Lightweight drag-and-drop grid without extra deps
+const DragGrid: React.FC<{
+  scenes: Scene[];
+  renderMode: 'draft' | 'final';
+  onReorder: (newOrder: Scene[]) => void;
+  onDelete: (id: string) => void;
+  onGenerate: (id: string, prompt: string) => void;
+  onVariant: (id: string, prompt: string) => void;
+  onUpdateScene: (id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration' | 'backgroundImage' | 'stylePreset' | 'variantImageUrls'>>) => void;
+  onUpdateSequence: (id: string, newImageUrls: string[]) => void;
+}> = ({ scenes, renderMode, onReorder, onDelete, onGenerate, onVariant, onUpdateScene, onUpdateSequence }) => {
+  const [dragIndex, setDragIndex] = React.useState<number | null>(null);
+  const [overIndex, setOverIndex] = React.useState<number | null>(null);
+
+  const handleDragStart = (index: number) => setDragIndex(index);
+  const handleDragOver = (index: number, e: React.DragEvent) => {
+    e.preventDefault();
+    if (overIndex !== index) setOverIndex(index);
+  };
+  const handleDrop = (index: number) => {
+    if (dragIndex === null || dragIndex === index) { setDragIndex(null); setOverIndex(null); return; }
+    const next = scenes.slice();
+    const [moved] = next.splice(dragIndex, 1);
+    next.splice(index, 0, moved);
+    onReorder(next);
+    setDragIndex(null);
+    setOverIndex(null);
+  };
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+      {scenes.map((scene, index) => (
+        <div
+          key={scene.id}
+          draggable
+          onDragStart={() => handleDragStart(index)}
+          onDragOver={(e) => handleDragOver(index, e)}
+          onDrop={() => handleDrop(index)}
+          className={overIndex === index ? 'ring-2 ring-amber-500 rounded-md' : ''}
+        >
+          <SceneCard
+            scene={scene}
+            index={index}
+            onDelete={onDelete}
+            onGenerateImage={onGenerate}
+            onGenerateVariant={onVariant}
+            onUpdateScene={onUpdateScene}
+            onUpdateSequence={onUpdateSequence}
+            framesPerScene={renderMode === 'draft' ? 3 : 5}
+          />
+        </div>
+      ))}
+    </div>
+  );
+};

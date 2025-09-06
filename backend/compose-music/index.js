@@ -1,11 +1,11 @@
-const express = require('express');
-const cors = require('cors');
-const { Storage } = require('@google-cloud/storage');
-const admin = require('firebase-admin');
-const { configureGenkit } = require('@genkit-ai/core');
-const { firebase } = require('@genkit-ai/firebase');
-const { vertexAI, gemini15Flash } = require('@genkit-ai/vertexai');
-const { generate } = require('@genkit-ai/ai/model');
+import express from 'express';
+import cors from 'cors';
+import { Storage } from '@google-cloud/storage';
+import admin from 'firebase-admin';
+import { genkit } from 'genkit';
+import { firebase } from '@genkit-ai/firebase';
+import { vertexAI, gemini15Flash } from '@genkit-ai/vertexai';
+import { randomUUID } from 'crypto';
 
 const app = express();
 app.use(express.json());
@@ -20,16 +20,22 @@ if (!admin.apps.length) {
 }
 
 // Configure Firebase Genkit for server-side AI
-configureGenkit({
-  plugins: [
-    firebase(),
-    vertexAI({ projectId: 'reel-banana-35a54', location: 'us-central1' })
-  ],
-  logLevel: 'info'
-});
+let ai;
+try {
+  ai = genkit({
+    plugins: [
+      firebase({ projectId: 'reel-banana-35a54' }),
+      vertexAI({ projectId: 'reel-banana-35a54', location: 'us-central1' })
+    ],
+    model: gemini15Flash,
+  });
+  console.log('✅ Firebase Genkit configured successfully');
+} catch (error) {
+  console.error('❌ Failed to configure Firebase Genkit:', error);
+  process.exit(1);
+}
 
 // Observability & Error helpers
-const { randomUUID } = require('crypto');
 app.use((req, res, next) => {
   req.requestId = randomUUID();
   req.startTime = Date.now();
@@ -88,8 +94,7 @@ async function generateMusicPromptWithAI(narrationScript) {
     console.log('🎵 Generating music prompt with Firebase Genkit + Vertex AI...');
     
     // Use Firebase Genkit with Vertex AI Gemini model
-    const response = await generate({
-      model: gemini15Flash,
+    const response = await ai.generate({
       prompt: prompt,
       config: {
         maxOutputTokens: 100,
@@ -97,7 +102,7 @@ async function generateMusicPromptWithAI(narrationScript) {
       }
     });
     
-    const aiResponse = response.text?.trim();
+    const aiResponse = response.text()?.trim();
     console.log('🎵 AI-generated music prompt:', aiResponse);
     
     return aiResponse || generateFallbackPrompt(narrationScript);
@@ -175,8 +180,8 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
     // In production, you would use a music generation API here
     // Reuse bucket, fileName, and file variables from cache check above
     
-    // Create a simple audio file (placeholder - in production, use actual music generation)
-    const audioBuffer = createPlaceholderAudio(musicPrompt);
+    // Create a simple WAV audio file (placeholder - in production, use actual music generation)
+    const audioBuffer = createWavPlaceholderAudio(musicPrompt);
     
     await file.save(audioBuffer, {
       metadata: { contentType: 'audio/mpeg' },
@@ -209,45 +214,51 @@ app.get('/health', (req, res) => {
 });
 
 /**
- * Create a placeholder audio file based on mood analysis
- * In production, this would be replaced with actual music generation
+ * Create a placeholder WAV audio file based on mood analysis
+ * In production, replace with actual music generation
  */
+function createWavPlaceholderAudio(musicPrompt) {
+  const lower = (musicPrompt || '').toLowerCase();
+  let frequency = 440; // A4
+  if (lower.includes('adventurous') || lower.includes('exciting')) frequency = 523.25; // C5
+  else if (lower.includes('mysterious') || lower.includes('dark')) frequency = 349.23; // F4
+  else if (lower.includes('uplifting') || lower.includes('happy')) frequency = 659.25; // E5
+  else if (lower.includes('dramatic') || lower.includes('epic')) frequency = 392.00; // G4
+  else if (lower.includes('whimsical') || lower.includes('playful')) frequency = 587.33; // D5
 
-function createPlaceholderAudio(musicPrompt) {
-  // This is a simplified placeholder - in reality, you'd use a music generation API
-  // For the hackathon demo, we'll create a simple tone sequence
-  
-  const fs = require('fs');
-  const path = require('path');
-  
-  // Create a simple audio file with different tones based on mood keywords
-  let frequency = 440; // Base frequency (A4)
-  
-  if (musicPrompt.toLowerCase().includes('adventurous') || musicPrompt.toLowerCase().includes('exciting')) {
-    frequency = 523; // C5
-  } else if (musicPrompt.toLowerCase().includes('mysterious') || musicPrompt.toLowerCase().includes('dark')) {
-    frequency = 349; // F4
-  } else if (musicPrompt.toLowerCase().includes('uplifting') || musicPrompt.toLowerCase().includes('happy')) {
-    frequency = 659; // E5
-  } else if (musicPrompt.toLowerCase().includes('dramatic') || musicPrompt.toLowerCase().includes('epic')) {
-    frequency = 392; // G4
-  } else if (musicPrompt.toLowerCase().includes('whimsical') || musicPrompt.toLowerCase().includes('playful')) {
-    frequency = 587; // D5
-  }
-  
-  // For demo purposes, create a simple sine wave audio
-  // In production, replace with actual music generation
-  const duration = 30; // 30 seconds
+  const durationSec = 20;
   const sampleRate = 44100;
-  const samples = duration * sampleRate;
-  const buffer = Buffer.alloc(samples * 2); // 16-bit audio
-  
-  for (let i = 0; i < samples; i++) {
-    const sample = Math.sin(2 * Math.PI * frequency * i / sampleRate) * 0.1; // Low volume
-    const intSample = Math.round(sample * 32767);
-    buffer.writeInt16LE(intSample, i * 2);
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+  const blockAlign = numChannels * (bitsPerSample / 8);
+  const numSamples = durationSec * sampleRate;
+  const dataSize = numSamples * blockAlign;
+
+  const buffer = Buffer.alloc(44 + dataSize);
+  // RIFF header
+  buffer.write('RIFF', 0);
+  buffer.writeUInt32LE(36 + dataSize, 4);
+  buffer.write('WAVE', 8);
+  buffer.write('fmt ', 12);
+  buffer.writeUInt32LE(16, 16); // PCM chunk size
+  buffer.writeUInt16LE(1, 20); // PCM
+  buffer.writeUInt16LE(numChannels, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(byteRate, 28);
+  buffer.writeUInt16LE(blockAlign, 32);
+  buffer.writeUInt16LE(bitsPerSample, 34);
+  buffer.write('data', 36);
+  buffer.writeUInt32LE(dataSize, 40);
+
+  let offset = 44;
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    const sample = Math.sin(2 * Math.PI * frequency * t) * 0.15; // low volume
+    const s = Math.max(-1, Math.min(1, sample));
+    buffer.writeInt16LE(Math.round(s * 32767), offset);
+    offset += 2;
   }
-  
   return buffer;
 }
 

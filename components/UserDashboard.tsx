@@ -6,6 +6,7 @@ import { API_ENDPOINTS } from '../config/apiConfig';
 import { authFetch } from '../lib/authFetch';
 import { useUserCredits } from '../hooks/useUserCredits';
 import AdminHealth from './AdminHealth';
+import { apiConfig } from '../config/apiConfig';
 
 interface UserDashboardProps {
   onClose: () => void;
@@ -32,6 +33,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [showFalApiKey, setShowFalApiKey] = useState(false);
   const [hasFalApiKey, setHasFalApiKey] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   
   // Use the real-time credits hook
   const { freeCredits, totalUsage, refreshCredits, isLoading: creditsLoading } = useUserCredits();
@@ -52,6 +54,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
 
       setUserProfile(profile);
       setUsageStats(stats);
+      // Admin gating via env allowlist
+      try {
+        const allow = (import.meta as any)?.env?.VITE_ADMIN_EMAILS || '';
+        const allowed = allow.split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean);
+        const email = (profile?.email || '').toLowerCase();
+        setIsAdmin(allowed.includes(email));
+      } catch (_) { setIsAdmin(false); }
       // Don't load API keys for security - user must re-enter them
       setCustomApiKey('');
       setFalApiKey('');
@@ -311,8 +320,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
           </div>
         </div>
 
-        {/* Service Health Section */}
-        <AdminHealth />
+        {/* Service Health Section (Admin only) */}
+        {isAdmin && <AdminHealth />}
 
         {/* Token Analytics */}
         {usageStats.tokenAnalytics && (

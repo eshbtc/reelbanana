@@ -50,11 +50,13 @@ const cachedMessages: Record<RenderStage, string> = {
 };
 
 import { API_ENDPOINTS, apiCall } from './config/apiConfig';
+import { useToast } from './components/ToastProvider';
 
 const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'neutral', proPolish = false, projectId: providedProjectId, onRenderComplete, onRenderFail }) => {
   const [stage, setStage] = useState<RenderStage>('idle');
   const [progress, setProgress] = useState(0); // For uploads, 0 to 100
   const [useCachedMessage, setUseCachedMessage] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     const startRenderingProcess = async () => {
@@ -194,6 +196,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
             if (polishedUrl) finalUrl = polishedUrl;
           } catch (e) {
             console.warn('Polish failed, using original video');
+            try { toast.info('Polish failed, using original video'); } catch {}
           }
         }
         try { sessionStorage.setItem('lastRenderPolishedUrl', finalUrl); } catch {}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Check, Play, Loader2, AlertCircle, SkipForward } from 'lucide-react';
 import { API_ENDPOINTS, apiCall } from '../config/apiConfig';
 import { getCurrentUser } from '../services/authService';
@@ -69,6 +69,27 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
     }))
   );
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [showDetails, setShowDetails] = useState(false);
+
+  // Estimated step durations (seconds)
+  const ETAS: Record<string, [number, number]> = useMemo(() => ({
+    upload: [2, 10],
+    narrate: [5, 15],
+    align: [10, 25],
+    compose: [2, 5],
+    render: [20, 45],
+    polish: [15, 60],
+  }), []);
+
+  const remainingEta = useMemo(() => {
+    let totalMin = 0; let totalMax = 0;
+    for (let i = currentStepIndex; i < steps.length; i++) {
+      const s = steps[i];
+      const rng = ETAS[s.id] || [2, 5];
+      if (s.status === 'pending' || s.status === 'processing' || s.status === 'failed') { totalMin += rng[0]; totalMax += rng[1]; }
+    }
+    return `${totalMin}-${totalMax}s`;
+  }, [currentStepIndex, steps, ETAS]);
 
   // Update step status
   const updateStep = (stepId: string, updates: Partial<WizardStep>) => {
@@ -76,6 +97,34 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       step.id === stepId ? { ...step, ...updates } : step
     ));
   };
+
+  // Persist wizard state per project in session storage
+  useEffect(() => {
+    try {
+      const key = `wizard:${projectId}`;
+      const payload = { steps, currentStepIndex };
+      sessionStorage.setItem(key, JSON.stringify(payload));
+    } catch {}
+  }, [steps, currentStepIndex, projectId]);
+
+  // Resume wizard state
+  useEffect(() => {
+    try {
+      const key = `wizard:${projectId}`;
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved && Array.isArray(saved.steps)) {
+        const ok = window.confirm('Resume previous wizard session?');
+        if (ok) {
+          setSteps(saved.steps);
+          if (typeof saved.currentStepIndex === 'number') setCurrentStepIndex(saved.currentStepIndex);
+        } else {
+          sessionStorage.removeItem(key);
+        }
+      }
+    } catch {}
+  }, [projectId]);
 
   // Execute a step
   const executeStep = async (stepId: string) => {
@@ -134,6 +183,17 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       updateStep(stepId, { status: 'failed', error: errorMessage });
     }
   };
+
+  // Run all remaining steps
+  const runAll = useCallback(async () => {
+    for (let i = currentStepIndex; i < steps.length; i++) {
+      const s = steps[i];
+      await executeStep(s.id);
+      const after = steps.find(x => x.id === s.id);
+      if (after && after.status === 'failed') break;
+      setCurrentStepIndex(i + 1);
+    }
+  }, [currentStepIndex, steps]);
 
   // Step execution functions
   const executeUpload = async () => {
@@ -273,12 +333,58 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
   const getCurrentStep = () => steps[currentStepIndex];
   const canExecute = (step: WizardStep) => step.status === 'pending' || step.status === 'failed';
 
+  // Cloud Run logs link per step
+  const logsLinkFor = (serviceName: string) => {
+    const project = (import.meta as any)?.env?.VITE_FIREBASE_PROJECT_ID || 'reel-banana-35a54';
+    const q = encodeURIComponent(`resource.type="cloud_run_revision"\nresource.labels.service_name="${serviceName}"`);
+    return `https://console.cloud.google.com/logs/query;query=${q}?project=${project}`;
+  };
+
+  const serviceNameFor = (id: string): string => {
+    switch (id) {
+      case 'upload': return 'upload-assets';
+      case 'narrate': return 'narrate';
+      case 'align': return 'align-captions';
+      case 'compose': return 'compose-music';
+      case 'render': return 'render';
+      case 'polish': return 'polish';
+      default: return '';
+    }
+  };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        const s = steps[currentStepIndex];
+        if (s) executeStep(s.id);
+      } else if (e.key === 'Enter' && e.shiftKey) {
+        runAll();
+      } else if (e.key === 'ArrowRight') {
+        setCurrentStepIndex(i => Math.min(i + 1, steps.length - 1));
+      } else if (e.key === 'ArrowLeft') {
+        setCurrentStepIndex(i => Math.max(i - 1, 0));
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [steps, currentStepIndex, runAll]);
+
   return (
     <div className="max-w-4xl mx-auto p-6">
       <h1 className="text-3xl font-bold text-white mb-8 text-center">Movie Production Wizard</h1>
       
       {/* Progress Steps */}
       <div className="mb-8">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-xs text-gray-400">ETA: ~{remainingEta}</div>
+          <div className="flex gap-2">
+            <button onClick={() => setShowDetails(v => !v)} className="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded">
+              {showDetails ? 'Hide Details' : 'Show Details'}
+            </button>
+            <button onClick={runAll} className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded">Run All</button>
+          </div>
+        </div>
         <div className="flex items-center justify-between mb-4">
           {steps.map((step, index) => (
             <React.Fragment key={step.id}>
@@ -306,7 +412,15 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
               <h2 className="text-xl font-semibold text-white">{getCurrentStep().title}</h2>
               <p className="text-gray-400">{getCurrentStep().description}</p>
             </div>
-            {getStepIcon(getCurrentStep())}
+            <div className="flex items-center gap-3">
+              <a
+                href={logsLinkFor(serviceNameFor(getCurrentStep().id))}
+                target="_blank"
+                rel="noreferrer"
+                className="text-emerald-400 hover:text-emerald-300 text-xs"
+              >Logs ↗</a>
+              {getStepIcon(getCurrentStep())}
+            </div>
           </div>
 
           {/* Step Status */}
@@ -350,7 +464,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
           </div>
 
           {/* Step Result */}
-          {getCurrentStep().result && (
+          {showDetails && getCurrentStep().result && (
             <div className="mt-4 p-3 bg-gray-700 rounded text-sm text-gray-300">
               <strong>Result:</strong> {JSON.stringify(getCurrentStep().result, null, 2)}
             </div>

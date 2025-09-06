@@ -15,13 +15,13 @@ interface ServiceStatus {
 const AdminHealth: React.FC = () => {
   const services = useMemo(() => (
     [
-      { key: 'upload' as ServiceKey, name: 'Upload Assets', url: `${apiConfig.baseUrls.upload}/health` },
-      { key: 'narrate' as ServiceKey, name: 'Narrate (TTS)', url: `${apiConfig.baseUrls.narrate}/health` },
-      { key: 'align' as ServiceKey, name: 'Align Captions', url: `${apiConfig.baseUrls.align}/health` },
-      { key: 'render' as ServiceKey, name: 'Render', url: `${apiConfig.baseUrls.render}/health` },
-      { key: 'compose' as ServiceKey, name: 'Compose Music', url: `${apiConfig.baseUrls.compose}/health` },
-      { key: 'polish' as ServiceKey, name: 'Polish (FAL)', url: `${apiConfig.baseUrls.polish}/health` },
-      { key: 'apiKey' as ServiceKey, name: 'API Key Service', url: `${apiConfig.baseUrls.apiKey}/health` },
+      { key: 'upload' as ServiceKey, serviceName: 'upload-assets', name: 'Upload Assets', url: `${apiConfig.baseUrls.upload}/health` },
+      { key: 'narrate' as ServiceKey, serviceName: 'narrate', name: 'Narrate (TTS)', url: `${apiConfig.baseUrls.narrate}/health` },
+      { key: 'align' as ServiceKey, serviceName: 'align-captions', name: 'Align Captions', url: `${apiConfig.baseUrls.align}/health` },
+      { key: 'render' as ServiceKey, serviceName: 'render', name: 'Render', url: `${apiConfig.baseUrls.render}/health` },
+      { key: 'compose' as ServiceKey, serviceName: 'compose-music', name: 'Compose Music', url: `${apiConfig.baseUrls.compose}/health` },
+      { key: 'polish' as ServiceKey, serviceName: 'polish', name: 'Polish (FAL)', url: `${apiConfig.baseUrls.polish}/health` },
+      { key: 'apiKey' as ServiceKey, serviceName: 'api-key-service', name: 'API Key Service', url: `${apiConfig.baseUrls.apiKey}/health` },
     ]
   ), []);
 
@@ -95,6 +95,12 @@ const AdminHealth: React.FC = () => {
     return <span className={`px-2 py-0.5 rounded text-xs font-bold ${map[s]}`}>{text[s]}</span>;
   };
 
+  const logsLinkFor = (serviceName: string) => {
+    const projectId = apiConfig.firebase.projectId;
+    const query = encodeURIComponent(`resource.type="cloud_run_revision"\nresource.labels.service_name="${serviceName}"`);
+    return `https://console.cloud.google.com/logs/query;query=${query}?project=${projectId}`;
+  };
+
   return (
     <div className="mb-8">
       <div className="flex items-center justify-between mb-4">
@@ -133,7 +139,15 @@ const AdminHealth: React.FC = () => {
                   <div>Checked: <span className="text-gray-100">{new Date(st.lastChecked).toLocaleString()}</span></div>
                 )}
               </div>
-              <div className="mt-3 text-right">
+              <div className="mt-3 flex items-center justify-between">
+                <a
+                  href={logsLinkFor((s as any).serviceName)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-emerald-400 hover:text-emerald-300 text-xs"
+                >
+                  View logs ↗
+                </a>
                 <button
                   onClick={() => checkOne(s.key, s.url)}
                   className="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded text-xs"
@@ -153,4 +167,3 @@ const AdminHealth: React.FC = () => {
 };
 
 export default AdminHealth;
-
