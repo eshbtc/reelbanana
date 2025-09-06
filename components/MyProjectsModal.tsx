@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Modal from './Modal';
 import { getCurrentUser } from '../services/authService';
-import { listMyProjects, deleteProject, ProjectSummary } from '../services/firebaseService';
+import { listMyProjects, deleteProject, ProjectSummary, renameProject } from '../services/firebaseService';
 
 interface MyProjectsModalProps {
   isOpen: boolean;
@@ -55,6 +55,19 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
     }
   };
 
+  const handleRename = async (id: string, currentTitle: string) => {
+    const next = prompt('Rename project', currentTitle);
+    if (next == null) return;
+    const name = next.trim();
+    if (!name) return;
+    try {
+      await renameProject(id, name);
+      setProjects(prev => prev.map(p => (p.id === id ? { ...p, topic: name } : p)));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Rename failed');
+    }
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose}>
       <div className="text-white">
@@ -74,6 +87,7 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => handleOpen(p.id)} className="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1 rounded">Open</button>
+                  <button onClick={() => handleRename(p.id, p.topic)} className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded">Rename</button>
                   <button disabled={deletingId === p.id} onClick={() => handleDelete(p.id)} className="bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white px-3 py-1 rounded">Delete</button>
                 </div>
               </div>
@@ -86,4 +100,3 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
 };
 
 export default MyProjectsModal;
-

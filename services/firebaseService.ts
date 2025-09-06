@@ -12,7 +12,8 @@ import {
     orderBy,
     limit as fsLimit,
     getDocs,
-    deleteDoc
+    deleteDoc,
+    updateDoc
 } from 'firebase/firestore';
 import { Scene } from '../types';
 import { firebaseApp } from '../lib/firebase';
@@ -144,6 +145,22 @@ export const deleteProject = async (projectId: string): Promise<void> => {
     } catch (error) {
         console.error('Error deleting project:', error);
         throw new Error('Could not delete the project.');
+    }
+};
+
+/**
+ * Rename a project (updates the topic field)
+ */
+export const renameProject = async (projectId: string, newTopic: string): Promise<void> => {
+    try {
+        const ref = doc(db, PROJECTS_COLLECTION, projectId);
+        await updateDoc(ref, {
+            topic: newTopic,
+            updatedAt: serverTimestamp(),
+        });
+    } catch (error) {
+        console.error('Error renaming project:', error);
+        throw new Error('Could not rename the project.');
     }
 };
 

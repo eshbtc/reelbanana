@@ -164,7 +164,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
     }
   };
 
-w  if (!userProfile) {
+  if (!userProfile) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
