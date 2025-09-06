@@ -87,6 +87,112 @@ type StoryScene = {
  * @param topic The topic of the story
  * @returns An array of scene objects with prompts and narration
  */
+/**
+ * Generates character and style description for a story topic
+ * @param topic The topic of the story
+ * @returns A character and style description
+ */
+export const generateCharacterAndStyle = async (topic: string): Promise<string> => {
+    try {
+        const currentUser = getCurrentUser();
+        if (!currentUser) {
+            throw new Error("Please sign in to generate character and style.");
+        }
+
+        // Determine which AI service to use
+        const aiService = await getAIService();
+        if (!aiService) {
+            throw new Error("No credits remaining and no API key configured. Please add your Gemini API key or contact support for more credits.");
+        }
+
+        // For Firebase AI Logic, check credits before making the API call
+        if (aiService === 'firebase') {
+            const hasCredits = await checkUserCredits(currentUser.uid, 1);
+            if (!hasCredits) {
+                throw new Error("Insufficient credits. Please add your Gemini API key or contact support for more credits.");
+            }
+        }
+
+        let result;
+        
+        if (aiService === 'firebase') {
+            // Use Firebase AI Logic with free credits
+            console.log('Using Firebase AI Logic for character and style generation');
+            const model = getGenerativeModel(ai, { 
+                model: "gemini-2.5-flash",
+                generationConfig: {
+                    responseMimeType: "text/plain",
+                }
+            });
+            
+            console.log('Generating character and style with Firebase AI Logic...');
+            result = await model.generateContent(
+                `Create a character and visual style description for a kid-friendly story about "${topic}". 
+                Include:
+                - Main character description (appearance, personality)
+                - Visual style (art style, color palette, mood)
+                - Keep it concise (2-3 sentences)
+                - Make it suitable for children
+                
+                Example format: "A cute banana character with a tiny red cape, adventurous and curious, in a vibrant watercolor style with warm colors and soft edges."`
+            );
+            console.log('Firebase AI Logic character response received');
+            
+        } else {
+            // Use custom API key via secure server-side service
+            const response = await authFetch(API_ENDPOINTS.apiKey.use, {
+                method: 'POST',
+                body: {
+                    prompt: `Create a character and visual style description for a kid-friendly story about "${topic}". 
+                    Include:
+                    - Main character description (appearance, personality)
+                    - Visual style (art style, color palette, mood)
+                    - Keep it concise (2-3 sentences)
+                    - Make it suitable for children
+                    
+                    Example format: "A cute banana character with a tiny red cape, adventurous and curious, in a vibrant watercolor style with warm colors and soft edges."`,
+                    model: 'gemini-2.5-flash'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`API request failed: ${response.status}`);
+            }
+            
+            const apiResult = await response.json();
+            const parts = apiResult?.candidates?.[0]?.content?.parts || [];
+            const textPart = parts.find((p: any) => typeof p?.text === 'string')?.text || '';
+            result = { response: { text: () => textPart } };
+        }
+
+        const characterStyle = result.response.text().trim();
+        
+        // Only deduct credits after successful generation
+        if (currentUser) {
+            await recordUsage(currentUser.uid, 'story_generation', 1, true);
+        }
+        
+        return characterStyle;
+        
+    } catch (error) {
+        console.error("Error generating character and style:", error);
+        
+        if (error instanceof Error) {
+            // Provide more specific error messages
+            if (error.message.includes('API key')) {
+                throw new Error("Authentication failed. Please check your API key configuration.");
+            } else if (error.message.includes('quota') || error.message.includes('limit')) {
+                throw new Error("API quota exceeded. Please try again later.");
+            } else if (error.message.includes('safety')) {
+                throw new Error("Content was blocked by safety filters. Please try a different topic.");
+            } else if (error.message.includes('Insufficient credits')) {
+                throw error; // Re-throw credit errors as-is
+            }
+        }
+        throw new Error("Failed to generate character and style. The AI may be experiencing issues or the topic is too sensitive.");
+    }
+};
+
 export const generateStory = async (topic: string): Promise<StoryScene[]> => {
     try {
         const currentUser = getCurrentUser();
@@ -141,7 +247,12 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
             const response = await authFetch(API_ENDPOINTS.apiKey.use, {
                 method: 'POST',
                 body: {
-                    prompt: `Create a short, creative, and kid-friendly storyboard script about "${topic}". The story should have a clear beginning, middle, and end.`,
+                    prompt: `Return ONLY JSON. Format: {"scenes":[{"prompt":"...","narration":"..."}]}.
+                             Create 4-8 scenes for a short, kid-friendly storyboard about "${topic}".
+                             Each scene must include:
+                             - prompt: a detailed, visually rich description for image generation
+                             - narration: 1-2 sentences to be spoken.
+                             Do not include any markdown or extra commentary. Only valid JSON.`,
                     model: 'gemini-2.5-flash'
                 }
             });
@@ -150,33 +261,46 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
                 throw new Error('Failed to generate story with custom API key');
             }
             
-            const result = await response.json();
-            const jsonStr = result.candidates[0].content.parts[0].text.trim();
-            const responseData = JSON.parse(jsonStr);
-            
-            // Validate the response format
-            console.log('Custom API response data:', responseData);
-            if (responseData && responseData.scenes && Array.isArray(responseData.scenes)) {
-                const scenes = responseData.scenes.filter(
-                    (scene: any): scene is StoryScene =>
-                        typeof scene.prompt === 'string' && typeof scene.narration === 'string'
-                );
-                
-                console.log('Filtered scenes:', scenes);
-                if (scenes.length === 0) {
-                    throw new Error("No valid scenes found in API response. Please try a different topic.");
+            const apiResult = await response.json();
+            const parts = apiResult?.candidates?.[0]?.content?.parts || [];
+            const textPart = parts.find((p: any) => typeof p?.text === 'string')?.text || '';
+            const rawText = (textPart || '').trim();
+            let responseData: any;
+            try {
+                if (rawText.startsWith('{')) {
+                    responseData = JSON.parse(rawText);
+                } else {
+                    const match = rawText.match(/\{[\s\S]*\}/);
+                    if (match) responseData = JSON.parse(match[0]);
                 }
-                
-                // Only deduct credits after successful story generation
-                if (currentUser) {
-                    await recordUsage(currentUser.uid, 'story_generation', 1, true);
-                }
-                
-                return scenes;
-            } else {
-                console.error('Invalid response format:', responseData);
-                throw new Error(`Invalid story format received from API. Expected {scenes: [...]} but got: ${JSON.stringify(responseData)}`);
+            } catch (e) {
+                console.warn('Custom-key story JSON parse failed. Raw:', rawText);
             }
+
+            // Reuse the same collector as Firebase path
+            const collectScenes = (obj: any): StoryScene[] => {
+                if (!obj) return [];
+                const arr: any[] = Array.isArray(obj.scenes) ? obj.scenes : [];
+                const out: StoryScene[] = [];
+                for (const item of arr) {
+                    const prompt = item?.prompt || item?.description || item?.scene || item?.text;
+                    const narration = item?.narration || item?.caption || item?.voiceover || item?.text;
+                    if (typeof prompt === 'string' && typeof narration === 'string') {
+                        out.push({ prompt, narration });
+                    }
+                }
+                return out;
+            };
+
+            const scenes = collectScenes(responseData);
+            if (scenes.length === 0) {
+                throw new Error("Invalid story format received from API.");
+            }
+
+            if (currentUser) {
+                await recordUsage(currentUser.uid, 'story_generation', 1, true);
+            }
+            return scenes;
         }
 
         const rawText = result.response.text().trim();

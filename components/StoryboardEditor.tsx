@@ -1,7 +1,7 @@
 // Fix: Implement the StoryboardEditor component. This file was previously invalid.
 import React, { useState, useCallback, useEffect } from 'react';
 import { Scene } from '../types';
-import { generateStory, generateImageSequence } from '../services/geminiService';
+import { generateStory, generateCharacterAndStyle, generateImageSequence } from '../services/geminiService';
 import { createProject, getProject, updateProject } from '../services/firebaseService';
 import SceneCard from './SceneCard';
 import Spinner from './Spinner';
@@ -68,7 +68,12 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
     setScenes([]);
 
     try {
-      const storyScenes = await generateStory(storyTopic);
+      // Generate both story and character/style in parallel
+      const [storyScenes, characterStyle] = await Promise.all([
+        generateStory(storyTopic),
+        generateCharacterAndStyle(storyTopic)
+      ]);
+      
       if (storyScenes.length === 0) {
         throw new Error("The AI couldn't generate a story for this topic. Please try a different one.");
       }
@@ -83,13 +88,13 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
       // Create a new project in Firestore
       const newProjectId = await createProject({
           topic: storyTopic,
-          characterAndStyle: '', // Initially empty
+          characterAndStyle: characterStyle, // Auto-generated
           scenes: initialScenes
       });
       
       setProjectId(newProjectId);
       setTopic(storyTopic);
-      setCharacterAndStyle('');
+      setCharacterAndStyle(characterStyle); // Auto-generated
       setScenes(initialScenes);
       setSaveStatus('saved');
       
@@ -281,14 +286,14 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                         setCharacterAndStyle(e.target.value);
                         setSaveStatus('idle');
                     }}
-                    placeholder="e.g., A cute banana character with a tiny red cape, in a vibrant watercolor style"
+                    placeholder="Character and style will be auto-generated based on your story topic..."
                     className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition mb-2"
                     rows={2}
                 />
-                 {!characterAndStyle.trim() && (
-                    <div className="text-sm p-2 bg-amber-900/50 border border-amber-700 rounded-lg">
-                        <p className="text-amber-300">
-                        <strong>Pro Tip:</strong> Describe your character and style for visual consistency before generating images!
+                 {characterAndStyle.trim() && (
+                    <div className="text-sm p-2 bg-green-900/50 border border-green-700 rounded-lg">
+                        <p className="text-green-300">
+                        <strong>✨ Auto-generated:</strong> Character and style created by AI based on your story topic. You can edit this if needed!
                         </p>
                     </div>
                 )}
