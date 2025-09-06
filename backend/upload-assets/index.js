@@ -3,77 +3,63 @@ const cors = require('cors');
 const { Storage } = require('@google-cloud/storage');
 
 const app = express();
-// Increase the body limit to handle base64 image uploads
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '10mb' })); // Limit for a single base64 image
 app.use(cors());
 
 const storage = new Storage();
 const bucketName = 'oneminute-movie-in';
 
 /**
- * POST /upload
- * Receives scene images as base64 strings and uploads them to GCS.
+ * POST /upload-image
+ * Receives a single base64 image and its desired filename, then uploads to GCS.
  *
  * Request Body:
  * {
  *   "projectId": "string",
- *   "scenes": [
- *     {
- *       "sceneIndex": number,
- *       "images": ["data:image/jpeg;base64,...", ...]
- *     },
- *     ...
- *   ]
+ *   "fileName": "scene-0-0.jpeg",
+ *   "base64Image": "data:image/jpeg;base64,..."
  * }
  *
  * Response:
  * {
- *   "message": "Assets uploaded successfully."
+ *   "message": "Image uploaded successfully."
+ *   "gcsPath": "gs://oneminute-movie-in/projectId/fileName"
  * }
  */
-app.post('/upload', async (req, res) => {
-  const { projectId, scenes } = req.body;
-  if (!projectId || !scenes || !Array.isArray(scenes)) {
-    return res.status(400).json({ error: 'Missing projectId or scenes array.' });
-  }
+app.post('/upload-image', async (req, res) => {
+  const { projectId, fileName, base64Image } = req.body;
 
-  console.log(`Received asset upload request for projectId: ${projectId}`);
+  if (!projectId || !fileName || !base64Image) {
+    return res.status(400).json({ error: 'Missing required fields: projectId, fileName, and base64Image.' });
+  }
 
   try {
     const bucket = storage.bucket(bucketName);
-    const uploadPromises = [];
-
-    scenes.forEach((scene, sceneIndex) => {
-      if (scene.images && Array.isArray(scene.images)) {
-        scene.images.forEach((base64Image, imageIndex) => {
-          // Filename format must match what the render service expects: scene-INDEX-SEQUENCE.jpeg
-          const fileName = `${projectId}/scene-${sceneIndex}-${imageIndex}.jpeg`;
-          const file = bucket.file(fileName);
-          
-          // Strip metadata (e.g., "data:image/jpeg;base64,") from the base64 string
-          const base64Data = base64Image.replace(/^data:image\/jpeg;base64,/, "");
-          const imageBuffer = Buffer.from(base64Data, 'base64');
-          
-          const promise = file.save(imageBuffer, {
-            metadata: { contentType: 'image/jpeg' },
-          });
-          uploadPromises.push(promise);
-        });
-      }
+    
+    const fullPath = `${projectId}/${fileName}`;
+    const file = bucket.file(fullPath);
+    
+    const base64Data = base64Image.replace(/^data:image\/jpeg;base64,/, "");
+    const imageBuffer = Buffer.from(base64Data, 'base64');
+    
+    await file.save(imageBuffer, {
+      metadata: { contentType: 'image/jpeg' },
     });
 
-    await Promise.all(uploadPromises);
-
-    console.log(`Successfully uploaded ${uploadPromises.length} images for ${projectId}.`);
-    res.status(200).json({ message: 'Assets uploaded successfully.' });
+    const gcsPath = `gs://${bucketName}/${fullPath}`;
+    console.log(`Successfully uploaded ${fileName} for ${projectId}.`);
+    res.status(200).json({ 
+        message: 'Image uploaded successfully.',
+        gcsPath: gcsPath
+    });
 
   } catch (error) {
-    console.error(`Error uploading assets for projectId ${projectId}:`, error);
-    res.status(500).json({ error: 'Failed to upload assets.', details: error.message });
+    console.error(`Error uploading image for projectId ${projectId}:`, error);
+    res.status(500).json({ error: 'Failed to upload image.', details: error.message });
   }
 });
 
-const PORT = process.env.PORT || 8083; // Use a different port than other services
+const PORT = process.env.PORT || 8083;
 app.listen(PORT, () => {
   console.log(`Upload-assets service listening on port ${PORT}`);
 });

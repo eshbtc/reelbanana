@@ -2,142 +2,156 @@ import React, { useState, useEffect } from 'react';
 import { Scene } from './types';
 import AnimatedLoader from './components/AnimatedLoader';
 
+// Define the structure of the props
 interface RenderingScreenProps {
   scenes: Scene[];
   onRenderComplete: (url: string) => void;
   onRenderFail: (errorMessage: string) => void;
 }
 
-// These should probably be in a config file or environment variables, but are hardcoded for simplicity.
-const UPLOAD_SERVICE_URL = process.env.REACT_APP_UPLOAD_SERVICE_URL || 'http://localhost:8083';
-const NARRATE_SERVICE_URL = process.env.REACT_APP_NARRATE_SERVICE_URL || 'http://localhost:8080';
-const ALIGN_SERVICE_URL = process.env.REACT_APP_ALIGN_SERVICE_URL || 'http://localhost:8081';
-const RENDER_SERVICE_URL = process.env.REACT_APP_RENDER_SERVICE_URL || 'http://localhost:8082';
+// Define the different stages of the rendering process
+type RenderStage = 
+  | 'idle'
+  | 'initializing'
+  | 'uploading'
+  | 'narrating'
+  | 'aligning'
+  | 'rendering'
+  | 'done';
 
-// Public URL for the output bucket
-const OUTPUT_BUCKET_PUBLIC_URL = `https://storage.googleapis.com/oneminute-movie-out`;
+const STAGE_MESSAGES: Record<RenderStage, string> = {
+  idle: 'Preparing to start...',
+  initializing: 'Initializing movie project...',
+  uploading: 'Uploading image assets...',
+  narrating: 'Generating voiceover narration...',
+  aligning: 'Generating synchronized captions...',
+  rendering: 'Assembling the final movie...',
+  done: 'Your movie is ready!',
+};
 
-const loadingMessages = [
-    "Warming up the cameras...",
-    "Polishing the director's lens...",
-    "Teaching the AI to whisper sweet nothings...",
-    "Aligning the words with the stars...",
-    "Assembling the scenes frame by frame...",
-    "Adding a pinch of digital stardust...",
-    "Rendering the final cut...",
-    "This is taking longer than usual, the AI is being an artist...",
-    "Almost there, just signing the autographs..."
-];
+// Helper function for API calls
+const apiCall = async (url: string, body: object, errorMessage: string) => {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ details: 'Could not parse error response.' }));
+    throw new Error(`${errorMessage}: ${errorData.details || response.statusText}`);
+  }
+  return response.json();
+};
 
 const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, onRenderComplete, onRenderFail }) => {
-  const [statusMessage, setStatusMessage] = useState('Preparing your masterpiece...');
-  const [currentLoadingMessage, setCurrentLoadingMessage] = useState(loadingMessages[0]);
-  
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      setCurrentLoadingMessage(prev => {
-        const currentIndex = loadingMessages.indexOf(prev);
-        const nextIndex = (currentIndex + 1) % loadingMessages.length;
-        return loadingMessages[nextIndex];
-      });
-    }, 4000); // Change message every 4 seconds
-
-    return () => clearInterval(intervalId);
-  }, []);
+  const [stage, setStage] = useState<RenderStage>('idle');
+  const [progress, setProgress] = useState(0); // For uploads, 0 to 100
 
   useEffect(() => {
-    const createMovie = async () => {
+    const startRenderingProcess = async () => {
+      // 1. Initialize project
+      setStage('initializing');
+      const projectId = `movie-${Date.now()}`;
+      
       try {
-        // 0. Generate a unique ID for this movie project
-        const projectId = `movie-${Date.now()}`;
-        console.log(`Starting movie creation with projectId: ${projectId}`);
+        // 2. Upload all images
+        setStage('uploading');
+        const allImageUrls = scenes.flatMap((scene, sceneIndex) =>
+          (scene.imageUrls || []).map((url, imageIndex) => ({
+            base64Image: url,
+            fileName: `scene-${sceneIndex}-${imageIndex}.jpeg`,
+          }))
+        );
+
+        let uploadedCount = 0;
+        await Promise.all(
+          allImageUrls.map(async (image) => {
+            await apiCall('http://localhost:8083/upload-image', 
+              { projectId, ...image }, 
+              'Failed to upload image'
+            );
+            uploadedCount++;
+            setProgress(Math.round((uploadedCount / allImageUrls.length) * 100));
+          })
+        );
         
-        // 1. Upload all image assets for the scenes
-        setStatusMessage('Uploading scene images...');
-        const scenesToUpload = scenes.map((scene, index) => ({
-            sceneIndex: index,
-            images: scene.imageUrls || [],
+        // 3. Generate narration
+        setStage('narrating');
+        const narrationScript = scenes.map(s => s.narration).join(' ');
+        const { gsAudioPath } = await apiCall('http://localhost:8080/narrate', 
+          { projectId, narrationScript }, 
+          'Failed to generate narration'
+        );
+
+        // 4. Align captions
+        setStage('aligning');
+        const { srtPath } = await apiCall('http://localhost:8081/align', 
+          { projectId, gsAudioPath }, 
+          'Failed to align captions'
+        );
+
+        // 5. Render video
+        setStage('rendering');
+        const sceneDataForRender = scenes.map(scene => ({
+            narration: scene.narration,
+            imageCount: scene.imageUrls?.length || 0,
         }));
+        // Assuming render service knows how to find assets by projectId and scene structure.
+        const { videoUrl } = await apiCall('http://localhost:8082/render', 
+          { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath }, 
+          'Failed to render video'
+        );
 
-        const uploadResponse = await fetch(`${UPLOAD_SERVICE_URL}/upload`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId, scenes: scenesToUpload }),
-        });
-
-        if (!uploadResponse.ok) {
-          const errorData = await uploadResponse.json();
-          throw new Error(`Failed to upload assets: ${errorData.details || uploadResponse.statusText}`);
-        }
-        console.log(`[${projectId}] Assets uploaded successfully.`);
-
-        // 2. Generate narration for the entire story
-        setStatusMessage('Generating voiceover...');
-        const fullNarration = scenes.map(s => s.narration).join(' ');
-        const narrateResponse = await fetch(`${NARRATE_SERVICE_URL}/narrate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ projectId, narrationText: fullNarration }),
-        });
-
-        if (!narrateResponse.ok) {
-            const errorData = await narrateResponse.json();
-            throw new Error(`Failed to generate narration: ${errorData.details || narrateResponse.statusText}`);
-        }
-        const { audioPath } = await narrateResponse.json();
-        console.log(`[${projectId}] Narration created: ${audioPath}`);
-
-
-        // 3. Align captions
-        setStatusMessage('Creating subtitles...');
-        const alignResponse = await fetch(`${ALIGN_SERVICE_URL}/align`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ projectId, gsAudioPath: audioPath }),
-        });
-
-         if (!alignResponse.ok) {
-            const errorData = await alignResponse.json();
-            throw new Error(`Failed to align captions: ${errorData.details || alignResponse.statusText}`);
-        }
-        const { srtPath } = await alignResponse.json();
-        console.log(`[${projectId}] Captions aligned: ${srtPath}`);
-
-        // 4. Trigger the final render
-        setStatusMessage('Rendering final video...');
-        const renderResponse = await fetch(`${RENDER_SERVICE_URL}/render`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ projectId }),
-        });
-        
-        if (!renderResponse.ok) {
-            const errorData = await renderResponse.json();
-            throw new Error(`Failed to render video: ${errorData.details || renderResponse.statusText}`);
-        }
-        const { videoPath } = await renderResponse.json(); // This is gs://...
-        console.log(`[${projectId}] Video rendered: ${videoPath}`);
-        
-        // 5. Construct public URL and complete
-        const publicUrl = `${OUTPUT_BUCKET_PUBLIC_URL}/${projectId}/movie.mp4`;
-        onRenderComplete(publicUrl);
+        // 6. Complete
+        setStage('done');
+        onRenderComplete(videoUrl);
 
       } catch (error) {
-        console.error("Movie creation failed:", error);
-        const message = error instanceof Error ? error.message : "An unknown error occurred.";
-        onRenderFail(message);
+        if (error instanceof Error) {
+          onRenderFail(error.message);
+        } else {
+          onRenderFail('An unknown error occurred during rendering.');
+        }
       }
     };
 
-    createMovie();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scenes]);
+    if (scenes.length > 0) {
+      startRenderingProcess();
+    }
+  }, [scenes, onRenderComplete, onRenderFail]);
+
+  const renderProgressIndicator = () => {
+      const stages: RenderStage[] = ['uploading', 'narrating', 'aligning', 'rendering'];
+      const currentStageIndex = stages.indexOf(stage);
+
+      return (
+          <div className="w-full max-w-2xl mx-auto mt-8">
+              <div className="flex justify-between mb-2">
+                  {stages.map((s, index) => (
+                      <div key={s} className={`text-xs text-center flex-1 ${index <= currentStageIndex ? 'text-amber-400 font-bold' : 'text-gray-500'}`}>
+                          {STAGE_MESSAGES[s].replace('...','')}
+                      </div>
+                  ))}
+              </div>
+              <div className="w-full bg-gray-700 rounded-full h-2.5">
+                  <div 
+                    className="bg-amber-500 h-2.5 rounded-full transition-all duration-500" 
+                    style={{ width: `${(currentStageIndex / (stages.length - 1)) * 100}%` }}>
+                  </div>
+              </div>
+          </div>
+      );
+  }
 
   return (
-    <div className="flex flex-col items-center justify-center text-center h-96">
+    <div className="flex flex-col items-center justify-center text-center h-[60vh]">
       <AnimatedLoader />
-      <h2 className="text-3xl font-bold mt-8 text-amber-400">{statusMessage}</h2>
-      <p className="text-gray-400 mt-4 max-w-md">{currentLoadingMessage}</p>
+      <h1 className="text-3xl font-bold mt-8 text-white tracking-wide">{STAGE_MESSAGES[stage]}</h1>
+      {stage === 'uploading' && <p className="text-gray-400 mt-2">{progress}% complete</p>}
+      {renderProgressIndicator()}
+      <p className="text-gray-500 mt-12 max-w-lg">
+        This can take a few minutes, especially for longer videos. Please don't close this window. We're busy directing, editing, and adding special effects to your masterpiece!
+      </p>
     </div>
   );
 };
