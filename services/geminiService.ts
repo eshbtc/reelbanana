@@ -101,26 +101,40 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
             throw new Error("No credits remaining and no API key configured. Please add your Gemini API key or contact support for more credits.");
         }
 
+        // For Firebase AI Logic, check credits before making the API call
+        if (aiService === 'firebase') {
+            const hasCredits = await checkUserCredits(currentUser.uid, 1);
+            if (!hasCredits) {
+                throw new Error("Insufficient credits. Please add your Gemini API key or contact support for more credits.");
+            }
+        }
+
         let result;
         
         if (aiService === 'firebase') {
             // Use Firebase AI Logic with free credits
             console.log('Using Firebase AI Logic for story generation');
-            const model = getGenerativeModel(ai, { 
+            const model = getGenerativeModel(ai, {
                 model: "gemini-2.5-flash",
+                // Try to coerce structured output where supported
                 generationConfig: {
                     responseMimeType: "application/json",
+                    // responseSchema is supported in newer SDKs; harmless if ignored
+                    // @ts-ignore
+                    responseSchema: (storyResponseSchema as any),
                 }
             });
             
             console.log('Generating content with Firebase AI Logic...');
             result = await model.generateContent(
-                `Create a short, creative, and kid-friendly storyboard script about "${topic}". The story should have a clear beginning, middle, and end.`
+                `Return ONLY JSON. Format: {"scenes":[{"prompt":"...","narration":"..."}]}.
+                 Create 4-8 scenes for a short, kid-friendly storyboard about "${topic}".
+                 Each scene must include:
+                 - prompt: a detailed, visually rich description for image generation
+                 - narration: 1-2 sentences to be spoken.
+                 Do not include any markdown or extra commentary. Only valid JSON.`
             );
             console.log('Firebase AI Logic response received');
-            
-            // Record usage for free credits
-            await recordUsage(currentUser.uid, 'story_generation', 1, true);
             
         } else {
             // Use custom API key via secure server-side service
@@ -147,7 +161,7 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
                         typeof scene.prompt === 'string' && typeof scene.narration === 'string'
                 );
                 
-                // Record successful usage
+                // Only deduct credits after successful story generation
                 if (currentUser) {
                     await recordUsage(currentUser.uid, 'story_generation', 1, true);
                 }
@@ -158,32 +172,41 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
             }
         }
 
-        const jsonStr = result.response.text().trim();
-        const response = JSON.parse(jsonStr);
+        const rawText = result.response.text().trim();
+        let response: any;
+        try {
+            response = JSON.parse(rawText);
+        } catch (e) {
+            console.warn('Story JSON parse failed. Raw:', rawText);
+            throw new Error('Invalid story JSON received from AI.');
+        }
 
-        if (response && response.scenes && Array.isArray(response.scenes)) {
-            const scenes = response.scenes.filter(
-                (scene: any): scene is StoryScene =>
-                    typeof scene.prompt === 'string' && typeof scene.narration === 'string'
-            );
-            
-            // Record successful usage
+        const collectScenes = (obj: any): StoryScene[] => {
+            if (!obj) return [];
+            const arr: any[] = Array.isArray(obj.scenes) ? obj.scenes : [];
+            const out: StoryScene[] = [];
+            for (const item of arr) {
+                const prompt = item?.prompt || item?.description || item?.scene || item?.text;
+                const narration = item?.narration || item?.caption || item?.voiceover || item?.text;
+                if (typeof prompt === 'string' && typeof narration === 'string') {
+                    out.push({ prompt, narration });
+                }
+            }
+            return out;
+        };
+
+        const scenes = collectScenes(response);
+        if (scenes.length > 0) {
+            // Only deduct credits after successful story generation
+            const currentUser = getCurrentUser();
             if (currentUser) {
                 await recordUsage(currentUser.uid, 'story_generation', 1, true);
             }
-            
             return scenes;
-        } else {
-            throw new Error("Invalid story format received from API.");
         }
+        throw new Error("No scenes returned by AI. Try rephrasing the topic.");
     } catch (error) {
         console.error("Error generating story:", error);
-        
-        // Record failed usage
-        const currentUser = getCurrentUser();
-        if (currentUser) {
-            await recordUsage(currentUser.uid, 'story_generation', 1, false);
-        }
         
         if (error instanceof Error) {
             // Provide more specific error messages
