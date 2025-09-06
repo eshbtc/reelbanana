@@ -1,8 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { Storage } = require('@google-cloud/storage');
-const { initializeApp } = require('firebase-admin/app');
-const { getVertexAI, getGenerativeModel } = require('firebase-admin/vertexai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const admin = require('firebase-admin');
 
 const app = express();
@@ -69,9 +68,10 @@ const appCheckVerification = async (req, res, next) => {
 const storage = new Storage();
 const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 
-// Initialize Vertex AI with Firebase Admin for free credits
-const vertexAI = getVertexAI(admin.app());
-const geminiModel = getGenerativeModel(vertexAI, { model: 'gemini-2.5-flash' });
+// Initialize Gemini AI with API key
+// TODO: Migrate to Firebase AI Logic once properly configured
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
 /**
  * POST /compose-music
@@ -95,6 +95,10 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
     return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required fields: projectId and narrationScript');
   }
 
+  if (!process.env.GEMINI_API_KEY) {
+    console.error('Missing environment variable: GEMINI_API_KEY');
+    return sendError(req, res, 500, 'CONFIG', 'Missing GEMINI_API_KEY environment variable');
+  }
 
   console.log(`Received music composition request for projectId: ${projectId}`);
 
@@ -153,7 +157,8 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'compose-music',
-    aiConfigured: true, // Using Firebase AI Logic
+    geminiConfigured: !!process.env.GEMINI_API_KEY,
+    note: 'Will migrate to Firebase AI Logic once configured'
     bucket: bucketName,
     time: new Date().toISOString()
   });
