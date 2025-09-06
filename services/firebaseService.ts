@@ -190,15 +190,34 @@ export const updateProject = async (projectId: string, data: ProjectData): Promi
         console.log('Saving to Firestore:', cleanData);
         console.log('Clean data scenes:', cleanData.scenes);
         
-        // Additional validation for arrays
+        // Additional validation for arrays and Firestore compatibility
         if (cleanData.scenes && Array.isArray(cleanData.scenes)) {
             cleanData.scenes = cleanData.scenes.map((scene: any, index: number) => {
                 console.log(`Scene ${index}:`, scene);
-                // Ensure all array fields are properly formatted
+                
+                // Create a clean scene object with only valid Firestore types
+                const cleanScene: any = {};
+                
+                // Copy only valid fields with proper types
+                if (scene.id && typeof scene.id === 'string') cleanScene.id = scene.id;
+                if (scene.prompt && typeof scene.prompt === 'string') cleanScene.prompt = scene.prompt;
+                if (scene.narration && typeof scene.narration === 'string') cleanScene.narration = scene.narration;
+                if (scene.status && typeof scene.status === 'string') cleanScene.status = scene.status;
+                if (typeof scene.duration === 'number') cleanScene.duration = scene.duration;
+                if (scene.backgroundImage && typeof scene.backgroundImage === 'string') cleanScene.backgroundImage = scene.backgroundImage;
+                if (scene.stylePreset && typeof scene.stylePreset === 'string') cleanScene.stylePreset = scene.stylePreset;
+                if (scene.camera && typeof scene.camera === 'string') cleanScene.camera = scene.camera;
+                if (scene.transition && typeof scene.transition === 'string') cleanScene.transition = scene.transition;
+                
+                // Handle imageUrls array with strict validation
                 if (scene.imageUrls && Array.isArray(scene.imageUrls)) {
-                    scene.imageUrls = scene.imageUrls.filter((url: any) => url && typeof url === 'string');
+                    cleanScene.imageUrls = scene.imageUrls
+                        .filter((url: any) => url && typeof url === 'string' && url.trim() !== '')
+                        .slice(0, 1); // Only keep first image URL to avoid size limits
                 }
-                return scene;
+                
+                console.log(`Clean scene ${index}:`, cleanScene);
+                return cleanScene;
             });
         }
         
