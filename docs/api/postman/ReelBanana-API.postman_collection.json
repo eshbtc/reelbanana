@@ -1,0 +1,333 @@
+{
+  "info": {
+    "name": "ReelBanana API",
+    "description": "Complete API collection for ReelBanana video creation platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{firebase_id_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url_upload",
+      "value": "https://reel-banana-upload-assets-423229273041.us-central1.run.app",
+      "type": "string"
+    },
+    {
+      "key": "base_url_narrate",
+      "value": "https://reel-banana-narrate-423229273041.us-central1.run.app",
+      "type": "string"
+    },
+    {
+      "key": "base_url_align",
+      "value": "https://reel-banana-align-captions-423229273041.us-central1.run.app",
+      "type": "string"
+    },
+    {
+      "key": "base_url_compose",
+      "value": "https://reel-banana-compose-music-423229273041.us-central1.run.app",
+      "type": "string"
+    },
+    {
+      "key": "base_url_render",
+      "value": "https://reel-banana-render-423229273041.us-central1.run.app",
+      "type": "string"
+    },
+    {
+      "key": "base_url_api_key",
+      "value": "https://reel-banana-api-key-service-423229273041.us-central1.run.app",
+      "type": "string"
+    },
+    {
+      "key": "app_check_token",
+      "value": "{{app_check_token}}",
+      "type": "string"
+    },
+    {
+      "key": "project_id",
+      "value": "proj_123456789",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Upload Assets",
+      "item": [
+        {
+          "name": "Upload Image",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Firebase-AppCheck",
+                "value": "{{app_check_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"{{project_id}}\",\n  \"fileName\": \"scene_1.jpg\",\n  \"base64Image\": \"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_upload}}/upload-image",
+              "host": ["{{base_url_upload}}"],
+              "path": ["upload-image"]
+            },
+            "description": "Upload a base64-encoded image to Google Cloud Storage"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Narrate",
+      "item": [
+        {
+          "name": "Generate Narration",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Firebase-AppCheck",
+                "value": "{{app_check_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"{{project_id}}\",\n  \"narrationScript\": \"Once upon a time, in a magical forest far away, there lived a brave little rabbit who loved to explore. Every morning, he would hop through the tall grass and discover new wonders.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_narrate}}/narrate",
+              "host": ["{{base_url_narrate}}"],
+              "path": ["narrate"]
+            },
+            "description": "Generate professional narration from text script using ElevenLabs"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Align Captions",
+      "item": [
+        {
+          "name": "Align Captions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Firebase-AppCheck",
+                "value": "{{app_check_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"{{project_id}}\",\n  \"gsAudioPath\": \"gs://oneminute-movie-in/{{project_id}}/narration.mp3\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_align}}/align",
+              "host": ["{{base_url_align}}"],
+              "path": ["align"]
+            },
+            "description": "Align captions with audio using Google Cloud Speech-to-Text"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Compose Music",
+      "item": [
+        {
+          "name": "Compose Music",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Firebase-AppCheck",
+                "value": "{{app_check_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"{{project_id}}\",\n  \"narrationScript\": \"Once upon a time, in a magical forest far away, there lived a brave little rabbit who loved to explore. Every morning, he would hop through the tall grass and discover new wonders.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_compose}}/compose-music",
+              "host": ["{{base_url_compose}}"],
+              "path": ["compose-music"]
+            },
+            "description": "Generate AI-composed orchestral music based on narration script"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Render",
+      "item": [
+        {
+          "name": "Render Video",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Firebase-AppCheck",
+                "value": "{{app_check_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"{{project_id}}\",\n  \"scenes\": [\n    {\n      \"imageUrl\": \"gs://oneminute-movie-in/{{project_id}}/scene_1.jpg\",\n      \"camera\": \"zoom_in\",\n      \"transition\": \"fade\",\n      \"duration\": 3\n    },\n    {\n      \"imageUrl\": \"gs://oneminute-movie-in/{{project_id}}/scene_2.jpg\",\n      \"camera\": \"pan_left\",\n      \"transition\": \"wipe\",\n      \"duration\": 4\n    }\n  ],\n  \"gsAudioPath\": \"gs://oneminute-movie-in/{{project_id}}/narration.mp3\",\n  \"srtPath\": \"gs://oneminute-movie-in/{{project_id}}/captions.srt\",\n  \"gsMusicPath\": \"gs://oneminute-movie-in/{{project_id}}/music.mp3\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_render}}/render",
+              "host": ["{{base_url_render}}"],
+              "path": ["render"]
+            },
+            "description": "Render final video with FFmpeg using all assets and director controls"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "API Key Service",
+      "item": [
+        {
+          "name": "Store API Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Firebase-AppCheck",
+                "value": "{{app_check_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"apiKey\": \"AIzaSyBvOkBwvFwJjJjJjJjJjJjJjJjJjJjJjJjJjJjJj\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_api_key}}/store-api-key",
+              "host": ["{{base_url_api_key}}"],
+              "path": ["store-api-key"]
+            },
+            "description": "Securely store encrypted API key using KMS"
+          },
+          "response": []
+        },
+        {
+          "name": "Use API Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Firebase-AppCheck",
+                "value": "{{app_check_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prompt\": \"Create a short, creative, and kid-friendly storyboard script about a magical forest.\",\n  \"model\": \"gemini-2.5-flash\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url_api_key}}/use-api-key",
+              "host": ["{{base_url_api_key}}"],
+              "path": ["use-api-key"]
+            },
+            "description": "Use stored API key for AI requests"
+          },
+          "response": []
+        },
+        {
+          "name": "Check API Key",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Firebase-AppCheck",
+                "value": "{{app_check_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url_api_key}}/check-api-key",
+              "host": ["{{base_url_api_key}}"],
+              "path": ["check-api-key"]
+            },
+            "description": "Check if user has stored API key"
+          },
+          "response": []
+        },
+        {
+          "name": "Remove API Key",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Firebase-AppCheck",
+                "value": "{{app_check_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url_api_key}}/remove-api-key",
+              "host": ["{{base_url_api_key}}"],
+              "path": ["remove-api-key"]
+            },
+            "description": "Remove stored API key"
+          },
+          "response": []
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_api_key}}/health",
+              "host": ["{{base_url_api_key}}"],
+              "path": ["health"]
+            },
+            "description": "Check service health (no auth required)"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,191 @@
+openapi: 3.0.3
+info:
+  title: ReelBanana Render API
+  description: |
+    Service for rendering final videos using FFmpeg with advanced director controls.
+    Combines images, audio, captions, and music into professional video output.
+  version: 1.0.0
+  contact:
+    name: ReelBanana API Support
+    url: https://reel-banana-35a54.web.app
+servers:
+  - url: https://reel-banana-render-423229273041.us-central1.run.app
+    description: Production server
+  - url: http://localhost:8082
+    description: Development server
+
+security:
+  - AppCheck: []
+
+paths:
+  /render:
+    post:
+      summary: Render final video
+      description: |
+        Orchestrates the complete video rendering process using FFmpeg.
+        Combines images, narration, captions, and music with advanced director controls
+        including camera movements, transitions, and timing.
+      operationId: renderVideo
+      security:
+        - AppCheck: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - projectId
+                - scenes
+              properties:
+                projectId:
+                  type: string
+                  description: Unique project identifier
+                  example: "proj_123456789"
+                scenes:
+                  type: array
+                  description: Array of scene objects with director controls
+                  items:
+                    $ref: '#/components/schemas/Scene'
+                gsAudioPath:
+                  type: string
+                  description: Google Cloud Storage path to narration audio
+                  example: "gs://oneminute-movie-in/proj_123456789/narration.mp3"
+                srtPath:
+                  type: string
+                  description: Google Cloud Storage path to SRT captions file
+                  example: "gs://oneminute-movie-in/proj_123456789/captions.srt"
+                gsMusicPath:
+                  type: string
+                  description: Google Cloud Storage path to background music
+                  example: "gs://oneminute-movie-in/proj_123456789/music.mp3"
+            examples:
+              video_render:
+                summary: Complete video render
+                value:
+                  projectId: "proj_123456789"
+                  scenes:
+                    - imageUrl: "gs://oneminute-movie-in/proj_123456789/scene_1.jpg"
+                      camera: "zoom_in"
+                      transition: "fade"
+                      duration: 3
+                    - imageUrl: "gs://oneminute-movie-in/proj_123456789/scene_2.jpg"
+                      camera: "pan_left"
+                      transition: "wipe"
+                      duration: 4
+                  gsAudioPath: "gs://oneminute-movie-in/proj_123456789/narration.mp3"
+                  srtPath: "gs://oneminute-movie-in/proj_123456789/captions.srt"
+                  gsMusicPath: "gs://oneminute-movie-in/proj_123456789/music.mp3"
+      responses:
+        '200':
+          description: Video rendered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  videoUrl:
+                    type: string
+                    description: Signed URL to the rendered video (1-hour expiration)
+                    example: "https://storage.googleapis.com/oneminute-movie-out/proj_123456789/movie.mp4?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=..."
+                  duration:
+                    type: number
+                    description: Video duration in seconds
+                    example: 45.2
+                  resolution:
+                    type: string
+                    description: Video resolution
+                    example: "1920x1080"
+              examples:
+                success:
+                  summary: Successful render
+                  value:
+                    videoUrl: "https://storage.googleapis.com/oneminute-movie-out/proj_123456789/movie.mp4?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=..."
+                    duration: 45.2
+                    resolution: "1920x1080"
+        '400':
+          description: Bad request - missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_fields:
+                  summary: Missing required fields
+                  value:
+                    error: "Missing required fields: projectId, scenes"
+        '401':
+          description: Unauthorized - App Check token required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                app_check_required:
+                  summary: App Check token required
+                  value:
+                    error: "App Check token required"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                render_failed:
+                  summary: Video render failed
+                  value:
+                    error: "Failed to render video"
+                    details: "FFmpeg processing error or asset download issue"
+
+components:
+  securitySchemes:
+    AppCheck:
+      type: apiKey
+      in: header
+      name: X-Firebase-AppCheck
+      description: Firebase App Check token for request verification
+  schemas:
+    Scene:
+      type: object
+      required:
+        - imageUrl
+      properties:
+        imageUrl:
+          type: string
+          description: Google Cloud Storage path to the scene image
+          example: "gs://oneminute-movie-in/proj_123456789/scene_1.jpg"
+        camera:
+          type: string
+          enum: [static, zoom_in, zoom_out, pan_left, pan_right, pan_up, pan_down]
+          description: Camera movement for the scene
+          example: "zoom_in"
+        transition:
+          type: string
+          enum: [none, fade, wipe, dissolve, slide_left, slide_right]
+          description: Transition effect to the next scene
+          example: "fade"
+        duration:
+          type: number
+          minimum: 1
+          maximum: 10
+          description: Scene duration in seconds
+          example: 3
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+        details:
+          type: string
+          description: Additional error details (optional)
+      example:
+        error: "An error occurred"
+        details: "Additional context about the error"
+
+tags:
+  - name: Rendering
+    description: Video rendering and processing operations

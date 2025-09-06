@@ -1,0 +1,140 @@
+openapi: 3.0.3
+info:
+  title: ReelBanana Align Captions API
+  description: |
+    Service for aligning captions with audio using Google Cloud Speech-to-Text.
+    Generates SRT subtitle files synchronized with narration audio.
+  version: 1.0.0
+  contact:
+    name: ReelBanana API Support
+    url: https://reel-banana-35a54.web.app
+servers:
+  - url: https://reel-banana-align-captions-423229273041.us-central1.run.app
+    description: Production server
+  - url: http://localhost:8081
+    description: Development server
+
+security:
+  - AppCheck: []
+
+paths:
+  /align:
+    post:
+      summary: Align captions with audio
+      description: |
+        Uses Google Cloud Speech-to-Text to generate timestamped captions
+        synchronized with the provided audio file. Returns SRT format subtitles.
+      operationId: alignCaptions
+      security:
+        - AppCheck: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - projectId
+                - gsAudioPath
+              properties:
+                projectId:
+                  type: string
+                  description: Unique project identifier
+                  example: "proj_123456789"
+                gsAudioPath:
+                  type: string
+                  description: Google Cloud Storage path to the audio file
+                  example: "gs://oneminute-movie-in/proj_123456789/narration.mp3"
+            examples:
+              caption_alignment:
+                summary: Caption alignment
+                value:
+                  projectId: "proj_123456789"
+                  gsAudioPath: "gs://oneminute-movie-in/proj_123456789/narration.mp3"
+      responses:
+        '200':
+          description: Captions aligned successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Captions aligned successfully."
+                  srtPath:
+                    type: string
+                    description: Google Cloud Storage path to the SRT file
+                    example: "gs://oneminute-movie-in/proj_123456789/captions.srt"
+                  transcript:
+                    type: string
+                    description: Full transcript text
+                    example: "Once upon a time, in a magical forest far away, there lived a brave little rabbit."
+              examples:
+                success:
+                  summary: Successful alignment
+                  value:
+                    message: "Captions aligned successfully."
+                    srtPath: "gs://oneminute-movie-in/proj_123456789/captions.srt"
+                    transcript: "Once upon a time, in a magical forest far away, there lived a brave little rabbit."
+        '400':
+          description: Bad request - missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_fields:
+                  summary: Missing required fields
+                  value:
+                    error: "Missing required fields: projectId, gsAudioPath"
+        '401':
+          description: Unauthorized - App Check token required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                app_check_required:
+                  summary: App Check token required
+                  value:
+                    error: "App Check token required"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                alignment_failed:
+                  summary: Caption alignment failed
+                  value:
+                    error: "Failed to align captions"
+                    details: "Speech-to-Text API error or audio processing issue"
+
+components:
+  securitySchemes:
+    AppCheck:
+      type: apiKey
+      in: header
+      name: X-Firebase-AppCheck
+      description: Firebase App Check token for request verification
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+        details:
+          type: string
+          description: Additional error details (optional)
+      example:
+        error: "An error occurred"
+        details: "Additional context about the error"
+
+tags:
+  - name: Captions
+    description: Caption alignment and subtitle generation

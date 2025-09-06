@@ -8,8 +8,8 @@
   *Transform your ideas into professional movies in minutes with advanced AI technology*
   
   [![Live Demo](https://img.shields.io/badge/Live%20Demo-ReelBanana-brightgreen?style=for-the-badge&logo=firebase)](https://reel-banana-35a54.web.app)
-  [![AI Music](https://img.shields.io/badge/AI%20Music-Compose%20Score-blue?style=for-the-badge&logo=google)](https://compose-music-423229273041.us-central1.run.app)
-  [![Social Sharing](https://img.shields.io/badge/Social%20Sharing-Cloud%20Functions-orange?style=for-the-badge&logo=firebase)](https://sharehandler-nyckt4dazq-uc.a.run.app)
+  [![API Docs](https://img.shields.io/badge/API%20Documentation-OpenAPI-blue?style=for-the-badge&logo=swagger)](./docs/api/README.md)
+  [![Postman](https://img.shields.io/badge/Postman%20Collection-Test%20APIs-orange?style=for-the-badge&logo=postman)](./docs/api/postman/)
 </div>
 
 ## 🎬 **What is ReelBanana?**
@@ -61,6 +61,31 @@ ReelBanana is a revolutionary AI-powered storytelling platform that transforms y
 - **Share Handler**: [https://sharehandler-nyckt4dazq-uc.a.run.app](https://sharehandler-nyckt4dazq-uc.a.run.app)
 - **Render Service**: [https://reel-banana-render-423229273041.us-central1.run.app](https://reel-banana-render-423229273041.us-central1.run.app)
 - **Narrate Service**: [https://reel-banana-narrate-423229273041.us-central1.run.app](https://reel-banana-narrate-423229273041.us-central1.run.app)
+
+## 📚 **API Documentation**
+
+### **Complete API Reference**
+- **[📖 API Documentation](./docs/api/README.md)** - Comprehensive guide to all endpoints
+- **[🔗 OpenAPI Specs](./docs/api/)** - Individual service specifications
+- **[📥 Postman Collection](./docs/api/postman/)** - Ready-to-use API testing
+
+### **Available Services**
+| Service | Description | OpenAPI Spec | Swagger UI |
+|---------|-------------|--------------|------------|
+| **Upload Assets** | Image upload to GCS | [📄 YAML](./docs/api/upload-assets.yaml) | [🔗 View](https://reel-banana-upload-assets-423229273041.us-central1.run.app/docs) |
+| **Narrate** | Text-to-speech narration | [📄 YAML](./docs/api/narrate.yaml) | [🔗 View](https://reel-banana-narrate-423229273041.us-central1.run.app/docs) |
+| **Align Captions** | Caption synchronization | [📄 YAML](./docs/api/align-captions.yaml) | [🔗 View](https://reel-banana-align-captions-423229273041.us-central1.run.app/docs) |
+| **Compose Music** | AI music generation | [📄 YAML](./docs/api/compose-music.yaml) | [🔗 View](https://reel-banana-compose-music-423229273041.us-central1.run.app/docs) |
+| **Render** | Video rendering | [📄 YAML](./docs/api/render.yaml) | [🔗 View](https://reel-banana-render-423229273041.us-central1.run.app/docs) |
+| **API Key Service** | Secure key management | [📄 YAML](./docs/api/api-key-service.yaml) | [🔗 View](https://reel-banana-api-key-service-423229273041.us-central1.run.app/docs) |
+
+### **Quick API Test**
+```bash
+# Download Postman collection
+curl -o ReelBanana-API.postman_collection.json https://raw.githubusercontent.com/eshbtc/reelbanana/main/docs/api/postman/ReelBanana-API.postman_collection.json
+
+# Import into Postman and start testing!
+```
 
 ## 🛠 **Technical Architecture**
 

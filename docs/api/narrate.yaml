@@ -1,0 +1,140 @@
+openapi: 3.0.3
+info:
+  title: ReelBanana Narrate API
+  description: |
+    Service for generating professional narration from scripts using ElevenLabs.
+    Converts text scripts into high-quality audio files for video production.
+  version: 1.0.0
+  contact:
+    name: ReelBanana API Support
+    url: https://reel-banana-35a54.web.app
+servers:
+  - url: https://reel-banana-narrate-423229273041.us-central1.run.app
+    description: Production server
+  - url: http://localhost:8080
+    description: Development server
+
+security:
+  - AppCheck: []
+
+paths:
+  /narrate:
+    post:
+      summary: Generate narration from script
+      description: |
+        Converts a text script into professional narration audio using ElevenLabs.
+        The generated audio is uploaded to Google Cloud Storage for use in video rendering.
+      operationId: generateNarration
+      security:
+        - AppCheck: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - projectId
+                - narrationScript
+              properties:
+                projectId:
+                  type: string
+                  description: Unique project identifier
+                  example: "proj_123456789"
+                narrationScript:
+                  type: string
+                  description: Text script to be narrated
+                  example: "Once upon a time, in a magical forest far away, there lived a brave little rabbit..."
+            examples:
+              story_narration:
+                summary: Story narration
+                value:
+                  projectId: "proj_123456789"
+                  narrationScript: "Once upon a time, in a magical forest far away, there lived a brave little rabbit who loved to explore. Every morning, he would hop through the tall grass and discover new wonders."
+      responses:
+        '200':
+          description: Narration generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Narration generated successfully."
+                  gsAudioPath:
+                    type: string
+                    description: Google Cloud Storage path to the audio file
+                    example: "gs://oneminute-movie-in/proj_123456789/narration.mp3"
+                  duration:
+                    type: number
+                    description: Audio duration in seconds
+                    example: 45.2
+              examples:
+                success:
+                  summary: Successful narration
+                  value:
+                    message: "Narration generated successfully."
+                    gsAudioPath: "gs://oneminute-movie-in/proj_123456789/narration.mp3"
+                    duration: 45.2
+        '400':
+          description: Bad request - missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_fields:
+                  summary: Missing required fields
+                  value:
+                    error: "Missing required fields: projectId, narrationScript"
+        '401':
+          description: Unauthorized - App Check token required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                app_check_required:
+                  summary: App Check token required
+                  value:
+                    error: "App Check token required"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                narration_failed:
+                  summary: Narration generation failed
+                  value:
+                    error: "Failed to generate narration"
+                    details: "ElevenLabs API error or network issue"
+
+components:
+  securitySchemes:
+    AppCheck:
+      type: apiKey
+      in: header
+      name: X-Firebase-AppCheck
+      description: Firebase App Check token for request verification
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+        details:
+          type: string
+          description: Additional error details (optional)
+      example:
+        error: "An error occurred"
+        details: "Additional context about the error"
+
+tags:
+  - name: Narration
+    description: Text-to-speech narration generation
