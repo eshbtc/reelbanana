@@ -12,7 +12,7 @@ app.use(cors());
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.applicationDefault(),
-    projectId: 'reel-banana-35a54'
+    projectId: 'reel-banana'
   });
 }
 
