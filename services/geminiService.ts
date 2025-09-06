@@ -155,11 +155,17 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
             const responseData = JSON.parse(jsonStr);
             
             // Validate the response format
+            console.log('Custom API response data:', responseData);
             if (responseData && responseData.scenes && Array.isArray(responseData.scenes)) {
                 const scenes = responseData.scenes.filter(
                     (scene: any): scene is StoryScene =>
                         typeof scene.prompt === 'string' && typeof scene.narration === 'string'
                 );
+                
+                console.log('Filtered scenes:', scenes);
+                if (scenes.length === 0) {
+                    throw new Error("No valid scenes found in API response. Please try a different topic.");
+                }
                 
                 // Only deduct credits after successful story generation
                 if (currentUser) {
@@ -168,30 +174,37 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
                 
                 return scenes;
             } else {
-                throw new Error("Invalid story format received from API.");
+                console.error('Invalid response format:', responseData);
+                throw new Error(`Invalid story format received from API. Expected {scenes: [...]} but got: ${JSON.stringify(responseData)}`);
             }
         }
 
         const rawText = result.response.text().trim();
+        console.log('Firebase AI Logic raw response:', rawText);
         let response: any;
         try {
             response = JSON.parse(rawText);
+            console.log('Parsed Firebase AI response:', response);
         } catch (e) {
             console.warn('Story JSON parse failed. Raw:', rawText);
             throw new Error('Invalid story JSON received from AI.');
         }
 
         const collectScenes = (obj: any): StoryScene[] => {
+            console.log('collectScenes input:', obj);
             if (!obj) return [];
             const arr: any[] = Array.isArray(obj.scenes) ? obj.scenes : [];
+            console.log('Scenes array:', arr);
             const out: StoryScene[] = [];
             for (const item of arr) {
                 const prompt = item?.prompt || item?.description || item?.scene || item?.text;
                 const narration = item?.narration || item?.caption || item?.voiceover || item?.text;
+                console.log('Processing scene item:', { item, prompt, narration });
                 if (typeof prompt === 'string' && typeof narration === 'string') {
                     out.push({ prompt, narration });
                 }
             }
+            console.log('Final collected scenes:', out);
             return out;
         };
 
