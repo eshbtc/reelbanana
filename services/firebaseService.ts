@@ -10,30 +10,11 @@ import {
     serverTimestamp 
 } from 'firebase/firestore';
 import { Scene } from '../types';
-
-// =================================================================================
-// TODO: PASTE YOUR FIREBASE CONFIGURATION HERE
-// =================================================================================
-// You MUST replace these placeholder values with the actual configuration object
-// from your Firebase project settings.
-//
-// How to get this:
-// 1. Go to your Firebase project console.
-// 2. Click the gear icon -> Project settings.
-// 3. In the "General" tab, scroll down to "Your apps".
-// 4. Click the web icon (</>) to register your app if you haven't already.
-// 5. Copy the `firebaseConfig` object and paste it here.
-// =================================================================================
-const firebaseConfig = {
-    apiKey: "PASTE_YOUR_API_KEY_HERE",
-    authDomain: "PASTE_YOUR_AUTH_DOMAIN_HERE",
-    projectId: "PASTE_YOUR_PROJECT_ID_HERE",
-    storageBucket: "PASTE_YOUR_STORAGE_BUCKET_HERE",
-    messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID_HERE",
-    appId: "PASTE_YOUR_APP_ID_HERE"
-};
+import { firebaseConfig } from './apiConfig';
 
 // Initialize Firebase and Firestore
+// The firebaseConfig is now securely sourced from environment variables via apiConfig.ts,
+// removing the need for placeholder values in the code.
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 

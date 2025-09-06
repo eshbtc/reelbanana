@@ -8,4 +8,6 @@ export interface Scene {
   imageUrls?: string[]; // Changed from imageUrl
   status: SceneStatus;
   error?: string;
+  cameraEffect?: 'none' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right';
+  transition?: 'fade' | 'wipe-left' | 'circle-open';
 }
