@@ -3,6 +3,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import Header from './components/Header';
 import StoryboardEditor from './components/StoryboardEditor';
 import RenderingScreen from './RenderingScreen';
+import MovieWizard from './components/MovieWizard';
 import MoviePlayer from './components/MoviePlayer';
 import PublicGallery from './components/PublicGallery';
 import UserDashboard from './components/UserDashboard';
@@ -35,6 +36,7 @@ const App: React.FC = () => {
   const [narrationEmotion, setNarrationEmotion] = useState<string>('neutral');
   const [proPolish, setProPolish] = useState<boolean>(false);
   const [hasFalApiKey, setHasFalApiKey] = useState<boolean>(false);
+  const [useWizardMode, setUseWizardMode] = useState<boolean>(true);
   
   // Show Polish toggle if VITE_SHOW_POLISH is true OR user has FAL API key
   const showPolish = (import.meta as any)?.env?.VITE_SHOW_POLISH === 'true' || hasFalApiKey;
@@ -112,7 +114,25 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (view) {
       case 'rendering':
-        return <RenderingScreen scenes={scenes} emotion={narrationEmotion} proPolish={proPolish} projectId={projectId || undefined} onRenderComplete={handleRenderComplete} onRenderFail={handleRenderFail} />;
+        if (useWizardMode) {
+          return <MovieWizard 
+            scenes={scenes} 
+            emotion={narrationEmotion} 
+            proPolish={proPolish} 
+            projectId={projectId || 'default-project'}
+            onComplete={handleRenderComplete} 
+            onFail={handleRenderFail} 
+          />;
+        } else {
+          return <RenderingScreen 
+            scenes={scenes} 
+            emotion={narrationEmotion} 
+            proPolish={proPolish} 
+            projectId={projectId || undefined} 
+            onRenderComplete={handleRenderComplete} 
+            onRenderFail={handleRenderFail} 
+          />;
+        }
       case 'player':
         return <MoviePlayer scenes={scenes} videoUrl={videoUrl} originalUrl={videoUrlOriginal || undefined} polishedUrl={videoUrlPolished || undefined} emotion={narrationEmotion} onBack={handleBackToEditor} projectId={projectId || undefined} />;
       case 'gallery':
@@ -148,6 +168,12 @@ const App: React.FC = () => {
                     </label>
                   </div>
                 )}
+                <div className="ml-4 flex items-center gap-2">
+                  <input id="wizardMode" type="checkbox" checked={useWizardMode} onChange={(e) => setUseWizardMode(e.target.checked)} />
+                  <label htmlFor="wizardMode" className="text-sm text-gray-300">
+                    Wizard Mode (Step-by-step control)
+                  </label>
+                </div>
               </div>
             </div>
             <StoryboardEditor onPlayMovie={handlePlayMovie} onProjectIdChange={(id) => setProjectId(id || null)} />
