@@ -5,6 +5,7 @@ import StoryboardEditor from './components/StoryboardEditor';
 import RenderingScreen from './RenderingScreen';
 import MovieWizard from './components/MovieWizard';
 import MoviePlayer from './components/MoviePlayer';
+import QuickDemo from './components/QuickDemo';
 import PublicGallery from './components/PublicGallery';
 import UserDashboard from './components/UserDashboard';
 import MyProjectsPage from './components/MyProjectsPage';
@@ -15,7 +16,7 @@ import { API_ENDPOINTS } from './config/apiConfig';
 import { authFetch } from './lib/authFetch';
 // Removed auto-publish; handled in MoviePlayer for one-click publish UX
 
-type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects';
+type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects' | 'quickdemo';
 
 const App: React.FC = () => {
   // Initialize view based on URL path
@@ -37,6 +38,7 @@ const App: React.FC = () => {
   const [proPolish, setProPolish] = useState<boolean>(false);
   const [hasFalApiKey, setHasFalApiKey] = useState<boolean>(false);
   const [useWizardMode, setUseWizardMode] = useState<boolean>(true);
+  const [demoMode, setDemoMode] = useState<boolean>(false);
   
   // Show Polish toggle if VITE_SHOW_POLISH is true OR user has FAL API key
   const showPolish = (import.meta as any)?.env?.VITE_SHOW_POLISH === 'true' || hasFalApiKey;
@@ -141,11 +143,39 @@ const App: React.FC = () => {
         return <UserDashboard onClose={() => setView('editor')} />;
       case 'projects':
         return <MyProjectsPage />;
+      case 'quickdemo':
+        return <QuickDemo onBack={() => setView('editor')} />;
       case 'editor':
       default:
         return (
           <>
             <div className="bg-gray-800 p-4 rounded-lg border border-gray-700 mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <input 
+                      id="demoMode" 
+                      type="checkbox" 
+                      checked={demoMode} 
+                      onChange={(e) => setDemoMode(e.target.checked)} 
+                      className="rounded"
+                    />
+                    <label htmlFor="demoMode" className="text-sm text-gray-300 font-medium">
+                      Demo Mode
+                    </label>
+                  </div>
+                  {demoMode && (
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs bg-blue-600 text-white px-2 py-1 rounded">6-sec video</span>
+                      <span className="text-xs bg-green-600 text-white px-2 py-1 rounded">Ultra fast</span>
+                      <span className="text-xs bg-purple-600 text-white px-2 py-1 rounded">Simple scenes</span>
+                    </div>
+                  )}
+                  {!demoMode && (
+                    <span className="text-gray-400 text-sm">Pro Mode: Full customization & quality</span>
+                  )}
+                </div>
+              </div>
               <div className="flex items-center gap-3">
                 <label className="text-sm text-gray-300">Narration Emotion</label>
                 <select
@@ -176,7 +206,11 @@ const App: React.FC = () => {
                 </div>
               </div>
             </div>
-            <StoryboardEditor onPlayMovie={handlePlayMovie} onProjectIdChange={(id) => setProjectId(id || null)} />
+            <StoryboardEditor 
+              onPlayMovie={handlePlayMovie} 
+              onProjectIdChange={(id) => setProjectId(id || null)} 
+              demoMode={demoMode}
+            />
           </>
         );
     }

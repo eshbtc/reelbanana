@@ -22,6 +22,7 @@ const ai = getAI(firebaseApp);
 interface StoryboardEditorProps {
   onPlayMovie: (scenes: Scene[]) => void;
   onProjectIdChange?: (id: string | null) => void;
+  demoMode?: boolean;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -43,7 +44,7 @@ const inspirationCategories = [
     "Drama & Emotion"
 ];
 
-const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProjectIdChange }) => {
+const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProjectIdChange, demoMode = false }) => {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [topic, setTopic] = useState('');
   const [characterAndStyle, setCharacterAndStyle] = useState('');
@@ -62,6 +63,44 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   const [userHasApiKey, setUserHasApiKey] = useState(false);
   const [isGeneratingInspiration, setIsGeneratingInspiration] = useState(false);
   const [generatedInspiration, setGeneratedInspiration] = useState<string>('');
+  
+  // Demo mode: automatically load simple demo content
+  useEffect(() => {
+    if (demoMode && scenes.length === 0) {
+      const demoScenes = [
+        {
+          id: '1',
+          narration: 'Welcome to ReelBanana.',
+          imageUrls: [`https://via.placeholder.com/512x512/3B82F6/FFFFFF?text=ReelBanana+Demo`],
+          duration: 2,
+          camera: 'static' as const,
+          transition: 'fade' as const,
+        },
+        {
+          id: '2', 
+          narration: 'AI creates videos fast.',
+          imageUrls: [`https://via.placeholder.com/512x512/10B981/FFFFFF?text=AI+Power`],
+          duration: 2,
+          camera: 'static' as const,
+          transition: 'fade' as const,
+        },
+        {
+          id: '3',
+          narration: 'Try it now!',
+          imageUrls: [`https://via.placeholder.com/512x512/F59E0B/FFFFFF?text=Get+Started`],
+          duration: 2,
+          camera: 'static' as const,
+          transition: 'fade' as const,
+        }
+      ];
+      
+      setScenes(demoScenes);
+      setTopic('ReelBanana Demo');
+      setCharacterAndStyle('Simple minimal style with clean placeholders');
+      setIsLoadingProject(false);
+    }
+  }, [demoMode, scenes.length]);
+
   
   // Use the real-time credits hook
   const { refreshCredits } = useUserCredits();
