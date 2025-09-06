@@ -39,8 +39,24 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
   
   // Use the real-time credits hook
   const { freeCredits, totalUsage, refreshCredits, isLoading: creditsLoading } = useUserCredits();
-  const confirm = useConfirm();
-  const { toast } = useToast();
+  // Defensive context usage to prevent null context errors
+  let confirm: any = null;
+  let toast: any = null;
+  
+  try {
+    confirm = useConfirm();
+  } catch (error) {
+    console.warn('Confirm context not available:', error);
+    confirm = () => Promise.resolve(false);
+  }
+  
+  try {
+    const toastContext = useToast();
+    toast = toastContext.toast;
+  } catch (error) {
+    console.warn('Toast context not available:', error);
+    toast = { info: () => {}, success: () => {}, error: () => {} };
+  }
 
   useEffect(() => {
     loadUserData();

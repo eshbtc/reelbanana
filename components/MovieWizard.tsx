@@ -77,6 +77,16 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [showDetails, setShowDetails] = useState(false);
 
+  // Defensive context usage to prevent null context errors
+  let confirm: any = null;
+  
+  try {
+    confirm = useConfirm();
+  } catch (error) {
+    console.warn('Confirm context not available:', error);
+    confirm = () => Promise.resolve(false);
+  }
+
   // Estimated step durations (seconds) with rolling average override
   const [etas, setEtas] = useState<Record<string, [number, number]>>({
     upload: [2, 10],
@@ -548,4 +558,3 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
 };
 
 export default MovieWizard;
-  const confirm = useConfirm();

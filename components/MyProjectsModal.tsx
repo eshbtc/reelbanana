@@ -23,7 +23,16 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
   const [filterText, setFilterText] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
-  const { toast } = useToast();
+  // Defensive context usage to prevent null context errors
+  let toast: any = null;
+  
+  try {
+    const toastContext = useToast();
+    toast = toastContext.toast;
+  } catch (error) {
+    console.warn('Toast context not available:', error);
+    toast = { info: () => {}, success: () => {}, error: () => {} };
+  }
 
   const load = async () => {
     const user = getCurrentUser();
@@ -173,7 +182,15 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
     }
   };
 
-  const confirm = useConfirm();
+  // Defensive context usage for confirm
+  let confirm: any = null;
+  
+  try {
+    confirm = useConfirm();
+  } catch (error) {
+    console.warn('Confirm context not available:', error);
+    confirm = () => Promise.resolve(false);
+  }
   const bulkDelete = async () => {
     if (selectedIds.size === 0) return;
     const ok = await confirm({

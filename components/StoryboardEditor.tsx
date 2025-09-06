@@ -533,6 +533,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   }
 
   const hasGeneratedImages = scenes.some(s => s.status === 'success' && s.imageUrls && s.imageUrls.length > 0);
+  const hasAnyImages = scenes.some(s => Array.isArray(s.imageUrls) && s.imageUrls.length > 0);
   const canGenerateAll = scenes.some(s => s.status === 'idle' || s.status === 'error');
 
   return (
@@ -852,13 +853,17 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                  <p className="text-gray-400 mb-6 max-w-2xl mx-auto">Once you have generated images for your scenes, you can assemble them into a short movie. The backend will narrate, add captions, and render your video.</p>
                 <button
                   onClick={() => onPlayMovie(scenes)}
-                  disabled={!hasGeneratedImages || demoMode}
+                  disabled={demoMode ? !hasAnyImages : !hasGeneratedImages}
                   className="bg-green-600 hover:bg-green-700 text-white font-extrabold text-xl py-4 px-10 rounded-lg transition-all disabled:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Play My Movie!
                 </button>
-                {!hasGeneratedImages && <p className="text-sm text-gray-500 mt-2">Generate at least one image to enable this button.</p>}
-                {demoMode && <p className="text-sm text-amber-400 mt-1">Demo Mode: Upgrade to enable rendering.</p>}
+                {!hasGeneratedImages && !demoMode && (
+                  <p className="text-sm text-gray-500 mt-2">Generate at least one image to enable this button.</p>
+                )}
+                {demoMode && (
+                  <p className="text-sm text-amber-400 mt-1">Demo Mode: Renders with narration and captions (no music or polish).</p>
+                )}
               </div>
             </div>
             <TemplatesModal open={showTemplates} onClose={() => setShowTemplates(false)} onPick={handleLoadTemplate} />

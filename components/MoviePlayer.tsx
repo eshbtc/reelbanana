@@ -23,7 +23,16 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
   const [description, setDescription] = useState('');
   const [published, setPublished] = useState(false);
   const [usePolished, setUsePolished] = useState<boolean>(true);
-  const { toast } = useToast();
+  // Defensive context usage to prevent null context errors
+  let toast: any = null;
+  
+  try {
+    const toastContext = useToast();
+    toast = toastContext.toast;
+  } catch (error) {
+    console.warn('Toast context not available:', error);
+    toast = { info: () => {}, success: () => {}, error: () => {} };
+  }
 
   const styleBadges = useMemo(() => {
     const styles = Array.from(new Set((scenes || [])
