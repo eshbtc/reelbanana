@@ -175,13 +175,7 @@ export const generateCharacterAndStyle = async (topic: string): Promise<string> 
             throw new Error("No credits remaining and no API key configured. Please add your Gemini API key or contact support for more credits.");
         }
 
-        // For Firebase AI Logic, check credits before making the API call
-        if (aiService === 'firebase') {
-            const hasCredits = await checkUserCredits(currentUser.uid, 1);
-            if (!hasCredits) {
-                throw new Error("Insufficient credits. Please add your Gemini API key or contact support for more credits.");
-            }
-        }
+        // Credit check is already handled in getAIService, no need to check again
 
         let result;
         
@@ -314,13 +308,7 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
             throw new Error("No credits remaining and no API key configured. Please add your Gemini API key or contact support for more credits.");
         }
 
-        // For Firebase AI Logic, check credits before making the API call
-        if (aiService === 'firebase') {
-            const hasCredits = await checkUserCredits(currentUser.uid, 1);
-            if (!hasCredits) {
-                throw new Error("Insufficient credits. Please add your Gemini API key or contact support for more credits.");
-            }
-        }
+        // Credit check is already handled in getAIService, no need to check again
 
         let result;
         
@@ -328,10 +316,10 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
             // Use Firebase AI Logic with free credits
             console.log('Using Firebase AI Logic for story generation');
             const model = getGenerativeModel(ai, {
-                model: "gemini-2.5-flash",
+            model: "gemini-2.5-flash",
                 // Try to coerce structured output where supported
                 generationConfig: {
-                    responseMimeType: "application/json",
+                responseMimeType: "application/json",
                     // responseSchema is supported in newer SDKs; harmless if ignored
                     // @ts-ignore
                     responseSchema: (storyResponseSchema as any),
@@ -407,7 +395,7 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
 
             const scenes = collectScenes(responseData);
             if (scenes.length === 0) {
-                throw new Error("Invalid story format received from API.");
+            throw new Error("Invalid story format received from API.");
             }
 
             if (currentUser) {
@@ -582,7 +570,7 @@ export const generateImageSequence = async (
         
         // 2. Use sophisticated "shot director" approach for cinematic quality
         const directorSystemInstruction = `You are a film director planning a 2-second shot. Based on the following scene description, create a sequence of exactly 5 distinct, continuous camera shots that show a brief moment of action. Each shot should be a detailed visual prompt for an image generation model.
-
+            
 Return ONLY a JSON object with this exact format:
 {
   "prompts": [
@@ -597,7 +585,7 @@ Return ONLY a JSON object with this exact format:
         // Create a GenerativeModel instance for shot director
         const shotDirectorModel = getGenerativeModel(ai, { 
             model: "gemini-2.5-flash",
-            systemInstruction: directorSystemInstruction,
+                systemInstruction: directorSystemInstruction,
             generationConfig: {
                 responseMimeType: "application/json",
             }
@@ -616,6 +604,7 @@ Return ONLY a JSON object with this exact format:
 
         // 3. Generate an image for each of the 5 prompts sequentially to avoid rate limiting
         const base64Images: string[] = [];
+        const perImageTokenUsages: TokenUsage[] = [];
         const desired = Math.min(Math.max(opts?.frames || 5, 1), 5);
         const prompts = (shotList.prompts as string[]).slice(0, desired);
         for (const prompt of prompts) {
@@ -643,9 +632,10 @@ Return ONLY a JSON object with this exact format:
 
             const response = await imagenModel.generateContent(parts);
 
-            // Extract token usage from response
+            // Extract token usage from response (may be unavailable for image preview)
             const tokenUsage = extractTokenUsage(response, 'gemini-2.5-flash-image-preview');
             if (tokenUsage) {
+                perImageTokenUsages.push(tokenUsage);
                 console.log('Image generation token usage:', tokenUsage);
             }
 
@@ -655,7 +645,7 @@ Return ONLY a JSON object with this exact format:
                 if (inlineDataParts?.[0]) {
                     const image = inlineDataParts[0].inlineData;
                     base64Images.push(`data:${image.mimeType};base64,${image.data}`);
-                } else {
+            } else {
                     // Fallback: check candidates for interleaved content
                     const candidates = response.response.candidates;
                     if (candidates?.[0]?.content?.parts) {
@@ -700,35 +690,64 @@ Return ONLY a JSON object with this exact format:
             }
         }
         
+        // Persist frames to Storage and return HTTPS URLs for durability
+        const httpsUrls: string[] = [];
+        try {
+            const projectId = `gen-${Date.now()}`;
+            for (let idx = 0; idx < base64Images.length; idx++) {
+                const base64Image = base64Images[idx];
+                const fileName = `scene-0-${idx}.jpeg`;
+                const resp = await authFetch(API_ENDPOINTS.upload, {
+                    method: 'POST',
+                    body: { projectId, fileName, base64Image }
+                });
+                if (resp.ok) {
+                    const json = await resp.json();
+                    httpsUrls.push(json.publicUrl || base64Image);
+                } else {
+                    httpsUrls.push(base64Image);
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to persist generated frames; falling back to inline data URIs');
+            httpsUrls.push(...base64Images);
+        }
+
         // Record successful usage with token tracking
         if (currentUser) {
-            // Calculate total token usage for all images generated
-            const totalTokenUsage: TokenUsage = {
-                promptTokens: 0,
-                completionTokens: 0,
-                totalTokens: 0,
-                estimatedCost: 0,
-                model: 'gemini-2.5-flash-image-preview'
-            };
-            
-            // Note: For image generation, we don't have individual token usage per image
-            // The API doesn't return detailed token breakdown for image generation
-            // We'll use a reasonable estimate based on the number of images and complexity
-            const estimatedTokensPerImage = 1000; // Rough estimate
-            totalTokenUsage.totalTokens = base64Images.length * estimatedTokensPerImage;
-            totalTokenUsage.estimatedCost = calculateCost(totalTokenUsage.totalTokens, 'gemini-2.5-flash-image-preview');
+            // Aggregate actual token usage if available; otherwise, estimate
+            let totalTokenUsage: TokenUsage;
+            if (perImageTokenUsages.length > 0) {
+                totalTokenUsage = {
+                    promptTokens: perImageTokenUsages.reduce((s, u) => s + (u.promptTokens || 0), 0),
+                    completionTokens: perImageTokenUsages.reduce((s, u) => s + (u.completionTokens || 0), 0),
+                    totalTokens: perImageTokenUsages.reduce((s, u) => s + (u.totalTokens || 0), 0),
+                    estimatedCost: perImageTokenUsages.reduce((s, u) => s + (u.estimatedCost || 0), 0),
+                    model: 'gemini-2.5-flash-image-preview'
+                };
+            } else {
+                const estimatedTokensPerImage = 1000; // fallback rough estimate
+                const total = base64Images.length * estimatedTokensPerImage;
+                totalTokenUsage = {
+                    promptTokens: 0,
+                    completionTokens: 0,
+                    totalTokens: total,
+                    estimatedCost: calculateCost(total, 'gemini-2.5-flash-image-preview'),
+                    model: 'gemini-2.5-flash-image-preview'
+                };
+            }
             
             await recordUsage(
                 currentUser.uid, 
                 'image_generation', 
-                5, // Legacy cost field
+                desired, // credits equal to frames generated
                 true, 
                 totalTokenUsage,
                 'firebase'
             );
         }
         
-        return base64Images;
+        return httpsUrls;
 
     } catch (error) {
         console.error("Error generating image sequence:", error);
@@ -739,7 +758,7 @@ Return ONLY a JSON object with this exact format:
             await recordUsage(
                 currentUser.uid, 
                 'image_generation', 
-                5, // Legacy cost field
+                Math.min(Math.max(opts?.frames || 5, 1), 5),
                 false, 
                 undefined, // No token usage for failed calls
                 'firebase'
@@ -819,7 +838,7 @@ export const editImageSequence = async (base64Images: string[], editPrompt: stri
                 if (inlineDataParts?.[0]) {
                     const editedImage = inlineDataParts[0].inlineData;
                     editedImages.push(`data:${editedImage.mimeType};base64,${editedImage.data}`);
-                } else {
+            } else {
                     // Fallback: check candidates for interleaved content
                     const candidates = response.response.candidates;
                     if (candidates?.[0]?.content?.parts) {
@@ -989,5 +1008,5 @@ export const clearCharacterOptionsCache = async (topic: string, count: number, s
     await deleteDoc(cacheDoc);
   } catch (_) {
     // non-fatal
-  }
+    }
 };
