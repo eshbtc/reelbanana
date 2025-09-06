@@ -30,6 +30,43 @@ app.use(limiter);
 
 app.use(express.json({ limit: '10mb' }));
 
+// --- Observability & Error Helpers ---
+const { randomUUID } = require('crypto');
+
+// Attach requestId and start time
+app.use((req, res, next) => {
+  req.requestId = randomUUID();
+  req.startTime = Date.now();
+  res.setHeader('X-Request-Id', req.requestId);
+  next();
+});
+
+// Structured access log on response finish
+app.use((req, res, next) => {
+  res.on('finish', () => {
+    const durationMs = Date.now() - (req.startTime || Date.now());
+    const log = {
+      severity: res.statusCode >= 500 ? 'ERROR' : 'INFO',
+      requestId: req.requestId,
+      method: req.method,
+      path: req.originalUrl || req.url,
+      status: res.statusCode,
+      durationMs,
+      userId: req.user?.uid || undefined,
+      appId: req.appCheckClaims?.app_id || req.appCheckClaims?.appId || undefined,
+    };
+    try { console.log(JSON.stringify(log)); } catch (_) { console.log(log); }
+  });
+  next();
+});
+
+function sendError(req, res, httpStatus, code, message, details) {
+  const payload = { code, message };
+  if (details) payload.details = details;
+  payload.requestId = req.requestId || res.getHeader('X-Request-Id');
+  res.status(httpStatus).json(payload);
+}
+
 // Initialize Firebase Admin
 if (!admin.apps.length) {
   admin.initializeApp({
@@ -43,8 +80,7 @@ const appCheckVerification = async (req, res, next) => {
   const appCheckToken = req.header('X-Firebase-AppCheck');
 
   if (!appCheckToken) {
-    res.status(401);
-    return res.json({ error: 'App Check token required' });
+    return sendError(req, res, 401, 'APP_CHECK_REQUIRED', 'App Check token required');
   }
 
   try {
@@ -54,8 +90,7 @@ const appCheckVerification = async (req, res, next) => {
     return next();
   } catch (err) {
     console.error('App Check verification failed:', err);
-    res.status(401);
-    return res.json({ error: 'Invalid App Check token' });
+    return sendError(req, res, 401, 'APP_CHECK_INVALID', 'Invalid App Check token');
   }
 };
 
@@ -123,12 +158,12 @@ app.post('/store-api-key', appCheckVerification, verifyToken, async (req, res) =
     const userId = req.user.uid;
 
     if (!apiKey || typeof apiKey !== 'string') {
-      return res.status(400).json({ error: 'Invalid API key' });
+      return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Invalid API key');
     }
 
     // Validate API key format (basic validation)
     if (!apiKey.startsWith('AIza') || apiKey.length < 30) {
-      return res.status(400).json({ error: 'Invalid API key format' });
+      return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Invalid API key format');
     }
 
     // Encrypt the API key
@@ -143,10 +178,10 @@ app.post('/store-api-key', appCheckVerification, verifyToken, async (req, res) =
       keyVersion: '1.0'
     });
 
-    res.json({ success: true, message: 'API key stored securely' });
+    res.json({ success: true, message: 'API key stored securely', requestId: req.requestId });
   } catch (error) {
     console.error('Error storing API key:', error);
-    res.status(500).json({ error: 'Failed to store API key' });
+    return sendError(req, res, 500, 'INTERNAL', 'Failed to store API key');
   }
 });
 
@@ -157,7 +192,7 @@ app.post('/use-api-key', appCheckVerification, verifyToken, async (req, res) => 
     const userId = req.user.uid;
 
     if (!prompt) {
-      return res.status(400).json({ error: 'Prompt is required' });
+      return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Prompt is required');
     }
 
     // Get encrypted API key from Firestore
@@ -165,7 +200,7 @@ app.post('/use-api-key', appCheckVerification, verifyToken, async (req, res) => 
     const keyDoc = await db.collection('user_api_keys').doc(userId).get();
     
     if (!keyDoc.exists || !keyDoc.data().encryptedApiKey) {
-      return res.status(404).json({ error: 'No API key found' });
+      return sendError(req, res, 404, 'NOT_FOUND', 'No API key found');
     }
 
     // Decrypt the API key
@@ -194,7 +229,7 @@ app.post('/use-api-key', appCheckVerification, verifyToken, async (req, res) => 
     res.json(result);
   } catch (error) {
     console.error('Error using API key:', error);
-    res.status(500).json({ error: 'Failed to process request' });
+    return sendError(req, res, 500, 'INTERNAL', 'Failed to process request');
   }
 });
 
@@ -207,10 +242,10 @@ app.get('/check-api-key', appCheckVerification, verifyToken, async (req, res) =>
     const keyDoc = await db.collection('user_api_keys').doc(userId).get();
     const hasApiKey = keyDoc.exists && keyDoc.data().hasApiKey;
     
-    res.json({ hasApiKey });
+    res.json({ hasApiKey, requestId: req.requestId });
   } catch (error) {
     console.error('Error checking API key:', error);
-    res.status(500).json({ error: 'Failed to check API key' });
+    return sendError(req, res, 500, 'INTERNAL', 'Failed to check API key');
   }
 });
 
@@ -222,10 +257,10 @@ app.delete('/remove-api-key', appCheckVerification, verifyToken, async (req, res
     
     await db.collection('user_api_keys').doc(userId).delete();
     
-    res.json({ success: true, message: 'API key removed' });
+    res.json({ success: true, message: 'API key removed', requestId: req.requestId });
   } catch (error) {
     console.error('Error removing API key:', error);
-    res.status(500).json({ error: 'Failed to remove API key' });
+    return sendError(req, res, 500, 'INTERNAL', 'Failed to remove API key');
   }
 });
 

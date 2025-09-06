@@ -116,7 +116,7 @@ export const generateStory = async (topic: string): Promise<StoryScene[]> => {
             );
             
             // Record usage for free credits
-            await recordUsage(currentUser.uid, 'generate_story', 1, true);
+            await recordUsage(currentUser.uid, 'story_generation', 1, true);
             
         } else {
             // Use custom API key via secure server-side service

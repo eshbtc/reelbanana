@@ -16,13 +16,43 @@ if (!admin.apps.length) {
   });
 }
 
+// Observability & Error helpers
+const { randomUUID } = require('crypto');
+app.use((req, res, next) => {
+  req.requestId = randomUUID();
+  req.startTime = Date.now();
+  res.setHeader('X-Request-Id', req.requestId);
+  next();
+});
+app.use((req, res, next) => {
+  res.on('finish', () => {
+    const durationMs = Date.now() - (req.startTime || Date.now());
+    const log = {
+      severity: res.statusCode >= 500 ? 'ERROR' : 'INFO',
+      requestId: req.requestId,
+      method: req.method,
+      path: req.originalUrl || req.url,
+      status: res.statusCode,
+      durationMs,
+      appId: req.appCheckClaims?.app_id || req.appCheckClaims?.appId || undefined,
+    };
+    try { console.log(JSON.stringify(log)); } catch (_) { console.log(log); }
+  });
+  next();
+});
+function sendError(req, res, httpStatus, code, message, details) {
+  const payload = { code, message };
+  if (details) payload.details = details;
+  payload.requestId = req.requestId || res.getHeader('X-Request-Id');
+  res.status(httpStatus).json(payload);
+}
+
 // App Check verification middleware
 const appCheckVerification = async (req, res, next) => {
   const appCheckToken = req.header('X-Firebase-AppCheck');
 
   if (!appCheckToken) {
-    res.status(401);
-    return res.json({ error: 'App Check token required' });
+    return sendError(req, res, 401, 'APP_CHECK_REQUIRED', 'App Check token required');
   }
 
   try {
@@ -31,8 +61,7 @@ const appCheckVerification = async (req, res, next) => {
     return next();
   } catch (err) {
     console.error('App Check verification failed:', err);
-    res.status(401);
-    return res.json({ error: 'Invalid App Check token' });
+    return sendError(req, res, 401, 'APP_CHECK_INVALID', 'Invalid App Check token');
   }
 };
 
@@ -125,13 +154,13 @@ app.post('/align', appCheckVerification, async (req, res) => {
     const { projectId, gsAudioPath } = req.body;
 
     if (!projectId || !gsAudioPath) {
-        return res.status(400).json({ error: 'Missing required fields: projectId and gsAudioPath' });
+        return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required fields: projectId and gsAudioPath');
     }
 
     console.log(`Received caption alignment request for projectId: ${projectId}`);
 
     try {
-        const request = {
+    const request = {
             audio: { uri: gsAudioPath },
             config: {
                 encoding: 'MP3',
@@ -146,7 +175,7 @@ app.post('/align', appCheckVerification, async (req, res) => {
         const words = response.results.flatMap(result => result.alternatives[0].words);
 
         if (!words || words.length === 0) {
-            throw new Error("Speech-to-Text returned no words.");
+            throw new Error('NO_WORDS');
         }
         
         // 2. Convert transcription to SRT format
@@ -162,11 +191,14 @@ app.post('/align', appCheckVerification, async (req, res) => {
         const gcsPath = `gs://${bucketName}/${fileName}`;
         console.log(`Successfully uploaded captions for ${projectId} to ${gcsPath}`);
 
-        res.status(200).json({ srtPath: gcsPath });
+        res.status(200).json({ srtPath: gcsPath, requestId: req.requestId });
 
     } catch (error) {
         console.error(`Error aligning captions for projectId ${projectId}:`, error);
-        res.status(500).json({ error: 'Failed to align captions.', details: error.message });
+        if (error && error.message === 'NO_WORDS') {
+            return sendError(req, res, 422, 'UNPROCESSABLE', 'No words returned from Speech-to-Text');
+        }
+        return sendError(req, res, 500, 'INTERNAL', 'Failed to align captions.', error.message);
     }
 });
 

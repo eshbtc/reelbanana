@@ -1,300 +1,121 @@
 openapi: 3.0.3
 info:
   title: ReelBanana API Key Service
-  description: |
-    Secure service for managing user API keys with KMS encryption.
-    Provides encrypted storage and usage of custom Gemini API keys for unlimited AI requests.
   version: 1.0.0
-  contact:
-    name: ReelBanana API Support
-    url: https://reel-banana-35a54.web.app
 servers:
   - url: https://reel-banana-api-key-service-423229273041.us-central1.run.app
-    description: Production server
   - url: http://localhost:8085
-    description: Development server
-
-security:
-  - AppCheck: []
-  - FirebaseAuth: []
-
-paths:
-  /store-api-key:
-    post:
-      summary: Store encrypted API key
-      description: |
-        Securely stores a user's Gemini API key using Google Cloud KMS encryption.
-        The key is encrypted at rest and can only be decrypted by the service.
-      operationId: storeApiKey
-      security:
-        - AppCheck: []
-        - FirebaseAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - apiKey
-              properties:
-                apiKey:
-                  type: string
-                  description: User's Gemini API key to be encrypted and stored
-                  example: "AIzaSyBvOkBwvFwJjJjJjJjJjJjJjJjJjJjJjJjJjJj"
-            examples:
-              store_key:
-                summary: Store API key
-                value:
-                  apiKey: "AIzaSyBvOkBwvFwJjJjJjJjJjJjJjJjJjJjJjJjJjJjJj"
-      responses:
-        '200':
-          description: API key stored successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: "API key stored successfully"
-              examples:
-                success:
-                  summary: Successful storage
-                  value:
-                    message: "API key stored successfully"
-        '400':
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /use-api-key:
-    post:
-      summary: Use API key for AI request
-      description: |
-        Uses the stored encrypted API key to make AI requests to Gemini.
-        Acts as a secure proxy to prevent API key exposure.
-      operationId: useApiKey
-      security:
-        - AppCheck: []
-        - FirebaseAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - prompt
-              properties:
-                prompt:
-                  type: string
-                  description: Text prompt for the AI model
-                  example: "Create a short, creative, and kid-friendly storyboard script about a magical forest."
-                model:
-                  type: string
-                  description: Gemini model to use
-                  default: "gemini-2.5-flash"
-                  example: "gemini-2.5-flash"
-            examples:
-              ai_request:
-                summary: AI request
-                value:
-                  prompt: "Create a short, creative, and kid-friendly storyboard script about a magical forest."
-                  model: "gemini-2.5-flash"
-      responses:
-        '200':
-          description: AI request successful
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  response:
-                    type: string
-                    description: AI-generated response
-                    example: "Once upon a time, in a magical forest far away..."
-              examples:
-                success:
-                  summary: Successful AI request
-                  value:
-                    response: "Once upon a time, in a magical forest far away, there lived a brave little rabbit who loved to explore."
-        '400':
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /check-api-key:
-    get:
-      summary: Check if user has API key
-      description: |
-        Checks if the authenticated user has a stored API key.
-        Returns boolean status without exposing the key.
-      operationId: checkApiKey
-      security:
-        - AppCheck: []
-        - FirebaseAuth: []
-      responses:
-        '200':
-          description: API key status retrieved
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  hasApiKey:
-                    type: boolean
-                    description: Whether the user has a stored API key
-                    example: true
-              examples:
-                has_key:
-                  summary: User has API key
-                  value:
-                    hasApiKey: true
-                no_key:
-                  summary: User has no API key
-                  value:
-                    hasApiKey: false
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /remove-api-key:
-    delete:
-      summary: Remove stored API key
-      description: |
-        Permanently removes the user's stored encrypted API key.
-        This action cannot be undone.
-      operationId: removeApiKey
-      security:
-        - AppCheck: []
-        - FirebaseAuth: []
-      responses:
-        '200':
-          description: API key removed successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: "API key removed successfully"
-              examples:
-                success:
-                  summary: Successful removal
-                  value:
-                    message: "API key removed successfully"
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /health:
-    get:
-      summary: Health check
-      description: |
-        Simple health check endpoint to verify service status.
-        Does not require authentication.
-      operationId: healthCheck
-      security: []
-      responses:
-        '200':
-          description: Service is healthy
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: "healthy"
-                  timestamp:
-                    type: string
-                    format: date-time
-                    example: "2025-09-06T10:30:00.000Z"
-              examples:
-                healthy:
-                  summary: Service healthy
-                  value:
-                    status: "healthy"
-                    timestamp: "2025-09-06T10:30:00.000Z"
-
 components:
   securitySchemes:
     AppCheck:
       type: apiKey
       in: header
       name: X-Firebase-AppCheck
-      description: Firebase App Check token for request verification
     FirebaseAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Firebase ID token for user authentication
   schemas:
-    ErrorResponse:
+    Error:
       type: object
-      required:
-        - error
+      required: [code, message]
       properties:
-        error:
-          type: string
-          description: Error message
-        details:
-          type: string
-          description: Additional error details (optional)
-      example:
-        error: "An error occurred"
-        details: "Additional context about the error"
+        code: { type: string }
+        message: { type: string }
+        details: { type: string }
+        requestId: { type: string }
+paths:
+  /store-api-key:
+    post:
+      summary: Store an encrypted API key (server-side)
+      security:
+        - AppCheck: []
+        - FirebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [apiKey]
+              properties:
+                apiKey: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  requestId: { type: string }
+        '4XX': { description: Client error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '5XX': { description: Server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
-tags:
-  - name: API Keys
-    description: Secure API key management operations
-  - name: Health
-    description: Service health and status checks
+  /use-api-key:
+    post:
+      summary: Proxy a Gemini content generation request using stored API key
+      security:
+        - AppCheck: []
+        - FirebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                prompt: { type: string }
+                model: { type: string, default: gemini-2.5-flash }
+      responses:
+        '200':
+          description: Gemini API response passthrough
+          content:
+            application/json:
+              schema:
+                type: object
+        '4XX': { description: Client error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '5XX': { description: Server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /check-api-key:
+    get:
+      summary: Check if the user has a stored API key
+      security:
+        - AppCheck: []
+        - FirebaseAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hasApiKey: { type: boolean }
+                  requestId: { type: string }
+        '4XX': { description: Client error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '5XX': { description: Server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /remove-api-key:
+    delete:
+      summary: Remove the stored API key
+      security:
+        - AppCheck: []
+        - FirebaseAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  requestId: { type: string }
+        '4XX': { description: Client error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '5XX': { description: Server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+

@@ -16,13 +16,43 @@ if (!admin.apps.length) {
   });
 }
 
+// Observability & Error helpers
+const { randomUUID } = require('crypto');
+app.use((req, res, next) => {
+  req.requestId = randomUUID();
+  req.startTime = Date.now();
+  res.setHeader('X-Request-Id', req.requestId);
+  next();
+});
+app.use((req, res, next) => {
+  res.on('finish', () => {
+    const durationMs = Date.now() - (req.startTime || Date.now());
+    const log = {
+      severity: res.statusCode >= 500 ? 'ERROR' : 'INFO',
+      requestId: req.requestId,
+      method: req.method,
+      path: req.originalUrl || req.url,
+      status: res.statusCode,
+      durationMs,
+      appId: req.appCheckClaims?.app_id || req.appCheckClaims?.appId || undefined,
+    };
+    try { console.log(JSON.stringify(log)); } catch (_) { console.log(log); }
+  });
+  next();
+});
+function sendError(req, res, httpStatus, code, message, details) {
+  const payload = { code, message };
+  if (details) payload.details = details;
+  payload.requestId = req.requestId || res.getHeader('X-Request-Id');
+  res.status(httpStatus).json(payload);
+}
+
 // App Check verification middleware
 const appCheckVerification = async (req, res, next) => {
   const appCheckToken = req.header('X-Firebase-AppCheck');
 
   if (!appCheckToken) {
-    res.status(401);
-    return res.json({ error: 'App Check token required' });
+    return sendError(req, res, 401, 'APP_CHECK_REQUIRED', 'App Check token required');
   }
 
   try {
@@ -31,8 +61,7 @@ const appCheckVerification = async (req, res, next) => {
     return next();
   } catch (err) {
     console.error('App Check verification failed:', err);
-    res.status(401);
-    return res.json({ error: 'Invalid App Check token' });
+    return sendError(req, res, 401, 'APP_CHECK_INVALID', 'Invalid App Check token');
   }
 };
 
@@ -62,12 +91,12 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
   const { projectId, narrationScript } = req.body;
 
   if (!projectId || !narrationScript) {
-    return res.status(400).json({ error: 'Missing required fields: projectId and narrationScript' });
+    return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required fields: projectId and narrationScript');
   }
 
   if (!process.env.GEMINI_API_KEY) {
     console.error('Missing environment variable: GEMINI_API_KEY');
-    return res.status(500).json({ error: 'Server configuration error: Missing API key for music service.' });
+    return sendError(req, res, 500, 'CONFIG', 'Missing GEMINI_API_KEY environment variable');
   }
 
   console.log(`Received music composition request for projectId: ${projectId}`);
@@ -98,12 +127,13 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
 
     res.status(200).json({ 
       gsMusicPath: gsMusicPath,
-      musicPrompt: musicPrompt
+      musicPrompt: musicPrompt,
+      requestId: req.requestId
     });
 
   } catch (error) {
     console.error(`Error composing music for projectId ${projectId}:`, error);
-    res.status(500).json({ error: 'Failed to compose music.', details: error.message });
+    return sendError(req, res, 500, 'INTERNAL', 'Failed to compose music.', error.message);
   }
 });
 

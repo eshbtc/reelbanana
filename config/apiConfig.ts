@@ -136,10 +136,12 @@ export const apiCall = async (url: string, body: object, errorMessage: string) =
     });
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ 
-        details: `HTTP ${response.status}: ${response.statusText}` 
-      }));
-      throw new Error(`${errorMessage}: ${errorData.details || response.statusText}`);
+      let errorData: any = null;
+      try { errorData = await response.json(); } catch (_) {}
+      const code = errorData?.code || `HTTP_${response.status}`;
+      const msg = errorData?.message || response.statusText;
+      const reqId = errorData?.requestId ? ` (req: ${errorData.requestId})` : '';
+      throw new Error(`${errorMessage} [${code}] ${msg}${reqId}`);
     }
     
     return response.json();

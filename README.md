@@ -62,6 +62,13 @@ ReelBanana is a revolutionary AI-powered storytelling platform that transforms y
 - **Render Service**: [https://reel-banana-render-423229273041.us-central1.run.app](https://reel-banana-render-423229273041.us-central1.run.app)
 - **Narrate Service**: [https://reel-banana-narrate-423229273041.us-central1.run.app](https://reel-banana-narrate-423229273041.us-central1.run.app)
 
+## 📖 API Documentation
+
+- Full API specs and Postman collection are available under `docs/api/`:
+  - OpenAPI specs: `docs/api/*.yaml`
+  - Overview and usage: `docs/api/README.md`
+  - Postman collection and environment: `docs/api/postman/`
+
 ## 📚 **API Documentation**
 
 ### **Complete API Reference**

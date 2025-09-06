@@ -1,30 +1,35 @@
 openapi: 3.0.3
 info:
   title: ReelBanana Upload Assets API
-  description: |
-    Service for uploading images to Google Cloud Storage for video processing.
-    All endpoints require App Check verification for security.
   version: 1.0.0
-  contact:
-    name: ReelBanana API Support
-    url: https://reel-banana-35a54.web.app
 servers:
   - url: https://reel-banana-upload-assets-423229273041.us-central1.run.app
-    description: Production server
+    description: Production
   - url: http://localhost:8083
-    description: Development server
-
-security:
-  - AppCheck: []
-
+    description: Local
+components:
+  securitySchemes:
+    AppCheck:
+      type: apiKey
+      in: header
+      name: X-Firebase-AppCheck
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: string
+        requestId:
+          type: string
 paths:
   /upload-image:
     post:
-      summary: Upload image to Google Cloud Storage
-      description: |
-        Uploads a base64-encoded image to Google Cloud Storage for use in video processing.
-        The image is stored in the project-specific folder for organization.
-      operationId: uploadImage
+      summary: Upload a base64-encoded JPEG for a project
       security:
         - AppCheck: []
       requestBody:
@@ -33,33 +38,19 @@ paths:
           application/json:
             schema:
               type: object
-              required:
-                - projectId
-                - fileName
-                - base64Image
+              required: [projectId, fileName, base64Image]
               properties:
                 projectId:
                   type: string
-                  description: Unique project identifier
-                  example: "proj_123456789"
                 fileName:
                   type: string
-                  description: Name for the uploaded file
-                  example: "scene_1.jpg"
+                  example: scene-0-0.jpeg
                 base64Image:
                   type: string
-                  description: Base64-encoded image data
-                  example: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ..."
-            examples:
-              scene_image:
-                summary: Scene image upload
-                value:
-                  projectId: "proj_123456789"
-                  fileName: "scene_1.jpg"
-                  base64Image: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ..."
+                  description: data URI (e.g., data:image/jpeg;base64,...)
       responses:
         '200':
-          description: Image uploaded successfully
+          description: Uploaded
           content:
             application/json:
               schema:
@@ -67,74 +58,24 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: "Image uploaded successfully."
                   gcsPath:
                     type: string
-                    description: Google Cloud Storage path
-                    example: "gs://oneminute-movie-in/proj_123456789/scene_1.jpg"
-              examples:
-                success:
-                  summary: Successful upload
-                  value:
-                    message: "Image uploaded successfully."
-                    gcsPath: "gs://oneminute-movie-in/proj_123456789/scene_1.jpg"
         '400':
-          description: Bad request - missing required fields
+          description: Invalid arguments
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                missing_fields:
-                  summary: Missing required fields
-                  value:
-                    error: "Missing required fields: projectId, fileName, base64Image"
+                $ref: '#/components/schemas/Error'
         '401':
-          description: Unauthorized - App Check token required
+          description: App Check required/invalid
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                app_check_required:
-                  summary: App Check token required
-                  value:
-                    error: "App Check token required"
+                $ref: '#/components/schemas/Error'
         '500':
-          description: Internal server error
+          description: Internal error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                upload_failed:
-                  summary: Upload failed
-                  value:
-                    error: "Failed to upload image to Google Cloud Storage"
+                $ref: '#/components/schemas/Error'
 
-components:
-  securitySchemes:
-    AppCheck:
-      type: apiKey
-      in: header
-      name: X-Firebase-AppCheck
-      description: Firebase App Check token for request verification
-  schemas:
-    ErrorResponse:
-      type: object
-      required:
-        - error
-      properties:
-        error:
-          type: string
-          description: Error message
-        details:
-          type: string
-          description: Additional error details (optional)
-      example:
-        error: "An error occurred"
-        details: "Additional context about the error"
-
-tags:
-  - name: Assets
-    description: Image upload and management operations
