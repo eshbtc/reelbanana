@@ -84,7 +84,10 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
       try {
         const hasGoogleKey = await hasUserApiKey(currentUser.uid, 'google');
         const hasFalKey = await hasUserApiKey(currentUser.uid, 'fal');
-        setUserHasApiKey(hasGoogleKey || hasFalKey);
+        console.log('🔍 BYOK Check: Google key =', hasGoogleKey, ', FAL key =', hasFalKey);
+        const hasAnyKey = hasGoogleKey || hasFalKey;
+        setUserHasApiKey(hasAnyKey);
+        console.log('🔍 BYOK: userHasApiKey =', hasAnyKey);
       } catch (error) {
         console.error('Error checking API key:', error);
         setUserHasApiKey(false);
@@ -392,20 +395,20 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                        disabled={isLoadingStory}
                    />
                    
-                   {userHasApiKey && (
-                     <div className="flex items-center gap-3">
-                       <input
-                         type="checkbox"
-                         id="forceUseApiKey"
-                         checked={forceUseApiKey}
-                         onChange={(e) => setForceUseApiKey(e.target.checked)}
-                         className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
-                       />
-                       <label htmlFor="forceUseApiKey" className="text-sm text-gray-300">
-                         🔑 Use My API Key (Skip free credits)
-                       </label>
-                     </div>
-                   )}
+                   <div className="flex items-center gap-3">
+                     <input
+                       type="checkbox"
+                       id="forceUseApiKey"
+                       checked={forceUseApiKey}
+                       onChange={(e) => setForceUseApiKey(e.target.checked)}
+                       disabled={!userHasApiKey}
+                       className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2 disabled:opacity-50"
+                     />
+                     <label htmlFor="forceUseApiKey" className={`text-sm ${userHasApiKey ? 'text-gray-300' : 'text-gray-500'}`}>
+                       🔑 Use My API Key (Skip free credits)
+                       {!userHasApiKey && <span className="text-xs block text-gray-600">→ Add an API key in Dashboard to enable</span>}
+                     </label>
+                   </div>
                    
                    <div className="flex flex-col md:flex-row gap-4">
                    <button
@@ -513,20 +516,20 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie }) => {
                   }
                 </div>
                 
-                {userHasApiKey && (
-                  <div className="flex items-center gap-3 mb-4">
-                    <input
-                      type="checkbox"
-                      id="forceUseApiKeyImagesGenerate"
-                      checked={forceUseApiKey}
-                      onChange={(e) => setForceUseApiKey(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
-                    />
-                    <label htmlFor="forceUseApiKeyImagesGenerate" className="text-sm text-gray-300">
-                      🔑 Use My API Key for image generation (Skip free credits)
-                    </label>
-                  </div>
-                )}
+                <div className="flex items-center gap-3 mb-4">
+                  <input
+                    type="checkbox"
+                    id="forceUseApiKeyImagesGenerate"
+                    checked={forceUseApiKey}
+                    onChange={(e) => setForceUseApiKey(e.target.checked)}
+                    disabled={!userHasApiKey}
+                    className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2 disabled:opacity-50"
+                  />
+                  <label htmlFor="forceUseApiKeyImagesGenerate" className={`text-sm ${userHasApiKey ? 'text-gray-300' : 'text-gray-500'}`}>
+                    🔑 Use My API Key for image generation (Skip free credits)
+                    {!userHasApiKey && <span className="text-xs block text-gray-600">→ Add an API key in Dashboard to enable</span>}
+                  </label>
+                </div>
                 
                 <div className="flex items-center gap-2">
                     <div className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200">

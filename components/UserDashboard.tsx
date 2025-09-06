@@ -1,6 +1,6 @@
 // User Dashboard component for managing profile, API keys, and usage
 import React, { useState, useEffect } from 'react';
-import { UserProfile, getUserProfile, updateUserApiKey, getUserUsageStats } from '../services/authService';
+import { UserProfile, getUserProfile, updateUserApiKey, getUserUsageStats, resetCreditsForTesting } from '../services/authService';
 import { getCurrentUser } from '../services/authService';
 import { API_ENDPOINTS } from '../config/apiConfig';
 import { authFetch } from '../lib/authFetch';
@@ -282,6 +282,31 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
                 {usageStats.hasCustomApiKey ? 'Configured' : 'Not set'}
               </div>
             </div>
+          </div>
+          
+          {/* Temporary: Update to 100 Credits */}
+          <div className="mt-6 text-center">
+            <button
+              onClick={async () => {
+                const currentUser = getCurrentUser();
+                if (currentUser) {
+                  try {
+                    await resetCreditsForTesting(currentUser.uid);
+                    await loadUserData(); // Reload data
+                    alert('Credits updated to 100!');
+                  } catch (error) {
+                    console.error('Error updating credits:', error);
+                    alert('Failed to update credits. Check console for details.');
+                  }
+                }
+              }}
+              className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors duration-200 border border-green-500/30"
+            >
+              🎉 Upgrade to 100 Credits (One-time)
+            </button>
+            <p className="text-sm text-gray-400 mt-2">
+              Update existing account to new 100-credit starting amount
+            </p>
           </div>
         </div>
 
