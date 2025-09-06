@@ -279,7 +279,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 8086;
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Polish service listening on port ${PORT}`);
 });

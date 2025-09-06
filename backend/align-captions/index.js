@@ -217,7 +217,7 @@ app.get('/health', (req, res) => {
 });
 
 
-const PORT = process.env.PORT || 8081; // Use a different port than narrate service
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Align-captions service listening on port ${PORT}`);
 });

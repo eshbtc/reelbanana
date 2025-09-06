@@ -205,7 +205,7 @@ function createPlaceholderAudio(musicPrompt) {
   return buffer;
 }
 
-const PORT = process.env.PORT || 8084;
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Music composition service listening on port ${PORT}`);
 });

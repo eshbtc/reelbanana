@@ -194,7 +194,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'upload-assets', bucket: bucketName, time: new Date().toISOString() });
 });
 
-const PORT = process.env.PORT || 8083;
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Upload-assets service listening on port ${PORT}`);
 });
