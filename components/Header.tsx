@@ -3,8 +3,8 @@ import Logo from './Logo';
 import AuthButton from './AuthButton';
 
 interface HeaderProps {
-  onNavigate?: (view: 'editor' | 'gallery' | 'dashboard' | 'projects' | 'pricing') => void;
-  currentView?: 'editor' | 'gallery' | 'dashboard' | 'projects' | 'pricing';
+  onNavigate?: (view: 'editor' | 'gallery' | 'dashboard' | 'projects') => void;
+  currentView?: 'editor' | 'gallery' | 'dashboard' | 'projects';
 }
 
 const Header: React.FC<HeaderProps> = ({ onNavigate, currentView = 'editor' }) => {
@@ -61,16 +61,6 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentView = 'editor' }) =
                 }`}
               >
                 My Projects
-              </button>
-              <button
-                onClick={() => onNavigate('pricing')}
-                className={`px-4 py-2 rounded-lg transition-colors ${
-                  currentView === 'pricing'
-                    ? 'bg-amber-500 text-white'
-                    : 'text-gray-300 hover:text-white hover:bg-gray-800'
-                }`}
-              >
-                Pricing
               </button>
             </nav>
           )}

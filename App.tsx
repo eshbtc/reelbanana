@@ -7,7 +7,6 @@ import MoviePlayer from './components/MoviePlayer';
 import PublicGallery from './components/PublicGallery';
 import UserDashboard from './components/UserDashboard';
 import MyProjectsPage from './components/MyProjectsPage';
-import PricingPage from './components/PricingPage';
 import AdBlockerWarning from './components/AdBlockerWarning';
 import { Scene } from './types';
 import { getCurrentUser } from './services/authService';
@@ -15,14 +14,13 @@ import { API_ENDPOINTS } from './config/apiConfig';
 import { authFetch } from './lib/authFetch';
 // Removed auto-publish; handled in MoviePlayer for one-click publish UX
 
-type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects' | 'pricing';
+type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects';
 
 const App: React.FC = () => {
   // Initialize view based on URL path
   const getInitialView = (): View => {
     const path = window.location.pathname;
     if (path === '/projects') return 'projects';
-    if (path === '/pricing') return 'pricing';
     if (path === '/gallery') return 'gallery';
     if (path === '/dashboard') return 'dashboard';
     return 'editor';
@@ -96,7 +94,7 @@ const App: React.FC = () => {
     setProjectId(null);
   }, []);
 
-  const handleNavigate = useCallback((newView: 'editor' | 'gallery' | 'dashboard' | 'projects' | 'pricing') => {
+  const handleNavigate = useCallback((newView: 'editor' | 'gallery' | 'dashboard' | 'projects') => {
     setView(newView);
     
     // Update URL
@@ -123,8 +121,6 @@ const App: React.FC = () => {
         return <UserDashboard onClose={() => setView('editor')} />;
       case 'projects':
         return <MyProjectsPage />;
-      case 'pricing':
-        return <PricingPage />;
       case 'editor':
       default:
         return (
