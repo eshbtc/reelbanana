@@ -267,9 +267,19 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
               playsInline
               preload="metadata"
               loop
-              onClick={() => {
+              onClick={async () => {
                 if (videoRef.current) {
+                  console.log('🎬 MoviePlayer: User clicked video, attempting to unmute');
                   videoRef.current.muted = false;
+                  try {
+                    // Try to play with audio enabled
+                    await videoRef.current.play();
+                    console.log('🎬 MoviePlayer: Video unmuted and playing');
+                  } catch (error) {
+                    console.warn('🎬 MoviePlayer: Could not play with audio:', error);
+                    // Fallback: just unmute without playing
+                    videoRef.current.muted = false;
+                  }
                 }
               }}
               onError={(e) => {
@@ -285,15 +295,31 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
               }}
               onCanPlay={() => {
                 console.log('🎬 MoviePlayer: Video can play, duration:', videoRef.current?.duration);
+                console.log('🎬 MoviePlayer: Audio tracks:', videoRef.current?.audioTracks?.length || 0);
+                console.log('🎬 MoviePlayer: Has audio:', !videoRef.current?.muted && videoRef.current?.audioTracks?.length > 0);
+              }}
+              onLoadedMetadata={() => {
+                console.log('🎬 MoviePlayer: Metadata loaded');
+                console.log('🎬 MoviePlayer: Audio tracks available:', videoRef.current?.audioTracks?.length || 0);
+                console.log('🎬 MoviePlayer: Video duration:', videoRef.current?.duration);
+                console.log('🎬 MoviePlayer: Video muted:', videoRef.current?.muted);
               }}
             >
               Your browser does not support the video tag.
             </video>
             {/* Unmute indicator */}
             <div className="absolute top-4 right-4 bg-black bg-opacity-50 text-white px-3 py-1 rounded-full text-sm cursor-pointer hover:bg-opacity-70 transition-all"
-                 onClick={() => {
+                 onClick={async () => {
                    if (videoRef.current) {
+                     console.log('🎬 MoviePlayer: User clicked unmute button');
                      videoRef.current.muted = false;
+                     try {
+                       await videoRef.current.play();
+                       console.log('🎬 MoviePlayer: Video unmuted via button');
+                     } catch (error) {
+                       console.warn('🎬 MoviePlayer: Could not play with audio via button:', error);
+                       videoRef.current.muted = false;
+                     }
                    }
                  }}>
               🔊 Click to unmute
