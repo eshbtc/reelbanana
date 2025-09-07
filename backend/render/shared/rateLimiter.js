@@ -47,12 +47,12 @@ async function getUserQuotaLimits(userId, userPlan = null) {
   userPlan = userPlan || 'free';
   const quotas = {
     free: {
-      narrate: { daily: 10, hourly: 3 },
-      align: { daily: 10, hourly: 3 },
-      compose: { daily: 5, hourly: 2 },
-      render: { daily: 5, hourly: 2 },
-      polish: { daily: 2, hourly: 1 },
-      upload: { daily: 50, hourly: 10 }
+      narrate: { daily: 100, hourly: 20 },
+      align: { daily: 100, hourly: 20 },
+      compose: { daily: 50, hourly: 10 },
+      render: { daily: 50, hourly: 10 },
+      polish: { daily: 20, hourly: 5 },
+      upload: { daily: 500, hourly: 50 }
     },
     pro: {
       narrate: { daily: 100, hourly: 20 },
