@@ -20,6 +20,7 @@ try {
 }
 const { randomUUID } = require('crypto');
 const { ElevenLabsClient } = require('elevenlabs');
+const { createHash } = require('crypto');
 const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
 const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
 
@@ -163,6 +164,26 @@ function generateFallbackPrompt(narrationScript) {
   }
 }
 
+// Normalize scripts for cache matching (punctuation/spacing/quotes)
+function normalizeScriptForCache(text) {
+  if (!text) return '';
+  let s = String(text).trim();
+  s = s
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/([!?.,])\1+/g, '$1');
+  return s.toLowerCase();
+}
+
+// Content-addressable cache key for music results (supports exact and normalized)
+function musicCacheKey({ narrationScript, normalized = false }) {
+  const base = normalized ? normalizeScriptForCache(narrationScript) : String(narrationScript || '').trim();
+  const payload = JSON.stringify({ v: 2, text: base, duration: 20, format: 'wav' });
+  return createHash('sha256').update(payload).digest('hex');
+}
+
 /**
  * POST /compose-music
  * Generates a musical score based on narration script mood and saves it to GCS.
@@ -206,6 +227,26 @@ app.post('/compose-music', ...createExpensiveOperationLimiter('compose'), appChe
         cached: true
       });
     }
+    // Global cache by narration script (exact then normalized)
+    const exactId = musicCacheKey({ narrationScript, normalized: false });
+    const normId  = musicCacheKey({ narrationScript, normalized: true });
+    const exactFile = bucket.file(`cache/music/exact/${exactId}.wav`);
+    const normFile  = bucket.file(`cache/music/norm/${normId}.wav`);
+    const [[exactExists],[normExists]] = await Promise.all([exactFile.exists(), normFile.exists()]);
+    if (exactExists || normExists) {
+      const source = exactExists ? exactFile : normFile;
+      await source.copy(file);
+      const gsMusicPath = `gs://${bucketName}/${fileName}`;
+      console.log(`Music cache hit ${exactExists ? exactId : normId} (${exactExists ? 'exact' : 'norm'}); copied to ${gsMusicPath}`);
+      metrics.cacheHits++;
+      return res.status(200).json({ 
+        gsMusicPath,
+        musicPrompt: 'Previously generated',
+        requestId: req.requestId,
+        cached: true,
+        cacheId: exactExists ? exactId : normId
+      });
+    }
     // 1. Generate music prompt using AI analysis of narration content
     const musicPrompt = await generateMusicPromptWithAI(narrationScript);
     console.log(`Generated music prompt: "${musicPrompt}"`);
@@ -222,6 +263,18 @@ app.post('/compose-music', ...createExpensiveOperationLimiter('compose'), appChe
 
     const gsMusicPath = `gs://${bucketName}/${fileName}`;
     console.log(`Successfully created music for ${projectId} at ${gsMusicPath}`);
+
+    // Save to global cache (both exact and normalized variants)
+    try {
+      await Promise.all([
+        file.copy(exactFile),
+        file.copy(normFile)
+      ]);
+      console.log(`Saved music to cache keys exact=${exactId}, norm=${normId}`);
+      metrics.cacheWrites = (metrics.cacheWrites || 0) + 1;
+    } catch (e) {
+      console.warn('Failed to write music cache:', e.message);
+    }
 
     res.status(200).json({ 
       gsMusicPath: gsMusicPath,

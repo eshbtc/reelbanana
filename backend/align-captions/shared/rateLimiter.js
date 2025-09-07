@@ -79,6 +79,11 @@ async function getUserQuotaLimits(userId, userPlan = null) {
  * Check if user has exceeded quota for a specific operation
  */
 async function checkUserQuota(userId, operation) {
+  // DEV_MODE: Disable all quotas for testing
+  if (process.env.DEV_MODE === 'true') {
+    return { allowed: true, remaining: 999999 };
+  }
+  
   if (!userId) return { allowed: true, remaining: 0 };
   
   const now = Date.now();
@@ -193,6 +198,11 @@ function createOperationRateLimiter(operation, options = {}) {
  * Create IP-based rate limiter for anonymous users
  */
 function createIPRateLimiter(options = {}) {
+  // DEV_MODE: Disable IP rate limiting for testing
+  if (process.env.DEV_MODE === 'true') {
+    return (req, res, next) => next(); // No-op middleware
+  }
+  
   const {
     windowMs = 15 * 60 * 1000, // 15 minutes
     max = 50, // requests per window

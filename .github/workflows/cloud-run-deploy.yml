@@ -57,6 +57,7 @@ jobs:
         run: |
           ENV_FLAGS=""
           [[ -n "$INPUT_BUCKET_NAME" ]] && ENV_FLAGS+=" --set-env-vars=INPUT_BUCKET_NAME=$INPUT_BUCKET_NAME"
+          ENV_FLAGS+=" --set-env-vars=DEV_MODE=true"
           gcloud run deploy reel-banana-upload-assets --source backend/upload-assets --allow-unauthenticated $ENV_FLAGS
         env:
           INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
@@ -66,6 +67,7 @@ jobs:
         run: |
           ENV_FLAGS=""
           [[ -n "$INPUT_BUCKET_NAME" ]] && ENV_FLAGS+=" --set-env-vars=INPUT_BUCKET_NAME=$INPUT_BUCKET_NAME"
+          ENV_FLAGS+=" --set-env-vars=DEV_MODE=true"
           ENV_FLAGS+=" --set-secrets=ELEVENLABS_API_KEY=ELEVENLABS_API_KEY_VOICE_NEW:latest"
           gcloud run deploy reel-banana-narrate --source backend/narrate --allow-unauthenticated $ENV_FLAGS
         env:
@@ -76,6 +78,7 @@ jobs:
         run: |
           ENV_FLAGS=""
           [[ -n "$INPUT_BUCKET_NAME" ]] && ENV_FLAGS+=" --set-env-vars=INPUT_BUCKET_NAME=$INPUT_BUCKET_NAME"
+          ENV_FLAGS+=" --set-env-vars=DEV_MODE=true"
           gcloud run deploy reel-banana-align-captions --source backend/align-captions --allow-unauthenticated $ENV_FLAGS
         env:
           INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
@@ -86,6 +89,7 @@ jobs:
           ENV_FLAGS=""
           [[ -n "$GEMINI_API_KEY" ]] && ENV_FLAGS+=" --set-env-vars=GEMINI_API_KEY=$GEMINI_API_KEY"
           [[ -n "$INPUT_BUCKET_NAME" ]] && ENV_FLAGS+=" --set-env-vars=INPUT_BUCKET_NAME=$INPUT_BUCKET_NAME"
+          ENV_FLAGS+=" --set-env-vars=DEV_MODE=true"
           ENV_FLAGS+=" --set-secrets=ELEVENLABS_MUSIC_API_KEY=ELEVENLABS_MUSIC_API_KEY:latest"
           gcloud run deploy reel-banana-compose-music --source backend/compose-music --allow-unauthenticated $ENV_FLAGS
         env:
@@ -98,28 +102,32 @@ jobs:
           ENV_FLAGS=""
           [[ -n "$INPUT_BUCKET_NAME" ]] && ENV_FLAGS+=" --set-env-vars=INPUT_BUCKET_NAME=$INPUT_BUCKET_NAME"
           [[ -n "$OUTPUT_BUCKET_NAME" ]] && ENV_FLAGS+=" --set-env-vars=OUTPUT_BUCKET_NAME=$OUTPUT_BUCKET_NAME"
+          [[ -n "$FAL_RENDER_MODEL" ]] && ENV_FLAGS+=" --set-env-vars=FAL_RENDER_MODEL=$FAL_RENDER_MODEL"
+          [[ -n "$RENDER_ENGINE" ]] && ENV_FLAGS+=" --set-env-vars=RENDER_ENGINE=$RENDER_ENGINE"
+          ENV_FLAGS+=" --set-env-vars=DEV_MODE=true"
+          ENV_FLAGS+=" --set-secrets=FAL_RENDER_API_KEY=FAL_RENDER_API_KEY:latest"
           gcloud run deploy reel-banana-render --source backend/render --allow-unauthenticated $ENV_FLAGS
         env:
           INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
           OUTPUT_BUCKET_NAME: ${{ secrets.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
+          FAL_RENDER_MODEL: ${{ secrets.FAL_RENDER_MODEL || 'fal-ai/veo3/fast/image-to-video' }}
+          RENDER_ENGINE: ${{ secrets.RENDER_ENGINE || 'fal' }}
 
       - name: Deploy polish
         if: steps.changes.outputs.polish == 'true'
         run: |
           ENV_FLAGS=""
           [[ -n "$API_KEY_SERVICE_URL" ]] && ENV_FLAGS+=" --set-env-vars=API_KEY_SERVICE_URL=$API_KEY_SERVICE_URL"
-          [[ -n "$FAL_API_KEY" ]] && ENV_FLAGS+=" --set-env-vars=FAL_API_KEY=$FAL_API_KEY"
-          [[ -n "$FAL_KEY" ]] && ENV_FLAGS+=" --set-env-vars=FAL_KEY=$FAL_KEY"
           [[ -n "$FAL_MODEL_UPSCALE" ]] && ENV_FLAGS+=" --set-env-vars=FAL_MODEL_UPSCALE=$FAL_MODEL_UPSCALE"
           [[ -n "$FAL_MODEL_INTERP" ]] && ENV_FLAGS+=" --set-env-vars=FAL_MODEL_INTERP=$FAL_MODEL_INTERP"
           [[ -n "$FAL_UPSCALE_ENDPOINT" ]] && ENV_FLAGS+=" --set-env-vars=FAL_UPSCALE_ENDPOINT=$FAL_UPSCALE_ENDPOINT"
           [[ -n "$FAL_INTERP_ENDPOINT" ]] && ENV_FLAGS+=" --set-env-vars=FAL_INTERP_ENDPOINT=$FAL_INTERP_ENDPOINT"
           [[ -n "$OUTPUT_BUCKET_NAME" ]] && ENV_FLAGS+=" --set-env-vars=OUTPUT_BUCKET_NAME=$OUTPUT_BUCKET_NAME"
+          ENV_FLAGS+=" --set-env-vars=DEV_MODE=true"
+          ENV_FLAGS+=" --set-secrets=FAL_POLISH_API_KEY=FAL_POLISH_API_KEY:latest"
           gcloud run deploy reel-banana-polish --source backend/polish --allow-unauthenticated $ENV_FLAGS
         env:
           API_KEY_SERVICE_URL: ${{ secrets.API_KEY_SERVICE_URL }}
-          FAL_API_KEY: ${{ secrets.FAL_API_KEY }}
-          FAL_KEY: ${{ secrets.FAL_KEY }}
           FAL_MODEL_UPSCALE: ${{ secrets.FAL_MODEL_UPSCALE }}
           FAL_MODEL_INTERP: ${{ secrets.FAL_MODEL_INTERP }}
           FAL_UPSCALE_ENDPOINT: ${{ secrets.FAL_UPSCALE_ENDPOINT }}
@@ -131,6 +139,7 @@ jobs:
         run: |
           # Enable CORS origins via env if needed, otherwise deploy with defaults
           ENV_FLAGS=""
+          ENV_FLAGS+=" --set-env-vars=DEV_MODE=true"
           gcloud run deploy reel-banana-api-key-service --source backend/api-key-service --allow-unauthenticated $ENV_FLAGS
 
       - name: Deployment Summary

@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "smoke:health": "bash scripts/smoke-health.sh",
-    "e2e": "node scripts/e2e-pipeline.mjs"
+    "e2e": "node scripts/e2e-pipeline.mjs",
+    "publish:e2e": "node scripts/publish-only.mjs"
   },
   "dependencies": {
     "firebase": "^12.2.1",
@@ -17,6 +18,7 @@
     "react-dom": "^19.1.1"
   },
   "devDependencies": {
+    "@fal-ai/client": "^1.6.2",
     "@types/node": "^22.14.0",
     "playwright": "^1.55.0",
     "typescript": "~5.8.2",

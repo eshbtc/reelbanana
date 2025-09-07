@@ -2,6 +2,7 @@
 const express = require('express');
 const cors = require('cors');
 const { ElevenLabsClient } = require('elevenlabs');
+const { createHash } = require('crypto');
 const { Storage } = require('@google-cloud/storage');
 // Update ElevenLabs API key - trigger redeployment
 const admin = require('firebase-admin');
@@ -81,6 +82,32 @@ const elevenlabs = new ElevenLabsClient({
 const storage = new Storage();
 const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 
+// Normalize scripts for cache matching (punctuation/spacing/quotes)
+function normalizeScriptForCache(text) {
+  if (!text) return '';
+  let s = String(text).trim();
+  s = s
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/([!?.,])\1+/g, '$1'); // collapse repeated punct
+  return s.toLowerCase();
+}
+
+// Content-addressable cache key for TTS results (supports exact and normalized)
+function ttsCacheKey({ text, voiceId, emotion, normalized = false }) {
+  const base = normalized ? normalizeScriptForCache(text) : String(text || '').trim();
+  const payload = JSON.stringify({ v: 2, base, voiceId: voiceId || '21m00Tcm4TlvDq8ikWAM', emotion: emotion || 'neutral' });
+  return createHash('sha256').update(payload).digest('hex');
+}
+
+// Simple cache metrics
+const cacheMetrics = {
+  hits: 0,
+  writes: 0,
+};
+
 // Retry utility with exponential backoff
 async function retryWithBackoff(operation, maxRetries = 3, baseDelay = 1000) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -141,6 +168,21 @@ app.post('/narrate', ...createExpensiveOperationLimiter('narrate'), appCheckVeri
         gsAudioPath: gcsPath,
         cached: true 
       });
+    }
+
+    // Global content-addressable cache (cross-project: exact then normalized)
+    const exactId = ttsCacheKey({ text: narrationScript, voiceId: '21m00Tcm4TlvDq8ikWAM', emotion, normalized: false });
+    const normId  = ttsCacheKey({ text: narrationScript, voiceId: '21m00Tcm4TlvDq8ikWAM', emotion, normalized: true });
+    const exactFile = bucket.file(`cache/narrate/exact/${exactId}.mp3`);
+    const normFile  = bucket.file(`cache/narrate/norm/${normId}.mp3`);
+    const [[exactExists],[normExists]] = await Promise.all([exactFile.exists(), normFile.exists()]);
+    if (exactExists || normExists) {
+      const source = exactExists ? exactFile : normFile;
+      await source.copy(file);
+      const gcsPath = `gs://${bucketName}/${fileName}`;
+      console.log(`Narration cache hit ${exactExists ? exactId : normId} (${exactExists ? 'exact' : 'norm'}); copied to ${gcsPath}`);
+      cacheMetrics.hits++;
+      return res.status(200).json({ gsAudioPath: gcsPath, cached: true, cacheId: exactExists ? exactId : normId });
     }
     
     // Map simple emotion tags to ElevenLabs settings
@@ -219,6 +261,18 @@ app.post('/narrate', ...createExpensiveOperationLimiter('narrate'), appCheckVeri
     const gcsPath = `gs://${bucketName}/${fileName}`;
     console.log(`Successfully uploaded narration for ${projectId} to ${gcsPath}`);
 
+    // Save to global cache (both exact and normalized variants) for future reuse
+    try {
+      await Promise.all([
+        file.copy(exactFile),
+        file.copy(normFile)
+      ]);
+      console.log(`Saved narration to cache keys exact=${exactId}, norm=${normId}`);
+      cacheMetrics.writes++;
+    } catch (e) {
+      console.warn('Failed to write narration cache:', e.message);
+    }
+
     res.status(200).json({ gsAudioPath: gcsPath });
 
   } catch (error) {
@@ -242,6 +296,16 @@ createHealthEndpoints(app, 'narrate',
     }
   }
 );
+
+// Cache status (protected)
+app.get('/cache-status', appCheckVerification, (req, res) => {
+  res.json({
+    service: 'narrate',
+    bucket: bucketName,
+    cache: cacheMetrics,
+    now: new Date().toISOString(),
+  });
+});
 
 // Note: No music generation endpoint is included here as per the latest stable implementation.
 

@@ -130,7 +130,7 @@ app.post('/polish', ...createExpensiveOperationLimiter('polish'), appCheckVerifi
 
     // Fallback to default FAL key if no customer key
     if (!key) {
-      key = process.env.FAL_API_KEY || process.env.FAL_KEY;
+      key = process.env.FAL_POLISH_API_KEY || process.env.FAL_API_KEY || process.env.FAL_KEY;
       if (!key) {
         console.warn('No FAL API key available (neither customer nor default). Returning original video URL.');
         return res.status(200).json({ polishedUrl: videoUrl });
@@ -317,12 +317,45 @@ app.post('/polish', ...createExpensiveOperationLimiter('polish'), appCheckVerifi
   }
 });
 
+// FAL API health check function
+async function checkFalApiHealth() {
+  const key = process.env.FAL_POLISH_API_KEY || process.env.FAL_API_KEY || process.env.FAL_KEY;
+  if (!key) {
+    throw new Error('No FAL API key configured');
+  }
+  
+  try {
+    // Test FAL API with a simple request
+    const response = await fetch('https://fal.run/fal-ai/fast-sdxl', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        prompt: 'test',
+        image_size: 'square_hd',
+        num_inference_steps: 1,
+        enable_safety_checker: false
+      })
+    });
+    
+    if (response.ok) {
+      return { message: 'FAL API accessible and working' };
+    } else {
+      throw new Error(`FAL API returned ${response.status}: ${response.statusText}`);
+    }
+  } catch (error) {
+    throw new Error(`FAL API health check failed: ${error.message}`);
+  }
+}
+
 // Lightweight health check (no App Check required)
 // Health check endpoints
 createHealthEndpoints(app, 'polish', 
   {
     usingApiKeyService: !!process.env.API_KEY_SERVICE_URL,
-    hasDefaultFalKey: !!(process.env.FAL_API_KEY || process.env.FAL_KEY)
+    hasDefaultFalKey: !!(process.env.FAL_POLISH_API_KEY || process.env.FAL_API_KEY || process.env.FAL_KEY)
   },
   {
     dependencies: {
@@ -332,7 +365,8 @@ createHealthEndpoints(app, 'polish',
           throw new Error('API Key Service URL not configured');
         }
         return { message: 'API Key Service URL configured' };
-      }
+      },
+      falApi: () => checkFalApiHealth()
     }
   }
 );

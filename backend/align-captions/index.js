@@ -3,6 +3,7 @@ const cors = require('cors');
 const { SpeechClient } = require('@google-cloud/speech');
 const { Storage } = require('@google-cloud/storage');
 const admin = require('firebase-admin');
+const { createHash } = require('crypto');
 const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
 const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
 
@@ -70,6 +71,9 @@ const appCheckVerification = async (req, res, next) => {
     return sendError(req, res, 401, 'APP_CHECK_INVALID', 'Invalid App Check token');
   }
 };
+
+// Cache metrics
+const cacheMetrics = { hits: 0, writes: 0 };
 
 // --- CLIENT INITIALIZATION ---
 const speechClient = new SpeechClient();
@@ -181,6 +185,37 @@ app.post('/align', ...createExpensiveOperationLimiter('align'), appCheckVerifica
                 cached: true 
             });
         }
+
+        // Global cache by audio content (md5) + config
+        const parseGs = (uri) => {
+          if (!uri || !uri.startsWith('gs://')) return null;
+          const rest = uri.substring(5);
+          const idx = rest.indexOf('/');
+          if (idx < 0) return null;
+          return { bucket: rest.substring(0, idx), path: rest.substring(idx + 1) };
+        };
+        const audioObj = parseGs(gsAudioPath);
+        if (audioObj) {
+          try {
+            const [meta] = await storage.bucket(audioObj.bucket).file(audioObj.path).getMetadata();
+            const audioMd5 = meta.md5Hash || '';
+            const cfgSig = { enc: 'MP3', lang: 'en-US', wordOffsets: true };
+            const cacheId = createHash('sha256').update(JSON.stringify({ v: 1, md5: audioMd5, cfg: cfgSig })).digest('hex');
+            const cacheFile = bucket.file(`cache/align/${cacheId}.srt`);
+            const [cacheExists] = await cacheFile.exists();
+            if (cacheExists) {
+              await cacheFile.copy(file);
+              const gcsPath = `gs://${bucketName}/${fileName}`;
+              console.log(`Align cache hit ${cacheId}; copied to ${gcsPath}`);
+              cacheMetrics.hits++;
+              return res.status(200).json({ srtPath: gcsPath, requestId: req.requestId, cached: true, cacheId });
+            }
+            // attach to req for later save
+            req._alignCache = { cacheId, cacheFile };
+          } catch (e) {
+            console.warn('Align cache check failed:', e.message);
+          }
+        }
     const request = {
             audio: { uri: gsAudioPath },
             config: {
@@ -206,6 +241,17 @@ app.post('/align', ...createExpensiveOperationLimiter('align'), appCheckVerifica
         // Reuse bucket, fileName, and file variables from the cache check above
         
         await file.save(srtContent, { metadata: { contentType: 'text/plain' } });
+
+        // Save to global cache
+        try {
+          if (req._alignCache?.cacheFile) {
+            await file.copy(req._alignCache.cacheFile);
+            console.log(`Saved align result to cache key ${req._alignCache.cacheId}`);
+            cacheMetrics.writes++;
+          }
+        } catch (e) {
+          console.warn('Align cache write failed:', e.message);
+        }
 
         const gcsPath = `gs://${bucketName}/${fileName}`;
         console.log(`Successfully uploaded captions for ${projectId} to ${gcsPath}`);
@@ -234,6 +280,16 @@ createHealthEndpoints(app, 'align-captions',
     }
   }
 );
+
+// Cache status (protected)
+app.get('/cache-status', appCheckVerification, (req, res) => {
+  res.json({
+    service: 'align-captions',
+    bucket: bucketName,
+    cache: cacheMetrics,
+    now: new Date().toISOString(),
+  });
+});
 
 
 const PORT = process.env.PORT || 8080;

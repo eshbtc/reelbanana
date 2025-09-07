@@ -175,18 +175,38 @@ async function post(url, body, tokens, label) {
   console.log('Narrate:', narr);
 
   // 3) Align
-  const align = await post(`${BASE_URLS.align}/align`, { projectId, gsAudioPath: narr.gsAudioPath }, tokens, 'Align');
-  console.log('Align:', align);
+  let align;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      align = await post(`${BASE_URLS.align}/align`, { projectId, gsAudioPath: narr.gsAudioPath }, tokens, 'Align');
+      console.log('Align:', align);
+      break;
+    } catch (e) {
+      const msg = String(e?.message || e);
+      if (attempt < 3 && (msg.includes('UNPROCESSABLE') || msg.includes('No words'))) {
+        console.log(`Align attempt ${attempt} returned no words; retrying in 2s...`);
+        await sleep(2000);
+        continue;
+      }
+      throw e;
+    }
+  }
 
   // 4) Compose music (optional; service may fallback to placeholder WAV)
   const comp = await post(`${BASE_URLS.compose}/compose-music`, { projectId, narrationScript }, tokens, 'Compose');
   console.log('Compose:', comp);
 
   // 5) Render (draft, signed URL)
-  const scenes = [
-    { duration: 3, camera: 'zoom-in', transition: 'fade' },
-    { duration: 3, camera: 'pan-left', transition: 'wipe' },
-  ];
+  const minimal = (process.env.RENDER_MINIMAL || '0') === '1';
+  const scenes = minimal
+    ? [
+        { duration: 2, camera: 'static', transition: 'none' },
+        { duration: 2, camera: 'static', transition: 'none' },
+      ]
+    : [
+        { duration: 3, camera: 'zoom-in', transition: 'fade' },
+        { duration: 3, camera: 'pan-left', transition: 'wipe' },
+      ];
   const render = await post(
     `${BASE_URLS.render}/render`,
     {
@@ -196,6 +216,8 @@ async function post(url, body, tokens, label) {
       srtPath: align.srtPath,
       gsMusicPath: comp.gsMusicPath,
       published: false,
+      useFal: true,
+      veoPrompt: `Video depicting: ${narrationScript}`,
     },
     tokens,
     'Render'
