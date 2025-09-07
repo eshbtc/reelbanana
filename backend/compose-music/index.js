@@ -88,8 +88,9 @@ const storage = new Storage();
 const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
 
 // Initialize ElevenLabs client for music generation
+// Support both dedicated music key and fallback to general key
 const elevenLabsClient = new ElevenLabsClient({
-  apiKey: process.env.ELEVENLABS_MUSIC_API_KEY
+  apiKey: process.env.ELEVENLABS_MUSIC_API_KEY || process.env.ELEVENLABS_API_KEY
 });
 
 // Observability counters
@@ -219,7 +220,7 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
 
 // Lightweight health check (no App Check required)
 app.get('/health', (req, res) => {
-  const elevenLabsMusicConfigured = !!process.env.ELEVENLABS_MUSIC_API_KEY;
+  const elevenLabsMusicConfigured = !!(process.env.ELEVENLABS_MUSIC_API_KEY || process.env.ELEVENLABS_API_KEY);
   const geminiConfigured = !!process.env.GEMINI_API_KEY;
   
   res.json({
@@ -245,8 +246,8 @@ app.get('/health', (req, res) => {
  */
 async function generateRealMusic(musicPrompt) {
   const startTime = Date.now();
-  const maxRetries = 2;
-  const timeoutMs = 30000; // 30 second timeout
+  const maxRetries = parseInt(process.env.ELEVENLABS_MUSIC_MAX_RETRIES || '2', 10);
+  const timeoutMs = parseInt(process.env.ELEVENLABS_MUSIC_TIMEOUT_MS || '30000', 10); // 30 second timeout
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -292,7 +293,9 @@ async function generateRealMusic(musicPrompt) {
       return audioBuffer;
       
     } catch (error) {
-      console.error(`🎵 ElevenLabs music generation attempt ${attempt} failed:`, error.message);
+      const isTimeout = error.message.includes('timeout');
+      const errorType = isTimeout ? 'timeout' : 'api_error';
+      console.error(`🎵 ElevenLabs music generation attempt ${attempt} failed (${errorType}):`, error.message);
       
       if (attempt < maxRetries) {
         metrics.musicRetries++;
@@ -303,7 +306,7 @@ async function generateRealMusic(musicPrompt) {
       } else {
         // All attempts failed, track fallback
         metrics.musicFallbacks++;
-        console.log('🎵 All ElevenLabs attempts failed, falling back to placeholder audio...');
+        console.log(`🎵 All ElevenLabs attempts failed (${errorType}), falling back to placeholder audio...`);
         return createWavPlaceholderAudio(musicPrompt);
       }
     }
