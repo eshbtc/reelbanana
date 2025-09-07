@@ -178,34 +178,54 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
   };
 
   const handleOpenPublish = () => {
-    setTitle(`ReelBanana Movie ${new Date().toLocaleString()}`);
+    const defaultTitle = `ReelBanana Movie ${new Date().toLocaleString()}`;
+    console.log('🎬 MoviePlayer: Opening publish modal with title:', defaultTitle);
+    setTitle(defaultTitle);
     setDescription('');
     setShowPublishModal(true);
   };
 
   const handlePublish = async () => {
-    if (!videoUrl || !projectId) return;
+    console.log('🎬 MoviePlayer: handlePublish called');
+    console.log('🎬 MoviePlayer: videoUrl:', videoUrl);
+    console.log('🎬 MoviePlayer: projectId:', projectId);
+    console.log('🎬 MoviePlayer: title:', title);
+    console.log('🎬 MoviePlayer: description:', description);
+    
+    if (!videoUrl || !projectId) {
+      console.error('🎬 MoviePlayer: Cannot publish - missing videoUrl or projectId');
+      toast.error('Cannot publish: Video URL or project ID is missing');
+      return;
+    }
+    
     setPublishing(true);
     try {
       // Ensure a durable URL by asking render service to mark as published
       let durableUrl = videoUrl;
       try {
+        console.log('🎬 MoviePlayer: Requesting durable URL from render service...');
         const r = await apiCall(API_ENDPOINTS.render, { projectId, published: true }, 'Failed to finalize published video URL');
         durableUrl = r?.videoUrl || videoUrl;
+        console.log('🎬 MoviePlayer: Durable URL received:', durableUrl);
       } catch (e) {
-        console.warn('Durable URL request failed, falling back to current URL:', e);
+        console.warn('🎬 MoviePlayer: Durable URL request failed, falling back to current URL:', e);
       }
 
       const thumb = scenes[0]?.imageUrls?.[0];
+      console.log('🎬 MoviePlayer: Publishing movie with thumbnail:', thumb);
       const id = await publishMovie({ title, description, videoUrl: durableUrl, thumbnailUrl: thumb });
+      console.log('🎬 MoviePlayer: Movie published with ID:', id);
+      
       setPublished(true);
       const origin = window?.location?.origin || '';
       setShareUrl(`${origin}/share/${id}`);
       setShowPublishModal(false);
       setShowShareModal(true);
+      
+      toast.success('Movie published successfully!');
     } catch (e) {
-      console.error('Publish failed:', e);
-      toast.error('Publish failed. Please try again.');
+      console.error('🎬 MoviePlayer: Publish failed:', e);
+      toast.error(`Publish failed: ${e.message || 'Please try again.'}`);
     } finally {
       setPublishing(false);
     }
@@ -392,7 +412,13 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
                 Cancel
               </button>
               <button
-                onClick={handlePublish}
+                onClick={() => {
+                  console.log('🎬 MoviePlayer: Publish button clicked');
+                  console.log('🎬 MoviePlayer: Button disabled?', publishing || !title.trim());
+                  console.log('🎬 MoviePlayer: Publishing state:', publishing);
+                  console.log('🎬 MoviePlayer: Title trim:', title.trim());
+                  handlePublish();
+                }}
                 disabled={publishing || !title.trim()}
                 className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white py-2 rounded transition-colors"
               >
