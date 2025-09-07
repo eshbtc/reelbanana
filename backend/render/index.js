@@ -116,6 +116,73 @@ async function retryWithBackoff(operation, maxRetries = null, baseDelay = null) 
 }
 
 /**
+ * POST /generate-clip
+ * Generates a single motion clip for a given scene index using the configured FAL image-to-video model.
+ * Body: { projectId: string, sceneIndex: number, veoPrompt?: string, videoSeconds?: number, modelOverride?: string }
+ * Saves to: gs://OUTPUT_BUCKET_NAME/{projectId}/clips/scene-{sceneIndex}.mp4
+ */
+app.post('/generate-clip', appCheckVerification, async (req, res) => {
+  try {
+    const { projectId, sceneIndex, veoPrompt, videoSeconds, modelOverride } = req.body || {};
+    if (!projectId || typeof sceneIndex !== 'number' || sceneIndex < 0) {
+      return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing projectId or invalid sceneIndex');
+    }
+    const modelId = (modelOverride && String(modelOverride)) || falRenderModel;
+    if (!falApiKey) return sendError(req, res, 500, 'CONFIG', 'FAL_API_KEY is not configured');
+    if (!modelId) return sendError(req, res, 500, 'CONFIG', 'FAL_RENDER_MODEL is not configured');
+
+    // Find scene image in input bucket
+    const inputBucket = storage.bucket(inputBucketName);
+    const [files] = await inputBucket.getFiles({ prefix: `${projectId}/scene-${sceneIndex}-` });
+    const first = files && files[0];
+    if (!first) return sendError(req, res, 404, 'NOT_FOUND', `No image found for scene ${sceneIndex}`);
+    const [signedUrl] = await inputBucket.file(first.name).getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 60*60*1000 });
+
+    // Build FAL input
+    let input = { prompt: veoPrompt || 'Cinematic parallax over UI; subtle camera motion; modern tech vibe.', image_url: signedUrl };
+    const secs = parseInt(String(videoSeconds || process.env.FAL_IMAGE_TO_VIDEO_SECONDS || ''), 10);
+    if (!isNaN(secs) && secs > 0) {
+      input = { ...input, duration: secs, seconds: secs, video_length: secs };
+    }
+
+    // Call FAL using queue for reliability
+    const { fal } = await import('@fal-ai/client');
+    fal.config({ credentials: falApiKey });
+    const submit = await fal.queue.submit(modelId, { input, logs: false });
+    const requestId = submit?.request_id || submit?.requestId;
+    if (!requestId) return sendError(req, res, 500, 'FAL', 'Missing FAL request id');
+    const timeoutMs = parseInt(process.env.FAL_RENDER_TIMEOUT_MS || '600000', 10);
+    const pollMs = parseInt(process.env.FAL_RENDER_POLL_MS || '3000', 10);
+    const start = Date.now();
+    const pickUrl = (j) => j?.output_url || j?.result?.url || j?.data?.url || j?.output?.url || j?.video?.url || null;
+    while (Date.now() - start < timeoutMs) {
+      const st = await fal.queue.status(modelId, { requestId, logs: false });
+      const s = (st?.status || '').toString().toUpperCase();
+      if (s === 'COMPLETED') break;
+      if (s === 'FAILED' || s === 'ERROR') return sendError(req, res, 500, 'FAL_RENDER_FAILURE', `FAL status ${s}`);
+      await new Promise(r => setTimeout(r, pollMs));
+    }
+    const result = await fal.queue.result(modelId, { requestId });
+    const outUrl = pickUrl(result?.data);
+    if (!outUrl) return sendError(req, res, 500, 'FAL_RENDER_FAILURE', 'FAL did not return a video URL');
+
+    // Download and persist to clips folder
+    const outBucket = storage.bucket(outputBucketName);
+    const clipPath = `${projectId}/clips/scene-${sceneIndex}.mp4`;
+    const file = outBucket.file(clipPath);
+    const remote = await fetch(outUrl);
+    if (!remote.ok) return sendError(req, res, 500, 'FAL_DOWNLOAD_FAILED', `HTTP ${remote.status}`);
+    const buf = Buffer.from(await remote.arrayBuffer());
+    await file.save(buf, { metadata: { contentType: 'video/mp4' } });
+    const [signedClipUrl] = await file.getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 7*24*60*60*1000 });
+    res.json({ ok: true, clipPath, clipUrl: signedClipUrl });
+  } catch (e) {
+    console.error('generate-clip error:', e);
+    return sendError(req, res, 500, 'INTERNAL', 'Failed to generate clip', e?.message || String(e));
+  }
+});
+
+/**
  * POST /render
  * Orchestrates the entire video rendering process.
  *
@@ -564,62 +631,68 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         await Promise.all(downloadPromises);
         console.log('Asset download complete.');
 
-        // 3. FFmpeg processing
+        // 3. FFmpeg processing (prefer per-scene video clips if available)
         console.log('Starting FFmpeg processing...');
         const command = ffmpeg();
         const complexFilter = [];
         let sceneOutputs = [];
 
-        // For each scene, create a short video clip from its image sequence
-        scenes.forEach((scene, sceneIndex) => {
-            // Find the actual image files for this scene
-            const sceneImages = imageFiles.filter(file => {
-                const fileName = path.basename(file.name);
-                const matches = fileName.startsWith(`scene-${sceneIndex}-`);
-                console.log(`Scene ${sceneIndex}: Checking file ${fileName}, matches: ${matches}`);
-                return matches;
-            });
-            
-            console.log(`Scene ${sceneIndex}: Found ${sceneImages.length} images:`, sceneImages.map(f => path.basename(f.name)));
-            
-            if (sceneImages.length === 0) {
-                console.error(`No images found for scene ${sceneIndex}`);
-                return;
-            }
-            
-            // Use the first image for the scene (or we could create a sequence)
-            const firstImage = sceneImages[0];
-            const localImagePath = path.join(tempDir, path.basename(firstImage.name));
-            const duration = scene.duration || 3;
-            
-            console.log(`Processing scene ${sceneIndex} with image: ${localImagePath}`);
-            
-            command.input(localImagePath)
-                .inputOptions(['-loop 1']) // Loop the single image
-                .inputOptions([`-t ${duration}`]); // Duration in seconds
+        // Pre-fetch per-scene clips if present
+        const outBucket = storage.bucket(outputBucketName);
+        const clipLocalPaths = await Promise.all((scenes || []).map(async (_, i) => {
+            try {
+                const clipFile = outBucket.file(`${projectId}/clips/scene-${i}.mp4`);
+                const [exists] = await clipFile.exists();
+                if (!exists) return null;
+                const local = path.join(tempDir, `clip_${i}.mp4`);
+                await clipFile.download({ destination: local });
+                return local;
+            } catch { return null; }
+        }));
 
-            // Dynamic camera movement based on user selection
-            let zoomEffect;
-            switch (scene.camera || 'static') {
-                case 'zoom-in':
-                    zoomEffect = `zoompan=z='min(zoom+0.001,1.3)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH}`;
-                    break;
-                case 'zoom-out':
-                    zoomEffect = `zoompan=z='if(lte(zoom,1.0),1.3,max(1.001,zoom-0.001))':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH}`;
-                    break;
-                case 'pan-left':
-                    zoomEffect = `zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)-50*sin(t)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH}`;
-                    break;
-                case 'pan-right':
-                    zoomEffect = `zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)+50*sin(t)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH}`;
-                    break;
-                default: // static
-                    zoomEffect = `scale=${targetW}:${targetH}`;
-                    break;
+        let inputIndex = 0;
+        (scenes || []).forEach((scene, sceneIndex) => {
+            const duration = scene.duration || 3;
+            const clipPath = clipLocalPaths[sceneIndex];
+            if (clipPath) {
+                // Use motion clip as video input
+                command.input(clipPath).inputOptions([`-t ${duration}`]);
+                const effect = `scale=${targetW}:${targetH}`; // Keep simple for clips
+                complexFilter.push(`[${inputIndex}:v]${effect},format=yuv420p[v${sceneIndex}]`);
+                sceneOutputs.push(`[v${sceneIndex}]`);
+                inputIndex++;
+            } else {
+                // Fallback to first image for the scene
+                const sceneImages = imageFiles.filter(file => path.basename(file.name).startsWith(`scene-${sceneIndex}-`));
+                if (sceneImages.length === 0) {
+                    console.error(`No images found for scene ${sceneIndex}`);
+                    return;
+                }
+                const firstImage = sceneImages[0];
+                const localImagePath = path.join(tempDir, path.basename(firstImage.name));
+                command.input(localImagePath).inputOptions(['-loop 1']).inputOptions([`-t ${duration}`]);
+                let zoomEffect;
+                switch (scene.camera || 'static') {
+                    case 'zoom-in':
+                        zoomEffect = `zoompan=z='min(zoom+0.001,1.3)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH}`;
+                        break;
+                    case 'zoom-out':
+                        zoomEffect = `zoompan=z='if(lte(zoom,1.0),1.3,max(1.001,zoom-0.001))':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH}`;
+                        break;
+                    case 'pan-left':
+                        zoomEffect = `zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)-50*sin(t)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH}`;
+                        break;
+                    case 'pan-right':
+                        zoomEffect = `zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)+50*sin(t)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH}`;
+                        break;
+                    default:
+                        zoomEffect = `scale=${targetW}:${targetH}`;
+                        break;
+                }
+                complexFilter.push(`[${inputIndex}:v]${zoomEffect},format=yuv420p[v${sceneIndex}]`);
+                sceneOutputs.push(`[v${sceneIndex}]`);
+                inputIndex++;
             }
-            
-            complexFilter.push(`[${sceneIndex}:v]${zoomEffect},format=yuv420p[v${sceneIndex}]`);
-            sceneOutputs.push(`[v${sceneIndex}]`);
         });
 
         // Chain all scene clips together with dynamic transitions
@@ -659,9 +732,9 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         
         // Add audio mixing with gentle ducking if music is available
         // Calculate correct audio input indices: images are added first, then audio
-        const imageInputs = scenes.length;
-        const narrationAudioIndex = imageInputs;
-        const musicAudioIndex = imageInputs + 1;
+        const videoInputs = sceneOutputs.length; // one per scene
+        const narrationAudioIndex = videoInputs;
+        const musicAudioIndex = videoInputs + 1;
 
         if (gsMusicPath) {
             // Sidechain compress music with narration as sidechain, then mix

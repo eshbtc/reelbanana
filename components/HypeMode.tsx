@@ -36,6 +36,10 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
   const [targetSeconds, setTargetSeconds] = useState<number>(120);
   const [includeCallouts, setIncludeCallouts] = useState<boolean>(true);
   const [includeCta, setIncludeCta] = useState<boolean>(true);
+  const [genClips, setGenClips] = useState<boolean>(true);
+  const [clipCount, setClipCount] = useState<number>(5);
+  const [clipSeconds, setClipSeconds] = useState<number>(12);
+  const [clipModel, setClipModel] = useState<string>('fal-ai/veo3/fast/image-to-video');
 
   const defaultCallouts = useMemo(() => (
     ['Generate Story', 'Images', 'Narration', 'Captions', 'Music', 'Render & Polish', 'Publish & Share', 'Results']
@@ -237,6 +241,25 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
       setProgress(65);
       const comp = await apiCall(API_ENDPOINTS.compose, { projectId: pid, narrationScript: narration }, 'Music generation failed');
 
+      // Optional: generate motion clips for first N file scenes
+      if (genClips) {
+        setStatus('Generating motion clips…');
+        const indexes: number[] = entries
+          .map((e, i) => ({ e, i }))
+          .filter(x => x.e.kind === 'file')
+          .slice(0, Math.max(0, clipCount))
+          .map(x => x.i);
+        for (let j = 0; j < indexes.length; j++) {
+          const i = indexes[j];
+          setProgress(70 + Math.round((j / Math.max(1, indexes.length)) * 10));
+          try {
+            await apiCall(API_ENDPOINTS.generateClip, { projectId: pid, sceneIndex: i, veoPrompt: 'Cinematic UI motion; subtle parallax; modern tech vibe', videoSeconds: clipSeconds, modelOverride: clipModel }, 'Clip generation failed');
+          } catch (e) {
+            console.warn('Clip generation failed for scene', i, e);
+          }
+        }
+      }
+
       // Build scenes payload
       const renderScenes = (includeCta ? [...entries, { kind: 'ai', prompt: 'CTA' }] : entries).map((_, i) => ({
         duration: Math.max(3, Math.min(12, durations[i] || 8)),
@@ -340,6 +363,25 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
               <span className="flex items-center gap-2"><input type="checkbox" checked={includeCta} onChange={(e)=>setIncludeCta(e.target.checked)} /> Include CTA end frame</span>
             </label>
             <p className="text-xs text-gray-500 mt-1">Callouts: {defaultCallouts.join(' • ')}. CTA adds a branded end card with logo + URL.</p>
+          </div>
+          <div className="bg-gray-800 border border-gray-700 rounded p-4">
+            <label className="flex items-center gap-2 text-gray-300 mb-2">
+              <input type="checkbox" checked={genClips} onChange={(e)=>setGenClips(e.target.checked)} /> Generate Motion Clips (FAL image-to-video)
+            </label>
+            {genClips && (
+              <div className="flex flex-wrap items-center gap-3 text-sm text-gray-300">
+                <span>Model</span>
+                <select value={clipModel} onChange={(e)=>setClipModel(e.target.value)} className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white">
+                  <option value="fal-ai/veo3/fast/image-to-video">Veo 3 Fast (i2v)</option>
+                  <option value="fal-ai/ltxv-13b-098-distilled/image-to-video">LTXV 13B (i2v)</option>
+                </select>
+                <span>Clips</span>
+                <input type="number" min={1} max={8} value={clipCount} onChange={(e)=>setClipCount(Math.max(1, Math.min(8, parseInt(e.target.value || '5', 10))))} className="w-16 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white" />
+                <span>Seconds/clip</span>
+                <input type="number" min={6} max={20} value={clipSeconds} onChange={(e)=>setClipSeconds(Math.max(6, Math.min(20, parseInt(e.target.value || '12', 10))))} className="w-16 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white" />
+                <span className="text-xs text-gray-500">We’ll use your first N screenshot scenes for motion.</span>
+              </div>
+            )}
           </div>
           <div className="bg-gray-800 border border-gray-700 rounded p-4">
             <label className="text-gray-300 text-sm mb-1 block">Narration</label>

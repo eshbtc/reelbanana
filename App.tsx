@@ -9,6 +9,7 @@ import MoviePlayer from './components/MoviePlayer';
 import PublicGallery from './components/PublicGallery';
 import DemoWizardHelpModal from './components/DemoWizardHelpModal';
 import UserDashboard from './components/UserDashboard';
+import HypeMode from './components/HypeMode';
 import MyProjectsPage from './components/MyProjectsPage';
 import AdBlockerWarning from './components/AdBlockerWarning';
 import DemoUI from './components/DemoUI';
@@ -199,15 +200,12 @@ const App: React.FC = () => {
           />
         );
       case 'hype':
-        {
-          const HypeMode = require('./components/HypeMode').default;
-          return (
-            <HypeMode
-              onComplete={handleRenderComplete}
-              onFail={handleRenderFail}
-            />
-          );
-        }
+        return (
+          <HypeMode
+            onComplete={handleRenderComplete}
+            onFail={handleRenderFail}
+          />
+        );
       case 'editor':
       default:
         return (
