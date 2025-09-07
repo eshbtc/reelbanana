@@ -163,6 +163,32 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
         );
         
         console.log(`🎬 Upload complete - ${uploadedCount} images uploaded successfully`);
+        
+        // Preflight: confirm at least one image per scene is accessible in GCS
+        try {
+          const bucket = (await import('./config/apiConfig')).apiConfig.firebase.storageBucket;
+          const tryExts = ['jpeg','jpg','png','webp'];
+          const checkOne = async (sceneIdx: number): Promise<boolean> => {
+            for (const ext of tryExts) {
+              const url = `https://storage.googleapis.com/${bucket}/${projectId}/scene-${sceneIdx}-0.${ext}`;
+              try {
+                const resp = await fetch(url, { method: 'GET', cache: 'no-store' });
+                if (resp.ok) return true;
+              } catch (_) {
+                // ignore and try next ext
+              }
+            }
+            return false;
+          };
+          for (let i = 0; i < scenes.length; i++) {
+            const ok = await checkOne(i);
+            if (!ok) {
+              console.warn(`Preflight: Could not verify scene ${i} asset in storage`);
+            }
+          }
+        } catch (e) {
+          console.warn('Preflight storage verification skipped due to error:', e);
+        }
         setProgress(100);
         
         // 3. Generate narration

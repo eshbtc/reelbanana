@@ -571,7 +571,7 @@ const sequentialPromptsSchema = {
 export const generateImageSequence = async (
     mainPrompt: string,
     characterAndStyle: string,
-    opts?: { characterRefs?: string[]; backgroundImage?: string; frames?: number; projectId?: string; forceUseApiKey?: boolean; sceneIndex?: number }
+    opts?: { characterRefs?: string[]; backgroundImage?: string; frames?: number; projectId?: string; forceUseApiKey?: boolean; sceneIndex?: number; onInfo?: (info: { cached?: boolean }) => void }
 ): Promise<string[]> => {
     try {
         const currentUser = getCurrentUser();
@@ -589,6 +589,7 @@ export const generateImageSequence = async (
         const cacheKey = generateCacheKey(mainPrompt, characterAndStyle, opts);
         const cacheDoc = doc(db, CACHE_COLLECTION, cacheKey);
         let cacheSnap: any = null;
+        let usedCache = false;
         let base64Images: string[] = [];
         let perImageTokenUsages: TokenUsage[] = [];
         const desired = Math.min(Math.max(opts?.frames || 5, 1), 5);
@@ -600,6 +601,7 @@ export const generateImageSequence = async (
         }
         
         if (cacheSnap && cacheSnap.exists()) {
+            usedCache = true;
             const cachedData = cacheSnap.data();
             console.log(`Cache hit for prompt: ${mainPrompt.substring(0, 50)}...`);
             // For cached images, we still need to upload them to the current project's
@@ -920,6 +922,8 @@ Return ONLY a JSON object with this exact format:
             }, { merge: true });
         } catch (_) {}
 
+        // Notify caller about cache usage if requested
+        try { opts?.onInfo?.({ cached: usedCache }); } catch {}
         return httpsUrls;
     } catch (error) {
         console.error("Error generating image sequence:", error);

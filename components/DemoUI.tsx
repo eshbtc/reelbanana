@@ -80,6 +80,7 @@ const DemoUI: React.FC<DemoUIProps> = ({ onComplete, onFail }) => {
       for (let i = 0; i < storyScenes.length; i++) {
         updateProgress(20 + (i * 15), `Generating scene ${i + 1} images...`);
         
+        let cachedInfo: { cached?: boolean } | undefined;
         const imageUrls = await generateImageSequence(
           storyScenes[i].prompt,
           characterStyle,
@@ -87,7 +88,8 @@ const DemoUI: React.FC<DemoUIProps> = ({ onComplete, onFail }) => {
             frames: 5,
             projectId: newProjectId,
             sceneIndex: i,
-            forceUseApiKey: false
+            forceUseApiKey: false,
+            onInfo: (info) => { cachedInfo = info; }
           }
         );
         
@@ -97,6 +99,7 @@ const DemoUI: React.FC<DemoUIProps> = ({ onComplete, onFail }) => {
           narration: storyScenes[i].narration,
           imageUrls,
           status: 'success',
+          cached: !!cachedInfo?.cached,
           duration: 3,
           camera: 'zoom-in',
           transition: 'fade'

@@ -14,6 +14,8 @@ export interface Scene {
   variantImageUrls?: string[];
   status: SceneStatus;
   error?: string;
+  // Indicates if the latest images came from cache
+  cached?: boolean;
   // Director-level controls for hackathon-winning features
   camera?: CameraMovement;
   transition?: TransitionType;

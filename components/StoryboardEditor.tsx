@@ -395,16 +395,18 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         }
       })();
       const sceneIndex = scenes.findIndex(s => s.id === id);
+      let cachedInfo: { cached?: boolean } | undefined;
       const imageUrls = await generateImageSequence(prompt, styleInstruction, {
         characterRefs,
         backgroundImage: bg,
         frames: demoMode ? 3 : (renderMode === 'draft' ? 3 : 5),
         projectId: projectId || undefined,
         sceneIndex,
-        forceUseApiKey
+        forceUseApiKey,
+        onInfo: (info) => { cachedInfo = info; }
       });
       setScenes(prevScenes =>
-        prevScenes.map(s => s.id === id ? { ...s, status: 'success', imageUrls } : s)
+        prevScenes.map(s => s.id === id ? { ...s, status: 'success', imageUrls, cached: !!cachedInfo?.cached } : s)
       );
       
       // Refresh credits after successful image generation
@@ -470,15 +472,17 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       })();
       const bg = sceneObj.backgroundImage;
       const sceneIndex = scenes.findIndex(s => s.id === id);
+      let cachedInfo: { cached?: boolean } | undefined;
       const imageUrls = await generateImageSequence(`${prompt} (alternative angle variation)`, styleInstruction, {
         characterRefs,
         backgroundImage: bg,
         frames: demoMode ? 3 : (renderMode === 'draft' ? 3 : 5),
         projectId: projectId || undefined,
         sceneIndex,
-        forceUseApiKey
+        forceUseApiKey,
+        onInfo: (info) => { cachedInfo = info; }
       });
-      setScenes(prev => prev.map(s => s.id === id ? { ...s, status: 'success', variantImageUrls: imageUrls } : s));
+      setScenes(prev => prev.map(s => s.id === id ? { ...s, status: 'success', variantImageUrls: imageUrls, cached: !!cachedInfo?.cached } : s));
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'Variant generation failed.';
       setScenes(prev => prev.map(s => s.id === id ? { ...s, status: 'error', error: errorMessage } : s));

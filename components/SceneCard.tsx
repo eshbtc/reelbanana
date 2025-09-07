@@ -70,11 +70,18 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
       case 'success':
         if (!scene.imageUrls || scene.imageUrls.length === 0) return null;
         return (
-            <img 
-                src={scene.imageUrls[currentImageIndex]} 
-                alt={`${scene.prompt} - frame ${currentImageIndex + 1}`} 
-                className="w-full h-full object-cover transition-opacity duration-300" 
-            />
+            <div className="relative w-full h-full">
+              {scene.cached && (
+                <div className="absolute top-2 left-2 z-10 bg-amber-500/90 text-black text-[10px] font-bold px-2 py-0.5 rounded">
+                  Cached
+                </div>
+              )}
+              <img 
+                  src={scene.imageUrls[currentImageIndex]} 
+                  alt={`${scene.prompt} - frame ${currentImageIndex + 1}`} 
+                  className="w-full h-full object-cover transition-opacity duration-300" 
+              />
+            </div>
         );
       case 'error':
         return (

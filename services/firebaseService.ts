@@ -216,7 +216,25 @@ const removeUndefinedValues = (obj: any): any => {
 
 export const updateProject = async (projectId: string, data: ProjectData): Promise<void> => {
     try {
+        // Ensure user is authenticated; skip silently in autosave contexts
+        const currentUser = getCurrentUser();
+        if (!currentUser) {
+            console.warn('updateProject: no authenticated user; skipping update');
+            return;
+        }
+
         const docRef = doc(db, PROJECTS_COLLECTION, projectId);
+        // Ownership guard: only allow the owner to update
+        try {
+            const existing = await getDoc(docRef);
+            const ownerId = (existing.exists() ? (existing.data() as any).userId : undefined) as string | undefined;
+            if (ownerId && ownerId !== currentUser.uid) {
+                console.warn(`updateProject: user ${currentUser.uid} is not owner of project ${projectId}; skipping update`);
+                return;
+            }
+        } catch (e) {
+            // Non-fatal: continue; rules will still enforce
+        }
         
         // Build the data object with all possible fields
         const rawData: any = {
@@ -227,10 +245,7 @@ export const updateProject = async (projectId: string, data: ProjectData): Promi
 
         // Ensure userId is present to satisfy Firestore rules on updates
         try {
-            const currentUser = getCurrentUser();
-            if (currentUser?.uid) {
-                rawData.userId = currentUser.uid;
-            }
+            if (currentUser?.uid) rawData.userId = currentUser.uid;
         } catch {}
         
         // Only include characterRefs if it exists and is not empty
