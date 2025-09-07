@@ -255,7 +255,7 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
             const outputBucket = storage.bucket(outputBucketName);
             const finalVideoFile = outputBucket.file(`${projectId}/movie.mp4`);
             const [exists] = await finalVideoFile.exists();
-            if (exists) {
+            if (exists && !req.body.force) {
                 const isPublishedCached = req.body.published || false;
                 let videoUrlCached;
                 if (isPublishedCached) {
@@ -471,8 +471,8 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         // This supports calling /render with just { projectId, published: true }
         const outputBucket = storage.bucket(outputBucketName);
         const finalVideoFile = outputBucket.file(`${projectId}/movie.mp4`);
-        const [exists] = await finalVideoFile.exists();
-        if (exists) {
+            const [exists] = await finalVideoFile.exists();
+            if (exists && !req.body.force) {
             console.log(`Final video already exists for ${projectId}, evaluating URL type (published vs draft)`);
 
             const isPublished = req.body.published || false;
@@ -578,7 +578,7 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         const manifestHash = createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
         const cacheFile = outputBucket.file(`cache/render/${manifestHash}.mp4`);
         const [cacheExists] = await cacheFile.exists();
-        if (cacheExists) {
+        if (cacheExists && !req.body.force) {
             await cacheFile.copy(finalVideoFile);
             const isPublishedCached = req.body.published || false;
             let videoUrlCached;
