@@ -7,9 +7,12 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "demo": "node scripts/demo-test.js",
     "smoke:health": "bash scripts/smoke-health.sh",
     "e2e": "node scripts/e2e-pipeline.mjs",
-    "publish:e2e": "node scripts/publish-only.mjs"
+    "publish:e2e": "node scripts/publish-only.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "firebase": "^12.2.1",
@@ -19,11 +22,12 @@
   },
   "devDependencies": {
     "@fal-ai/client": "^1.6.2",
+    "@playwright/test": "^1.55.0",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.20",
+    "playwright": "^1.55.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.13",
-    "playwright": "^1.55.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   },

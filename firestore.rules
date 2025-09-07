@@ -18,6 +18,13 @@ service cloud.firestore {
          request.auth.uid == request.resource.data.userId);
       allow create: if request.auth != null && 
         request.auth.uid == request.resource.data.userId;
+
+      // Scenes subcollection under a project (owner-only)
+      match /scenes/{sceneIndex} {
+        allow read, write: if request.auth != null &&
+          // Owner check against parent project doc
+          request.auth.uid == get(/databases/$(database)/documents/projects/$(projectId)).data.userId;
+      }
     }
     
     // Generated images cache - allow shared cache for cost control

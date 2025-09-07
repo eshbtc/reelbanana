@@ -589,6 +589,9 @@ export const generateImageSequence = async (
         const cacheKey = generateCacheKey(mainPrompt, characterAndStyle, opts);
         const cacheDoc = doc(db, CACHE_COLLECTION, cacheKey);
         let cacheSnap: any = null;
+        let base64Images: string[] = [];
+        let perImageTokenUsages: TokenUsage[] = [];
+        const desired = Math.min(Math.max(opts?.frames || 5, 1), 5);
         try {
             cacheSnap = await getDoc(cacheDoc);
         } catch (e) {
@@ -599,12 +602,36 @@ export const generateImageSequence = async (
         if (cacheSnap && cacheSnap.exists()) {
             const cachedData = cacheSnap.data();
             console.log(`Cache hit for prompt: ${mainPrompt.substring(0, 50)}...`);
-            return cachedData.imageUrls;
-        }
-        
-        console.log(`Cache miss for prompt: ${mainPrompt.substring(0, 50)}...`);
-        
-        // For Firebase AI Logic, check credits after cache miss
+            // For cached images, we still need to upload them to the current project's
+            // folder with the correct naming pattern so the render service can discover them.
+            // If the cache contains HTTPS URLs, convert them to data URIs first.
+            const cachedUrls: string[] = Array.isArray(cachedData.imageUrls) ? cachedData.imageUrls.slice(0, desired) : [];
+            const urlToDataUri = async (url: string): Promise<string> => {
+                try {
+                    const resp = await fetch(url);
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    const blob = await resp.blob();
+                    const reader = new FileReader();
+                    const dataUri: string = await new Promise((resolve, reject) => {
+                        reader.onerror = () => reject(new Error('FileReader failed'));
+                        reader.onloadend = () => resolve(String(reader.result || ''));
+                        reader.readAsDataURL(blob);
+                    });
+                    if (!dataUri.startsWith('data:image/')) throw new Error('Invalid data URI');
+                    return dataUri;
+                } catch (e) {
+                    console.warn('Failed to convert cached URL to data URI, using original URL:', url, e);
+                    return url; // fallback — upload step will skip and keep original URL
+                }
+            };
+            // Convert cached URLs to data URIs where needed
+            base64Images = await Promise.all(
+                cachedUrls.map((u) => (typeof u === 'string' && u.startsWith('http')) ? urlToDataUri(u) : Promise.resolve(String(u)))
+            );
+        } else {
+            console.log(`Cache miss for prompt: ${mainPrompt.substring(0, 50)}...`);
+            
+            // For Firebase AI Logic, check credits after cache miss
         if (aiService === 'firebase') {
             const requestedFrames = Math.min(Math.max(opts?.frames || 5, 1), 5);
             console.log(`🔍 generateImageSequence: Checking ${requestedFrames} credits for user ${currentUser.uid}`);
@@ -698,9 +725,6 @@ Return ONLY a JSON object with this exact format:
         }
 
         // 3. Generate an image for each of the 5 prompts sequentially to avoid rate limiting
-        const base64Images: string[] = [];
-        const perImageTokenUsages: TokenUsage[] = [];
-        const desired = Math.min(Math.max(opts?.frames || 5, 1), 5);
         const prompts = (shotList.prompts as string[]).slice(0, desired);
         for (const prompt of prompts) {
             const finalPrompt = `${characterAndStyle}. Maintain this character and style consistently. A cinematic, high quality, professional photograph of: ${prompt}` + (opts?.backgroundImage ? ' Compose the subject naturally into the provided background image with matching lighting and perspective.' : '');
@@ -814,29 +838,9 @@ Return ONLY a JSON object with this exact format:
                 }
             }
         }
-        
-        // 4. Save to cache for future use (cost control)
-        if (currentUser) {
-            try {
-                // Store only metadata, not the actual base64 images to avoid size limits
-                await setDoc(cacheDoc, {
-                    imageCount: base64Images.length,
-                    prompt: mainPrompt,
-                    characterAndStyle: characterAndStyle,
-                    userId: currentUser.uid, // Required by security rules
-                    createdAt: new Date().toISOString(),
-                    cacheKey: cacheKey,
-                    hasBackground: !!opts?.backgroundImage,
-                    refCount: opts?.characterRefs?.length || 0,
-                    // Store a hash or identifier instead of full images
-                    imageHash: btoa(mainPrompt + characterAndStyle).substring(0, 50)
-                });
-                console.log(`Cached metadata for ${base64Images.length} images for future use`);
-            } catch (cacheError) {
-                console.warn('Failed to cache images:', cacheError);
-                // Don't fail the whole operation if caching fails
-            }
         }
+        
+        // Note: Cache will be saved later after we have HTTPS URLs
         
         // Persist frames to Storage and return HTTPS URLs for durability
         const httpsUrls: string[] = [];
@@ -854,7 +858,12 @@ Return ONLY a JSON object with this exact format:
                     const json = await resp.json();
                     httpsUrls.push(json.publicUrl || base64Image);
                 } else {
-                    httpsUrls.push(base64Image);
+                    // If upload failed and we have an HTTPS URL already, keep it; otherwise drop
+                    if (typeof base64Image === 'string' && base64Image.startsWith('http')) {
+                        httpsUrls.push(base64Image);
+                    } else {
+                        console.warn('Upload failed and no HTTPS URL available, skipping frame', resp.status);
+                    }
                 }
             }
         } catch (e) {

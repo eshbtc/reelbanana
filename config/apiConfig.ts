@@ -137,11 +137,17 @@ const getConfig = (): ApiConfig => {
     selectedConfig = AI_STUDIO_CONFIG;
     envName = 'AI_STUDIO';
   }
-  // Local development: localhost/127.0.0.1
+  // Local development: localhost/127.0.0.1 (but use production for demo)
   else if (typeof window !== 'undefined' && 
            (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-    selectedConfig = DEVELOPMENT_CONFIG;
-    envName = 'DEVELOPMENT';
+              // Force production services for demo and meta-demo
+              if (window.location.pathname === '/demo' || window.location.pathname === '/meta-demo') {
+                selectedConfig = PRODUCTION_CONFIG;
+                envName = 'PRODUCTION (demo mode)';
+              } else {
+      selectedConfig = DEVELOPMENT_CONFIG;
+      envName = 'DEVELOPMENT';
+    }
   }
   // Fallback to production
   else {
@@ -202,7 +208,7 @@ export const apiCall = async (url: string, body: object, errorMessage: string) =
         hasBase64Image: !!bodyData.base64Image,
         isValidDataUri: bodyData.base64Image?.startsWith('data:image/'),
         base64Preview: bodyData.base64Image?.substring(0, 50),
-        expectedBucket: 'oneminute-movie-in (default bucket for upload service)'
+        expectedBucket: 'reel-banana-35a54.firebasestorage.app'
       });
     }
 

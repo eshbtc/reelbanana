@@ -81,7 +81,8 @@ const restoreImagesFromGCS = async (projectId: string, scenes: Scene[]): Promise
         }
         
         // Avoid listing (403). Synthesize up to 3 public URLs per scene based on naming convention.
-        const exts = ['png','jpg','jpeg','webp'];
+        // Prefer 'jpeg' since upload service defaults to JPEG for most generated images
+        const exts = ['jpeg','jpg','png','webp'];
         const bucket = 'reel-banana-35a54.firebasestorage.app';
         const publicUrl = (sceneIdx: number, imgIdx: number, ext: string) =>
           `https://storage.googleapis.com/${bucket}/${projectId}/scene-${sceneIdx}-${imgIdx}.${ext}`;
@@ -90,7 +91,7 @@ const restoreImagesFromGCS = async (projectId: string, scenes: Scene[]): Promise
             if (Array.isArray(scene.imageUrls) && scene.imageUrls.length > 0) return scene;
             const urls: string[] = [];
             for (let i = 0; i < 3; i++) {
-              // Prefer png (first ext)
+              // Prefer jpeg (first ext)
               urls.push(publicUrl(index, i, exts[0]));
             }
             return { ...scene, imageUrls: urls };
@@ -223,6 +224,14 @@ export const updateProject = async (projectId: string, data: ProjectData): Promi
             characterAndStyle: data.characterAndStyle || '',
             updatedAt: serverTimestamp()
         };
+
+        // Ensure userId is present to satisfy Firestore rules on updates
+        try {
+            const currentUser = getCurrentUser();
+            if (currentUser?.uid) {
+                rawData.userId = currentUser.uid;
+            }
+        } catch {}
         
         // Only include characterRefs if it exists and is not empty
         if (data.characterRefs && data.characterRefs.length > 0) {

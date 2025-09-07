@@ -38,27 +38,61 @@ const PublicGallery: React.FC = () => {
           console.warn('🔐 PublicGallery: App Check token error:', appCheckError);
         }
 
-        const col = collection(db, 'public_movies');
-        const q = query(col, orderBy('createdAt', 'desc'), limit(18));
-        const snap = await getDocs(q);
-        const items: GalleryMovie[] = snap.docs.map((d) => {
-          const data: any = d.data();
-          return {
-            id: d.id,
-            title: data.title || 'Untitled Movie',
-            description: data.description || '',
-            videoUrl: data.videoUrl,
-            thumbnailUrl: data.thumbnailUrl || 'https://via.placeholder.com/400x225/374151/FFFFFF?text=ReelBanana',
-            createdAt: (data.createdAt?.toDate?.() || new Date()).toISOString(),
-            views: data.views || 0,
-            likes: data.likes || 0,
-          };
-        });
-        setMovies(items);
-        console.log('✅ PublicGallery: Successfully fetched', items.length, 'movies');
-      } catch (error) {
-        console.error('❌ Error fetching movies:', error);
-        // Set empty array on error to show empty state
+        // First attempt: Firestore SDK read (fast path)
+        try {
+          const col = collection(db, 'public_movies');
+          const q = query(col, orderBy('createdAt', 'desc'), limit(18));
+          const snap = await getDocs(q);
+          const items: GalleryMovie[] = snap.docs.map((d) => {
+            const data: any = d.data();
+            return {
+              id: d.id,
+              title: data.title || 'Untitled Movie',
+              description: data.description || '',
+              videoUrl: data.videoUrl,
+              thumbnailUrl: data.thumbnailUrl || 'https://via.placeholder.com/400x225/374151/FFFFFF?text=ReelBanana',
+              createdAt: (data.createdAt?.toDate?.() || new Date()).toISOString(),
+              views: data.views || 0,
+              likes: data.likes || 0,
+            };
+          });
+          setMovies(items);
+          console.log('✅ PublicGallery: Successfully fetched', items.length, 'movies (Firestore)');
+          return;
+        } catch (fsErr) {
+          console.warn('⚠️ PublicGallery: Firestore fetch failed, falling back to functions:', fsErr);
+        }
+
+        // Fallback: Cloud Function listPublicMovies (public)
+        try {
+          const resp = await fetch('https://us-central1-reel-banana-35a54.cloudfunctions.net/listPublicMovies', {
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          });
+          if (resp.ok) {
+            const json = await resp.json();
+            const items: GalleryMovie[] = (json.items || []).map((m: any) => ({
+              id: m.id,
+              title: m.title,
+              description: m.description,
+              videoUrl: m.videoUrl,
+              thumbnailUrl: m.thumbnailUrl || 'https://via.placeholder.com/400x225/374151/FFFFFF?text=ReelBanana',
+              createdAt: m.createdAt || new Date().toISOString(),
+              views: 0,
+              likes: 0,
+            }));
+            setMovies(items);
+            console.log('✅ PublicGallery: Successfully fetched', items.length, 'movies (functions)');
+            return;
+          } else {
+            console.warn('⚠️ PublicGallery: listPublicMovies returned', resp.status);
+          }
+        } catch (fnErr) {
+          console.warn('⚠️ PublicGallery: functions fallback failed:', fnErr);
+        }
+
+        // Final fallback: empty state
         setMovies([]);
       } finally {
         setLoading(false);

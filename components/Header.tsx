@@ -3,8 +3,8 @@ import Logo from './Logo';
 import AuthButton from './AuthButton';
 
 interface HeaderProps {
-  onNavigate?: (view: 'editor' | 'gallery' | 'dashboard' | 'projects') => void;
-  currentView?: 'editor' | 'gallery' | 'dashboard' | 'projects';
+  onNavigate?: (view: 'editor' | 'gallery' | 'dashboard' | 'projects' | 'demo' | 'meta-demo') => void;
+  currentView?: 'editor' | 'gallery' | 'dashboard' | 'projects' | 'demo' | 'meta-demo';
 }
 
 const Header: React.FC<HeaderProps> = ({ onNavigate, currentView = 'editor' }) => {
@@ -31,6 +31,26 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentView = 'editor' }) =
                 }`}
               >
                 Create Movie
+              </button>
+              <button
+                onClick={() => onNavigate('demo')}
+                className={`px-4 py-2 rounded-lg transition-colors ${
+                  currentView === 'demo'
+                    ? 'bg-amber-500 text-white'
+                    : 'text-gray-300 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                🎬 Live Demo
+              </button>
+              <button
+                onClick={() => onNavigate('meta-demo')}
+                className={`px-4 py-2 rounded-lg transition-colors ${
+                  currentView === 'meta-demo'
+                    ? 'bg-amber-500 text-white'
+                    : 'text-gray-300 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                🎭 Meta Demo
               </button>
               <button
                 onClick={() => onNavigate('gallery')}

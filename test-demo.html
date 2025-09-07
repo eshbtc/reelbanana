@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Demo Test</title>
+</head>
+<body>
+    <h1>Testing Demo Access</h1>
+    <p>If you can see this, the server is working.</p>
+    <p><a href="http://localhost:5173/demo">Go to Demo</a></p>
+    <p><a href="http://localhost:5173/">Go to Main App</a></p>
+    
+    <script>
+        // Test if we can access the demo endpoint
+        fetch('http://localhost:5173/demo')
+            .then(response => response.text())
+            .then(html => {
+                console.log('Demo page HTML length:', html.length);
+                if (html.includes('DemoUI')) {
+                    console.log('✅ DemoUI component found in HTML');
+                } else {
+                    console.log('❌ DemoUI component not found in HTML');
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching demo page:', error);
+            });
+    </script>
+</body>
+</html>

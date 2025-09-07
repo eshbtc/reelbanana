@@ -11,13 +11,15 @@ import DemoWizardHelpModal from './components/DemoWizardHelpModal';
 import UserDashboard from './components/UserDashboard';
 import MyProjectsPage from './components/MyProjectsPage';
 import AdBlockerWarning from './components/AdBlockerWarning';
+import DemoUI from './components/DemoUI';
+import MetaDemoUI from './components/MetaDemoUI';
 import { Scene } from './types';
 import { getCurrentUser } from './services/authService';
 import { API_ENDPOINTS } from './config/apiConfig';
 import { authFetch } from './lib/authFetch';
 // Removed auto-publish; handled in MoviePlayer for one-click publish UX
 
-type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects';
+type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects' | 'demo' | 'meta-demo';
 
 const App: React.FC = () => {
   // Defensive context usage to prevent null context errors
@@ -33,6 +35,8 @@ const App: React.FC = () => {
   // Initialize view based on URL path
   const getInitialView = (): View => {
     const path = window.location.pathname;
+    if (path === '/meta-demo') return 'meta-demo';
+    if (path === '/demo') return 'demo';
     if (path === '/projects') return 'projects';
     if (path === '/gallery') return 'gallery';
     if (path === '/dashboard') return 'dashboard';
@@ -119,7 +123,7 @@ const App: React.FC = () => {
     setProjectId(null);
   }, []);
 
-  const handleNavigate = useCallback((newView: 'editor' | 'gallery' | 'dashboard' | 'projects') => {
+  const handleNavigate = useCallback((newView: 'editor' | 'gallery' | 'dashboard' | 'projects' | 'demo' | 'meta-demo') => {
     setView(newView);
     
     // Update URL
@@ -180,6 +184,20 @@ const App: React.FC = () => {
         return <UserDashboard onClose={() => setView('editor')} />;
       case 'projects':
         return <MyProjectsPage />;
+      case 'demo':
+        return (
+          <DemoUI 
+            onComplete={handleRenderComplete}
+            onFail={handleRenderFail}
+          />
+        );
+      case 'meta-demo':
+        return (
+          <MetaDemoUI 
+            onComplete={handleRenderComplete}
+            onFail={handleRenderFail}
+          />
+        );
       case 'editor':
       default:
         return (
