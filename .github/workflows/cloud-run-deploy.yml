@@ -59,7 +59,7 @@ jobs:
           [[ -n "$INPUT_BUCKET_NAME" ]] && ENV_FLAGS+=" --set-env-vars=INPUT_BUCKET_NAME=$INPUT_BUCKET_NAME"
           gcloud run deploy reel-banana-upload-assets --source backend/upload-assets --allow-unauthenticated $ENV_FLAGS
         env:
-          INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com' }}
+          INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
 
       - name: Deploy narrate
         if: steps.changes.outputs.narrate == 'true'
@@ -70,7 +70,7 @@ jobs:
           gcloud run deploy reel-banana-narrate --source backend/narrate --allow-unauthenticated $ENV_FLAGS
         env:
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
-          INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com' }}
+          INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
 
       - name: Deploy align-captions
         if: steps.changes.outputs.align-captions == 'true'
@@ -79,7 +79,7 @@ jobs:
           [[ -n "$INPUT_BUCKET_NAME" ]] && ENV_FLAGS+=" --set-env-vars=INPUT_BUCKET_NAME=$INPUT_BUCKET_NAME"
           gcloud run deploy reel-banana-align-captions --source backend/align-captions --allow-unauthenticated $ENV_FLAGS
         env:
-          INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com' }}
+          INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
 
       - name: Deploy compose-music
         if: steps.changes.outputs.compose-music == 'true'
@@ -91,7 +91,7 @@ jobs:
           gcloud run deploy reel-banana-compose-music --source backend/compose-music --allow-unauthenticated $ENV_FLAGS
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com' }}
+          INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
 
       - name: Deploy render
         if: steps.changes.outputs.render == 'true'
@@ -101,8 +101,8 @@ jobs:
           [[ -n "$OUTPUT_BUCKET_NAME" ]] && ENV_FLAGS+=" --set-env-vars=OUTPUT_BUCKET_NAME=$OUTPUT_BUCKET_NAME"
           gcloud run deploy reel-banana-render --source backend/render --allow-unauthenticated $ENV_FLAGS
         env:
-          INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com' }}
-          OUTPUT_BUCKET_NAME: ${{ secrets.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com' }}
+          INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
+          OUTPUT_BUCKET_NAME: ${{ secrets.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
 
       - name: Deploy polish
         if: steps.changes.outputs.polish == 'true'
@@ -125,7 +125,7 @@ jobs:
           FAL_MODEL_INTERP: ${{ secrets.FAL_MODEL_INTERP }}
           FAL_UPSCALE_ENDPOINT: ${{ secrets.FAL_UPSCALE_ENDPOINT }}
           FAL_INTERP_ENDPOINT: ${{ secrets.FAL_INTERP_ENDPOINT }}
-          OUTPUT_BUCKET_NAME: ${{ secrets.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com' }}
+          OUTPUT_BUCKET_NAME: ${{ secrets.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
 
       - name: Deploy api-key-service
         if: steps.changes.outputs.api-key-service == 'true'
