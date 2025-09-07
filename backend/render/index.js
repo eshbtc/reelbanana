@@ -137,14 +137,15 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
     
     try {
         // Smart engine selection: Use FAL only for specific use cases, default to FFmpeg for full videos
-        // FAL is good for: short clips, single images, experimental features
-        // FFmpeg is better for: full-length videos, multiple scenes, production content
+        // FAL is good for: image-to-video generation, experimental features
+        // FFmpeg is better for: complex multi-scene videos with transitions
         const totalDuration = (scenes || []).reduce((sum, s) => sum + (s?.duration || 3), 0);
-        const isShortVideo = totalDuration <= 10; // 10 seconds or less
+        const isShortVideo = totalDuration <= 30; // 30 seconds or less (increased for LTX Video)
         const isSingleScene = (scenes || []).length <= 1;
+        const isImageToVideo = falRenderModel.includes('image-to-video');
         
-        // Use FAL only if explicitly requested AND it's a short video/single scene
-        const useFalEngine = (typeof useFal === 'boolean') ? !!useFal && (isShortVideo || isSingleScene) : false;
+        // Use FAL if explicitly requested AND (short video OR single scene OR image-to-video model)
+        const useFalEngine = (typeof useFal === 'boolean') ? !!useFal && (isShortVideo || isSingleScene || isImageToVideo) : false;
         console.log(`Render engine selected: ${useFalEngine ? 'FAL' : 'FFmpeg'} (env=${renderEngineEnv}, body.useFal=${useFal}, duration=${totalDuration}s, scenes=${(scenes || []).length})`);
         
         if (useFalEngine) {
@@ -248,6 +249,19 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                     prompt: req.body.veoPrompt || `Create a short cinematic video for: ${String((req.body && req.body.prompt) || '').slice(0,200) || 'story'}`,
                     image_url: signedUrl
                 };
+                // Allow caller to specify clip duration for image-to-video models
+                try {
+                  const secs = parseInt(String(req.body.falVideoSeconds || process.env.FAL_IMAGE_TO_VIDEO_SECONDS || ''), 10);
+                  if (!isNaN(secs) && secs > 0) {
+                    falInput.duration = secs;
+                    falInput.seconds = secs;
+                    falInput.video_length = secs;
+                  }
+                } catch (_) {}
+                // Raw overrides for forward-compatibility with new models
+                if (req.body && typeof req.body.falInput === 'object') {
+                  try { falInput = { ...falInput, ...req.body.falInput }; } catch (_) {}
+                }
             } else if (falRenderModel.includes('veo3/fast') || falRenderModel.includes('veo')) {
                 // Veo 3 Fast text-to-video expects just a prompt
                 falInput = {
