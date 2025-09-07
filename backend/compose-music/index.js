@@ -89,7 +89,7 @@ const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.c
 
 // Initialize ElevenLabs client for music generation
 const elevenLabsClient = new ElevenLabsClient({
-  apiKey: process.env.ELEVENLABS_API_KEY
+  apiKey: process.env.ELEVENLABS_MUSIC_API_KEY
 });
 
 // Observability counters
@@ -219,14 +219,14 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
 
 // Lightweight health check (no App Check required)
 app.get('/health', (req, res) => {
-  const elevenLabsConfigured = !!process.env.ELEVENLABS_API_KEY;
+  const elevenLabsMusicConfigured = !!process.env.ELEVENLABS_MUSIC_API_KEY;
   const geminiConfigured = !!process.env.GEMINI_API_KEY;
   
   res.json({
     status: 'ok',
     service: 'compose-music',
     aiConfigured: true, // Using Firebase AI Logic
-    elevenLabsConfigured,
+    elevenLabsMusicConfigured,
     geminiConfigured,
     bucket: bucketName,
     metrics: {

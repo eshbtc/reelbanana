@@ -86,12 +86,12 @@ jobs:
         run: |
           ENV_FLAGS=""
           [[ -n "$GEMINI_API_KEY" ]] && ENV_FLAGS+=" --set-env-vars=GEMINI_API_KEY=$GEMINI_API_KEY"
-          [[ -n "$ELEVENLABS_API_KEY" ]] && ENV_FLAGS+=" --set-env-vars=ELEVENLABS_API_KEY=$ELEVENLABS_API_KEY"
+          [[ -n "$ELEVENLABS_MUSIC_API_KEY" ]] && ENV_FLAGS+=" --set-env-vars=ELEVENLABS_MUSIC_API_KEY=$ELEVENLABS_MUSIC_API_KEY"
           [[ -n "$INPUT_BUCKET_NAME" ]] && ENV_FLAGS+=" --set-env-vars=INPUT_BUCKET_NAME=$INPUT_BUCKET_NAME"
           gcloud run deploy reel-banana-compose-music --source backend/compose-music --allow-unauthenticated $ENV_FLAGS
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_MUSIC_API_KEY: ${{ secrets.ELEVENLABS_MUSIC_API_KEY }}
           INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME }}
 
       - name: Deploy render
