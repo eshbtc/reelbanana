@@ -110,7 +110,7 @@ jobs:
         env:
           INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
           OUTPUT_BUCKET_NAME: ${{ secrets.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
-          FAL_RENDER_MODEL: ${{ secrets.FAL_RENDER_MODEL || 'fal-ai/veo3/fast/image-to-video' }}
+          FAL_RENDER_MODEL: ${{ secrets.FAL_RENDER_MODEL || 'fal-ai/ltxv-13b-098-distilled/image-to-video' }}
           RENDER_ENGINE: ${{ secrets.RENDER_ENGINE || 'fal' }}
 
       - name: Deploy polish
