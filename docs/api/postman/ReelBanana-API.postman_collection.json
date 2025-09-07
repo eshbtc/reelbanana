@@ -141,7 +141,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"projectId\": \"{{project_id}}\",\n  \"gsAudioPath\": \"gs://oneminute-movie-in/{{project_id}}/narration.mp3\"\n}"
+              "raw": "{\n  \"projectId\": \"{{project_id}}\",\n  \"gsAudioPath\": \"gs://reel-banana-35a54.firebasestorage.app/{{project_id}}/narration.mp3\"\n}"
             },
             "url": {
               "raw": "{{base_url_align}}/align",
@@ -205,7 +205,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"projectId\": \"{{project_id}}\",\n  \"scenes\": [\n    {\n      \"imageUrl\": \"gs://oneminute-movie-in/{{project_id}}/scene_1.jpg\",\n      \"camera\": \"zoom_in\",\n      \"transition\": \"fade\",\n      \"duration\": 3\n    },\n    {\n      \"imageUrl\": \"gs://oneminute-movie-in/{{project_id}}/scene_2.jpg\",\n      \"camera\": \"pan_left\",\n      \"transition\": \"wipe\",\n      \"duration\": 4\n    }\n  ],\n  \"gsAudioPath\": \"gs://oneminute-movie-in/{{project_id}}/narration.mp3\",\n  \"srtPath\": \"gs://oneminute-movie-in/{{project_id}}/captions.srt\",\n  \"gsMusicPath\": \"gs://oneminute-movie-in/{{project_id}}/music.mp3\"\n}"
+              "raw": "{\n  \"projectId\": \"{{project_id}}\",\n  \"scenes\": [\n    {\n      \"imageUrl\": \"gs://reel-banana-35a54.firebasestorage.app/{{project_id}}/scene_1.jpg\",\n      \"camera\": \"zoom_in\",\n      \"transition\": \"fade\",\n      \"duration\": 3\n    },\n    {\n      \"imageUrl\": \"gs://reel-banana-35a54.firebasestorage.app/{{project_id}}/scene_2.jpg\",\n      \"camera\": \"pan_left\",\n      \"transition\": \"wipe\",\n      \"duration\": 4\n    }\n  ],\n  \"gsAudioPath\": \"gs://reel-banana-35a54.firebasestorage.app/{{project_id}}/narration.mp3\",\n  \"srtPath\": \"gs://reel-banana-35a54.firebasestorage.app/{{project_id}}/captions.srt\",\n  \"gsMusicPath\": \"gs://reel-banana-35a54.firebasestorage.app/{{project_id}}/music.mp3\"\n}"
             },
             "url": {
               "raw": "{{base_url_render}}/render",
