@@ -66,7 +66,7 @@ jobs:
         run: |
           ENV_FLAGS=""
           [[ -n "$INPUT_BUCKET_NAME" ]] && ENV_FLAGS+=" --set-env-vars=INPUT_BUCKET_NAME=$INPUT_BUCKET_NAME"
-          ENV_FLAGS+=" --set-secrets=ELEVENLABS_API_KEY=ELEVENLABS_API_KEY:latest"
+          ENV_FLAGS+=" --set-secrets=ELEVENLABS_API_KEY=ELEVENLABS_API_KEY_VOICE_NEW:latest"
           gcloud run deploy reel-banana-narrate --source backend/narrate --allow-unauthenticated $ENV_FLAGS
         env:
           INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
