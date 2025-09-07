@@ -38,10 +38,20 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
         return `https://storage.googleapis.com/${bucket}/${path}`;
       }
       
-      // Handle direct GCS URLs (already in correct format)
-      const gcsMatch = url.match(/^https?:\/\/storage\.googleapis\.com\//i);
+      // Handle direct GCS URLs (decode percent-encoding if present)
+      const gcsMatch = url.match(/^https?:\/\/storage\.googleapis\.com\/(.+)/i);
       if (gcsMatch) {
-        return url; // Already in correct format
+        try {
+          const u = new URL(url);
+          const parts = u.pathname.split('/').filter(Boolean);
+          if (parts.length >= 2) {
+            const bucket = parts[0];
+            const rest = parts.slice(1).join('/');
+            const decodedRest = decodeURIComponent(rest);
+            return `https://storage.googleapis.com/${bucket}/${decodedRest}`;
+          }
+        } catch {}
+        return url;
       }
       
       // Handle other GCS URL formats

@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Scene } from '../types';
-import { createProject } from '../services/firebaseService';
+import { createProject, updateProject } from '../services/firebaseService';
 import { generateImageSequence } from '../services/geminiService';
 import { API_ENDPOINTS, apiCall } from '../config/apiConfig';
 // Toast is optional; we fallback to console if provider is missing
@@ -41,9 +41,30 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
   const [clipCount, setClipCount] = useState<number>(5);
   const [clipSeconds, setClipSeconds] = useState<number>(12);
   const [clipModel, setClipModel] = useState<string>('fal-ai/veo3/fast/image-to-video');
+  const [reuseAssets, setReuseAssets] = useState<boolean>(true);
+  const [existingProjectId, setExistingProjectId] = useState<string>('');
 
   const defaultCallouts = useMemo(() => (
     ['Generate Story', 'Images', 'Narration', 'Captions', 'Music', 'Render & Polish', 'Publish & Share', 'Results']
+  ), []);
+
+  const baseSceneLines = useMemo(() => (
+    [
+      'What if your demo made itself?',
+      'Type an idea; we turn it into scenes and visuals.',
+      'Cinematic images, consistent look, styled automatically.',
+      'Pro‑grade narration, clear and natural.',
+      'Captions synced perfectly to every word.',
+      'A custom score that matches your story’s energy.',
+      'We assemble your movie with smooth camera motion.',
+      'Polish adds sharpness and fluid motion.',
+      'Built on Google Cloud Run and Firebase.',
+      'ElevenLabs powers narration and music.',
+      'FAL Veo 3 Fast creates hero motion clips.',
+      'Security with Firebase App Check and durable GCS URLs.',
+      'We built this in under forty‑eight hours.',
+      'Create your movie in minutes at reelbanana.ai.'
+    ]
   ), []);
 
   // Minimal notify layer (no hooks) — avoids invalid hook calls if provider is missing
@@ -59,6 +80,25 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
     const newEntries: Entry[] = arr.map(f => ({ kind: 'file', file: f, preview: URL.createObjectURL(f) }));
     setEntries(prev => [...prev, ...newEntries]);
     setDurations(prev => [...prev, ...newEntries.map(() => 8)]);
+  };
+
+  const gcsExists = async (bucket: string, path: string): Promise<boolean> => {
+    try {
+      const url = `https://storage.googleapis.com/${bucket}/${path}`;
+      const res = await fetch(url, { method: 'GET', cache: 'no-store' });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  };
+
+  const getRenderHealth = async (): Promise<{ outputBucket?: string } | null> => {
+    try {
+      const base = (await import('../config/apiConfig')).apiConfig.baseUrls.render;
+      const res = await fetch(`${base}/health`, { method: 'GET' });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch { return null; }
   };
 
   const fileToDataUri = (file: File): Promise<string> => {
@@ -174,46 +214,62 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
         narration: '',
         status: 'idle'
       }));
-      const pid = await createProject({ topic: 'ReelBanana — Demo of the Demo', characterAndStyle: 'Modern cinematic tech UI; dark mode; amber accents', scenes: scenesSeed });
+      const pid = existingProjectId.trim().length > 0 ? existingProjectId.trim() : await createProject({ topic: 'ReelBanana — Demo of the Demo', characterAndStyle: 'Modern cinematic tech UI; dark mode; amber accents', scenes: scenesSeed });
       setProjectId(pid);
 
       // Upload or stylize images per scene
       const uploadedUrls: string[][] = [];
+      // Buckets
+      const inputBucket = 'reel-banana-35a54.firebasestorage.app';
+      const renderHealth = await getRenderHealth();
+      const outputBucket = (renderHealth && renderHealth.outputBucket) || inputBucket;
       for (let i = 0; i < workingEntries.length; i++) {
         setStatus(`Preparing scene ${i + 1} of ${workingEntries.length}…`);
         setProgress(Math.round((i / Math.max(1, workingEntries.length)) * 30));
         const entry = workingEntries[i];
         if (entry.kind === 'file') {
           if (!stylize) {
-            let base64 = await fileToDataUri(entry.file);
-            if (includeCallouts) {
-              const label = defaultCallouts[i % defaultCallouts.length];
-              base64 = await overlayLabel(base64, label);
+            const rel = `${pid}/scene-${i}-0.jpeg`;
+            if (reuseAssets && await gcsExists(inputBucket, rel)) {
+              uploadedUrls.push([`https://storage.googleapis.com/${inputBucket}/${rel}`]);
+            } else {
+              let base64 = await fileToDataUri(entry.file);
+              if (includeCallouts) {
+                const label = defaultCallouts[i % defaultCallouts.length];
+                base64 = await overlayLabel(base64, label);
+              }
+              await apiCall(API_ENDPOINTS.upload, { projectId: pid, fileName: `scene-${i}-0.jpeg`, base64Image: base64 }, 'Upload failed');
+              uploadedUrls.push([`https://storage.googleapis.com/${inputBucket}/${rel}`]);
             }
-            await apiCall(API_ENDPOINTS.upload, { projectId: pid, fileName: `scene-${i}-0.jpeg`, base64Image: base64 }, 'Upload failed');
-            const bucket = 'reel-banana-35a54.firebasestorage.app';
-            const url = `https://storage.googleapis.com/${bucket}/${pid}/scene-${i}-0.jpeg`;
-            uploadedUrls.push([url]);
           } else {
             let base64Bg = await fileToDataUri(entry.file);
             if (includeCallouts) {
               const label = defaultCallouts[i % defaultCallouts.length];
               base64Bg = await overlayLabel(base64Bg, label);
             }
-            const frames = await generateImageSequence(
-              'Cinematic parallax of product UI screenshot; soft glow; depth; gradient lighting; modern tech vibe; subtle motion blur',
-              'Modern cinematic tech UI; dark background; amber highlights',
-              { backgroundImage: base64Bg, frames: 3, projectId: pid, sceneIndex: i }
-            );
-            uploadedUrls.push(frames);
+            if (reuseAssets && await gcsExists(inputBucket, `${pid}/scene-${i}-0.jpeg`)) {
+              uploadedUrls.push([`https://storage.googleapis.com/${inputBucket}/${pid}/scene-${i}-0.jpeg`]);
+            } else {
+              const frames = await generateImageSequence(
+                'Cinematic parallax of product UI screenshot; soft glow; depth; gradient lighting; modern tech vibe; subtle motion blur',
+                'Modern cinematic tech UI; dark background; amber highlights',
+                { backgroundImage: base64Bg, frames: 3, projectId: pid, sceneIndex: i }
+              );
+              uploadedUrls.push(frames);
+            }
           }
         } else {
           // AI-only scene generation
-          const frames = await generateImageSequence(
-            entry.prompt || 'Cinematic tech abstract; dark gradient; amber highlights; depth; subtle particles; premium UI motif',
-            'Modern cinematic tech UI; dark background; amber highlights',
-            { frames: 3, projectId: pid, sceneIndex: i }
-          );
+          let frames: string[] = [];
+          if (reuseAssets && await gcsExists(inputBucket, `${pid}/scene-${i}-0.jpeg`)) {
+            frames = [`https://storage.googleapis.com/${inputBucket}/${pid}/scene-${i}-0.jpeg`];
+          } else {
+            frames = await generateImageSequence(
+              entry.prompt || 'Cinematic tech abstract; dark gradient; amber highlights; depth; subtle particles; premium UI motif',
+              'Modern cinematic tech UI; dark background; amber highlights',
+              { frames: 3, projectId: pid, sceneIndex: i }
+            );
+          }
           // Overlay callout on first frame by overwriting scene-i-0.jpeg
           if (includeCallouts && frames[0]) {
             try {
@@ -221,8 +277,7 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
               const lab = defaultCallouts[i % defaultCallouts.length];
               const over = await overlayLabel(fg, lab);
               await apiCall(API_ENDPOINTS.upload, { projectId: pid, fileName: `scene-${i}-0.jpeg`, base64Image: over }, 'Upload failed');
-              const bucket = 'reel-banana-35a54.firebasestorage.app';
-              frames[0] = `https://storage.googleapis.com/${bucket}/${pid}/scene-${i}-0.jpeg`;
+              frames[0] = `https://storage.googleapis.com/${inputBucket}/${pid}/scene-${i}-0.jpeg`;
             } catch {}
           }
           uploadedUrls.push(frames);
@@ -241,10 +296,15 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
         // Note: we don't mutate entries state here; durations handled locally below
       }
 
+      // Build per‑scene narration lines and combined script
+      const totalScenes = workingEntries.length + (includeCta ? 1 : 0);
+      const linesForScenes: string[] = Array.from({ length: totalScenes }).map((_, i) => baseSceneLines[i] || '');
+      const combinedScript = linesForScenes.filter(Boolean).join(' ');
+
       setStep('processing');
       setStatus('Narrating…');
       setProgress(40);
-      const narr = await apiCall(API_ENDPOINTS.narrate, { projectId: pid, narrationScript: narration, emotion: 'professional' }, 'Narration failed');
+      const narr = await apiCall(API_ENDPOINTS.narrate, { projectId: pid, narrationScript: combinedScript, emotion: 'professional' }, 'Narration failed');
 
       setStatus('Aligning captions…');
       setProgress(55);
@@ -266,6 +326,11 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
           const i = indexes[j];
           setProgress(70 + Math.round((j / Math.max(1, indexes.length)) * 10));
           try {
+            // Skip if clip already exists
+            const clipRel = `${pid}/clips/scene-${i}.mp4`;
+            if (reuseAssets && await gcsExists(outputBucket, clipRel)) {
+              continue;
+            }
             await apiCall(API_ENDPOINTS.generateClip, { projectId: pid, sceneIndex: i, veoPrompt: 'Cinematic UI motion; subtle parallax; modern tech vibe', videoSeconds: clipSeconds, modelOverride: clipModel }, 'Clip generation failed');
           } catch (e) {
             console.warn('Clip generation failed for scene', i, e);
@@ -287,6 +352,21 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
         camera: i % 3 === 0 ? 'zoom-in' : i % 3 === 1 ? 'zoom-out' : 'pan-left',
         transition: i === 0 ? 'fade' : (i % 2 === 0 ? 'wipe' : 'fade')
       }));
+
+      // Persist per‑scene narration and image URLs for editor continuity
+      try {
+        const sceneDocs: Scene[] = Array.from({ length: totalEntries }).map((_, i) => ({
+          id: `hype-${i}`,
+          prompt: (workingEntries[i] && (workingEntries[i] as any).prompt) ? (workingEntries[i] as any).prompt : 'Cinematic parallax over UI; soft glow; modern tech vibe; slow zoom-in.',
+          narration: linesForScenes[i] || '',
+          imageUrls: uploadedUrls[i] || [],
+          status: 'success',
+          duration: renderScenes[i]?.duration || 8,
+          camera: renderScenes[i]?.camera as any,
+          transition: renderScenes[i]?.transition as any,
+        }));
+        await updateProject(pid, { topic: 'ReelBanana — Demo of the Demo', characterAndStyle: 'Modern cinematic tech UI; dark mode; amber accents', scenes: sceneDocs });
+      } catch (e) { console.warn('Non-fatal: failed to persist scene docs', e); }
 
       setStatus('Rendering movie…');
       setProgress(80);
@@ -370,6 +450,16 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
                 <button onClick={autoDistribute} className="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded">Auto distribute</button>
               </div>
             )}
+          </div>
+          <div className="bg-gray-800 border border-gray-700 rounded p-4">
+            <label className="flex items-center gap-2 text-gray-300 mb-2">
+              <input type="checkbox" checked={reuseAssets} onChange={(e)=>setReuseAssets(e.target.checked)} /> Reuse existing assets (skip generation if present)
+            </label>
+            <div className="flex items-center gap-3 text-sm text-gray-300">
+              <span>Existing projectId</span>
+              <input value={existingProjectId} onChange={(e)=>setExistingProjectId(e.target.value)} placeholder="Optional" className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white" />
+              <span className="text-xs text-gray-500">Provide to reuse a previous Hype project.</span>
+            </div>
           </div>
           <div className="bg-gray-800 border border-gray-700 rounded p-4">
             <label className="flex items-center gap-2 text-gray-300">
