@@ -145,25 +145,43 @@ app.post('/generate-clip', appCheckVerification, async (req, res) => {
       input = { ...input, duration: secs, seconds: secs, video_length: secs };
     }
 
-    // Call FAL using queue for reliability
+    // Call FAL using queue; try fallback models if first fails
     const { fal } = await import('@fal-ai/client');
     fal.config({ credentials: falApiKey });
-    const submit = await fal.queue.submit(modelId, { input, logs: false });
-    const requestId = submit?.request_id || submit?.requestId;
-    if (!requestId) return sendError(req, res, 500, 'FAL', 'Missing FAL request id');
+    const candidates = Array.from(new Set([
+      modelId,
+      falRenderModel || null,
+      'fal-ai/veo3/fast/image-to-video',
+      'fal-ai/ltxv-13b-098-distilled/image-to-video'
+    ].filter(Boolean)));
+
+    let outUrl = null; let lastError = null; let usedModel = null;
+    const pickUrl = (j) => j?.output_url || j?.result?.url || j?.data?.url || j?.output?.url || j?.video?.url || null;
     const timeoutMs = parseInt(process.env.FAL_RENDER_TIMEOUT_MS || '600000', 10);
     const pollMs = parseInt(process.env.FAL_RENDER_POLL_MS || '3000', 10);
-    const start = Date.now();
-    const pickUrl = (j) => j?.output_url || j?.result?.url || j?.data?.url || j?.output?.url || j?.video?.url || null;
-    while (Date.now() - start < timeoutMs) {
-      const st = await fal.queue.status(modelId, { requestId, logs: false });
-      const s = (st?.status || '').toString().toUpperCase();
-      if (s === 'COMPLETED') break;
-      if (s === 'FAILED' || s === 'ERROR') return sendError(req, res, 500, 'FAL_RENDER_FAILURE', `FAL status ${s}`);
-      await new Promise(r => setTimeout(r, pollMs));
+
+    for (const mdl of candidates) {
+      try {
+        const submit = await fal.queue.submit(mdl, { input, logs: false });
+        const requestId = submit?.request_id || submit?.requestId;
+        if (!requestId) throw new Error('Missing FAL request id');
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+          const st = await fal.queue.status(mdl, { requestId, logs: false });
+          const s = (st?.status || '').toString().toUpperCase();
+          if (s === 'COMPLETED') break;
+          if (s === 'FAILED' || s === 'ERROR') throw new Error(`FAL status ${s}`);
+          await new Promise(r => setTimeout(r, pollMs));
+        }
+        const result = await fal.queue.result(mdl, { requestId });
+        outUrl = pickUrl(result?.data);
+        usedModel = mdl;
+        if (outUrl) break;
+      } catch (e) {
+        lastError = e;
+        console.warn('generate-clip: model failed', mdl, e?.message || e);
+      }
     }
-    const result = await fal.queue.result(modelId, { requestId });
-    const outUrl = pickUrl(result?.data);
     if (!outUrl) return sendError(req, res, 500, 'FAL_RENDER_FAILURE', 'FAL did not return a video URL');
 
     // Download and persist to clips folder
@@ -175,7 +193,7 @@ app.post('/generate-clip', appCheckVerification, async (req, res) => {
     const buf = Buffer.from(await remote.arrayBuffer());
     await file.save(buf, { metadata: { contentType: 'video/mp4' } });
     const [signedClipUrl] = await file.getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 7*24*60*60*1000 });
-    res.json({ ok: true, clipPath, clipUrl: signedClipUrl });
+    res.json({ ok: true, model: usedModel, clipPath, clipUrl: signedClipUrl });
   } catch (e) {
     console.error('generate-clip error:', e);
     return sendError(req, res, 500, 'INTERNAL', 'Failed to generate clip', e?.message || String(e));
