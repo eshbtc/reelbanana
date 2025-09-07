@@ -6,6 +6,7 @@ const { Storage } = require('@google-cloud/storage');
 // Update ElevenLabs API key - trigger redeployment
 const admin = require('firebase-admin');
 const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
 
 const app = express();
 app.use(express.json());
@@ -223,15 +224,20 @@ app.post('/narrate', ...createExpensiveOperationLimiter('narrate'), appCheckVeri
 });
 
 // Lightweight health check (no App Check required)
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'narrate',
+// Health check endpoints
+createHealthEndpoints(app, 'narrate', 
+  {
     elevenlabsConfigured: !!process.env.ELEVENLABS_API_KEY,
-    bucket: bucketName,
-    time: new Date().toISOString()
-  });
-});
+    bucket: bucketName
+  },
+  {
+    dependencies: {
+      elevenlabs: () => commonDependencyChecks.elevenlabs(),
+      gcs: () => commonDependencyChecks.gcs(bucketName),
+      firebase: () => commonDependencyChecks.firebase()
+    }
+  }
+);
 
 // Note: No music generation endpoint is included here as per the latest stable implementation.
 

@@ -4,6 +4,7 @@ const { SpeechClient } = require('@google-cloud/speech');
 const { Storage } = require('@google-cloud/storage');
 const admin = require('firebase-admin');
 const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
 
 const app = express();
 app.use(express.json());
@@ -217,9 +218,18 @@ app.post('/align', ...createExpensiveOperationLimiter('align'), appCheckVerifica
 });
 
 // Lightweight health check (no App Check required)
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'align-captions', bucket: bucketName, time: new Date().toISOString() });
-});
+// Health check endpoints
+createHealthEndpoints(app, 'align-captions', 
+  {
+    bucket: bucketName
+  },
+  {
+    dependencies: {
+      gcs: () => commonDependencyChecks.gcs(bucketName),
+      firebase: () => commonDependencyChecks.firebase()
+    }
+  }
+);
 
 
 const PORT = process.env.PORT || 8080;

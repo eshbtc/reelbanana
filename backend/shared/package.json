@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Shared utilities for ReelBanana backend services",
   "main": "rateLimiter.js",
+  "files": [
+    "rateLimiter.js",
+    "healthCheck.js"
+  ],
   "dependencies": {
     "express-rate-limit": "^7.1.5",
     "firebase-admin": "^12.0.0"

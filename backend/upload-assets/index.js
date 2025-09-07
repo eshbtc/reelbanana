@@ -4,6 +4,7 @@ const { Storage } = require('@google-cloud/storage');
 // Trigger Cloud Run deployment after rendering pipeline fixes
 const admin = require('firebase-admin');
 const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
 
 const app = express();
 app.use(express.json({ limit: '10mb' })); // Limit for a single base64 image
@@ -215,9 +216,18 @@ app.post('/upload-image', ...createExpensiveOperationLimiter('upload'), appCheck
 });
 
 // Lightweight health check (no App Check required)
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'upload-assets', bucket: bucketName, time: new Date().toISOString() });
-});
+// Health check endpoints
+createHealthEndpoints(app, 'upload-assets', 
+  {
+    bucket: bucketName
+  },
+  {
+    dependencies: {
+      gcs: () => commonDependencyChecks.gcs(bucketName),
+      firebase: () => commonDependencyChecks.firebase()
+    }
+  }
+);
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {

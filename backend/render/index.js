@@ -7,6 +7,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const admin = require('firebase-admin');
 const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
 
 const app = express();
 app.use(express.json());
@@ -440,9 +441,19 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
 });
 
 // Lightweight health check (no App Check required)
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'render', inputBucket: inputBucketName, outputBucket: outputBucketName, time: new Date().toISOString() });
-});
+// Health check endpoints
+createHealthEndpoints(app, 'render', 
+  {
+    inputBucket: inputBucketName,
+    outputBucket: outputBucketName
+  },
+  {
+    dependencies: {
+      gcs: () => commonDependencyChecks.gcs(inputBucketName),
+      firebase: () => commonDependencyChecks.firebase()
+    }
+  }
+);
 
 
 const PORT = process.env.PORT || 8080;

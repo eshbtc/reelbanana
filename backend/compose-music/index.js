@@ -8,6 +8,7 @@ const { vertexAI, gemini15Flash } = require('@genkit-ai/vertexai');
 const { randomUUID } = require('crypto');
 const { ElevenLabsClient } = require('elevenlabs');
 const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
 
 const app = express();
 app.use(express.json());
@@ -220,16 +221,12 @@ app.post('/compose-music', ...createExpensiveOperationLimiter('compose'), appChe
 });
 
 // Lightweight health check (no App Check required)
-app.get('/health', (req, res) => {
-  const elevenLabsMusicConfigured = !!(process.env.ELEVENLABS_MUSIC_API_KEY || process.env.ELEVENLABS_API_KEY);
-  const geminiConfigured = !!process.env.GEMINI_API_KEY;
-  
-  res.json({
-    status: 'ok',
-    service: 'compose-music',
+// Health check endpoints
+createHealthEndpoints(app, 'compose-music', 
+  {
     aiConfigured: true, // Using Firebase AI Logic
-    elevenLabsMusicConfigured,
-    geminiConfigured,
+    elevenLabsMusicConfigured: !!(process.env.ELEVENLABS_MUSIC_API_KEY || process.env.ELEVENLABS_API_KEY),
+    geminiConfigured: !!process.env.GEMINI_API_KEY,
     bucket: bucketName,
     metrics: {
       musicGenerations: metrics.musicGenerations,
@@ -237,10 +234,17 @@ app.get('/health', (req, res) => {
       musicRetries: metrics.musicRetries,
       musicFallbacks: metrics.musicFallbacks,
       cacheHits: metrics.cacheHits
-    },
-    time: new Date().toISOString()
-  });
-});
+    }
+  },
+  {
+    dependencies: {
+      elevenlabs: () => commonDependencyChecks.elevenlabs(),
+      gemini: () => commonDependencyChecks.gemini(),
+      gcs: () => commonDependencyChecks.gcs(bucketName),
+      firebase: () => commonDependencyChecks.firebase()
+    }
+  }
+);
 
 /**
  * Generate real music using ElevenLabs Eleven Music API with retry logic

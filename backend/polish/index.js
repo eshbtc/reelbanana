@@ -3,6 +3,7 @@ const cors = require('cors');
 const admin = require('firebase-admin');
 const { Storage } = require('@google-cloud/storage');
 const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 const app = express();
@@ -313,15 +314,24 @@ app.post('/polish', ...createExpensiveOperationLimiter('polish'), appCheckVerifi
 });
 
 // Lightweight health check (no App Check required)
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'polish',
+// Health check endpoints
+createHealthEndpoints(app, 'polish', 
+  {
     usingApiKeyService: !!process.env.API_KEY_SERVICE_URL,
-    hasDefaultFalKey: !!(process.env.FAL_API_KEY || process.env.FAL_KEY),
-    time: new Date().toISOString()
-  });
-});
+    hasDefaultFalKey: !!(process.env.FAL_API_KEY || process.env.FAL_KEY)
+  },
+  {
+    dependencies: {
+      firebase: () => commonDependencyChecks.firebase(),
+      apiKeyService: async () => {
+        if (!process.env.API_KEY_SERVICE_URL) {
+          throw new Error('API Key Service URL not configured');
+        }
+        return { message: 'API Key Service URL configured' };
+      }
+    }
+  }
+);
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {

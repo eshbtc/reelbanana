@@ -5,6 +5,7 @@ const rateLimit = require('express-rate-limit');
 const admin = require('firebase-admin');
 const { KeyManagementServiceClient } = require('@google-cloud/kms');
 const { getUserQuotaStatus } = require('../shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -382,10 +383,27 @@ app.get('/quota-status', appCheckVerification, verifyToken, async (req, res) => 
   }
 });
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-});
+// Health check endpoints
+createHealthEndpoints(app, 'api-key-service', 
+  {
+    kmsConfigured: !!process.env.KMS_KEY_RING_ID
+  },
+  {
+    dependencies: {
+      firebase: () => commonDependencyChecks.firebase(),
+      kms: async () => {
+        try {
+          if (!process.env.KMS_KEY_RING_ID) {
+            throw new Error('KMS Key Ring ID not configured');
+          }
+          return { message: 'KMS Key Ring configured' };
+        } catch (error) {
+          throw new Error(`KMS check failed: ${error.message}`);
+        }
+      }
+    }
+  }
+);
 
 app.listen(PORT, () => {
   console.log(`API Key Service running on port ${PORT}`);
