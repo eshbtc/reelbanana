@@ -670,6 +670,8 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                     '-c:a aac',
                     '-b:a 192k',
                     '-pix_fmt yuv420p',
+                    // Move moov atom to the beginning for progressive playback
+                    '-movflags +faststart',
                     '-shortest' // Finish encoding when the shortest input (audio) ends
                 ])
                 .on('end', () => {

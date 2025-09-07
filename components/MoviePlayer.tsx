@@ -26,6 +26,7 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
   const [usePolished, setUsePolished] = useState<boolean>(true);
   const [playbackTracked, setPlaybackTracked] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const srcUrl = usePolished ? (polishedUrl || videoUrl || '') : (originalUrl || videoUrl || '');
   
   // Defensive context usage to prevent null context errors
   let toast: any = null;
@@ -79,6 +80,13 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
         `Video error: ${e.target.error?.message || 'Unknown error'}` : 
         'Unknown video error';
       trackPlaybackSuccess(false, error);
+      // Auto-fallback to original if polished fails
+      try {
+        if (usePolished && polishedUrl) {
+          console.warn('Polished playback failed, falling back to original video');
+          setUsePolished(false);
+        }
+      } catch {}
     };
 
     const handleLoadStart = () => {
@@ -167,9 +175,13 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
             <video
               ref={videoRef}
               className="absolute top-0 left-0 w-full h-full rounded-lg shadow-2xl bg-black"
-              src={usePolished ? (polishedUrl || videoUrl || '') : (originalUrl || videoUrl || '')}
+              key={(usePolished ? 'polished-' : 'original-') + (srcUrl || 'empty')}
+              src={srcUrl}
               controls
               autoPlay
+              muted
+              playsInline
+              preload="metadata"
               loop
             >
               Your browser does not support the video tag.
@@ -194,6 +206,12 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
             </div>
           )}
         </div>
+        {/* Debug link for playback issues */}
+        {srcUrl && (
+          <div className="text-center mb-2">
+            <a href={srcUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-400 underline">Open video in new tab</a>
+          </div>
+        )}
         <div className="text-center space-x-4">
           <button
             onClick={onBack}
