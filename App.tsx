@@ -98,15 +98,27 @@ const App: React.FC = () => {
     }
   }, [projectId]);
 
-  const handleRenderComplete = useCallback(async (url: string, projectId?: string) => {
-    setVideoUrl(url);
+  const handleRenderComplete = useCallback(async (urlOrResult: string | { videoUrl: string; projectId: string }, projectId?: string) => {
+    // Handle both object and string formats
+    let videoUrl: string;
+    let actualProjectId: string | undefined;
+    
+    if (typeof urlOrResult === 'object' && urlOrResult.videoUrl) {
+      videoUrl = urlOrResult.videoUrl;
+      actualProjectId = urlOrResult.projectId;
+    } else {
+      videoUrl = urlOrResult as string;
+      actualProjectId = projectId;
+    }
+    
+    setVideoUrl(videoUrl);
     try {
       const o = sessionStorage.getItem('lastRenderOriginalUrl');
       const p = sessionStorage.getItem('lastRenderPolishedUrl');
-      setVideoUrlOriginal(o || url);
-      setVideoUrlPolished(p || url);
+      setVideoUrlOriginal(o || videoUrl);
+      setVideoUrlPolished(p || videoUrl);
     } catch {}
-    setProjectId(projectId || null);
+    setProjectId(actualProjectId || null);
     setView('player');
   }, [scenes]);
 
