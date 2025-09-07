@@ -112,6 +112,48 @@ async function getAppCheckAndIdToken(debugSecret) {
   return tokens;
 }
 
+// Call Cloud Functions onCall secureDataHandler via Firebase client SDK in a real browser context
+async function callSecureDataHandler(debugSecret) {
+  if (!debugSecret) throw new Error('APPCHECK_DEBUG_SECRET env var is required');
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  await page.addInitScript((secret) => { window.FIREBASE_APPCHECK_DEBUG_TOKEN = secret; }, debugSecret);
+  await page.goto('https://reel-banana-35a54.web.app', { waitUntil: 'load' });
+  const result = await page.evaluate(async (cfg) => {
+    const appMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js');
+    const appCheckMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-app-check.js');
+    const authMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js');
+    const fnMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-functions.js');
+    const app = appMod.initializeApp({
+      projectId: cfg.projectId,
+      apiKey: cfg.apiKey,
+      authDomain: cfg.authDomain,
+      storageBucket: cfg.storageBucket,
+      appId: cfg.appId,
+    });
+    const ac = appCheckMod.initializeAppCheck(app, { provider: new appCheckMod.ReCaptchaV3Provider(cfg.recaptchaSiteKey), isTokenAutoRefreshEnabled: true });
+    await appCheckMod.getToken(ac, false);
+    // Optional sign-in (anonymous) to attach Authorization
+    const auth = authMod.getAuth(app);
+    try { await authMod.signInAnonymously(auth); } catch {}
+    // Call the onCall function
+    const fns = fnMod.getFunctions(app, 'us-central1');
+    const callable = fnMod.httpsCallable(fns, 'secureDataHandler');
+    const resp = await callable({ ping: 'hello' });
+    return resp?.data || null;
+  }, FIREBASE);
+  await browser.close();
+  return result;
+}
+
+async function fetchSharePage(shareId) {
+  const url = `https://reel-banana-35a54.web.app/share/${encodeURIComponent(shareId)}`;
+  const res = await fetch(url);
+  const html = await res.text();
+  const ok = res.ok && /<meta\s+property="og:title"/i.test(html);
+  return { url, ok, status: res.status };
+}
+
 async function exchangeRefreshTokenForIdToken(refreshToken) {
   const url = `https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(FIREBASE.apiKey)}`;
   const res = await fetch(url, {
@@ -232,6 +274,12 @@ async function post(url, body, tokens, label) {
     'Polish'
   );
   console.log('Polish:', polish);
+
+  // 7) Cloud Functions checks
+  const secureData = await callSecureDataHandler(process.env.APPCHECK_DEBUG_SECRET);
+  console.log('secureDataHandler:', secureData);
+  const shareCheck = await fetchSharePage(projectId);
+  console.log('shareHandler:', shareCheck);
 
   console.log('E2E pipeline complete.');
   console.log(JSON.stringify({ projectId, narr, align, comp, render, polish }, null, 2));
