@@ -369,11 +369,21 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
     }));
 
     const narrationScript = scenes.map((s: any) => s.narration).join(' ');
-    return await apiCall(
-      API_ENDPOINTS.render,
-      { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, veoPrompt: `Video depicting: ${narrationScript}` },
-      'Failed to render video'
-    );
+    const totalSecs = Math.max(8, Math.round(scenes.reduce((s, sc) => s + (sc.duration || 3), 0)));
+    try {
+      return await apiCall(
+        API_ENDPOINTS.render,
+        { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: true, veoPrompt: `Video depicting: ${narrationScript}`, falVideoSeconds: totalSecs },
+        'Failed to render video'
+      );
+    } catch (e) {
+      // Fallback to FFmpeg path
+      return await apiCall(
+        API_ENDPOINTS.render,
+        { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: false },
+        'Failed to render video (fallback)'
+      );
+    }
   };
 
   const executePolish = async () => {

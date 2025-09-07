@@ -244,10 +244,24 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
             transition: scene.transition || 'fade',
             duration: scene.duration || 3,
         }));
-        const renderResponse = await apiCall(API_ENDPOINTS.render, 
-          { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: true, veoPrompt: `Video depicting: ${narrationScript}` }, 
-          'Failed to render video'
-        );
+        let renderResponse: any;
+        try {
+          renderResponse = await apiCall(
+            API_ENDPOINTS.render,
+            { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: true, veoPrompt: `Video depicting: ${narrationScript}`, falVideoSeconds: Math.max(8, Math.round(scenes.reduce((s, sc) => s + (sc.duration || 3), 0))) },
+            'Failed to render video'
+          );
+        } catch (err: any) {
+          const msg = String(err?.message || err || '');
+          console.warn('Render via FAL failed, attempting FFmpeg fallback...', msg);
+          try { toast.info('FAL render failed. Trying fallback…'); } catch {}
+          // Fallback: try without FAL (FFmpeg path on server)
+          renderResponse = await apiCall(
+            API_ENDPOINTS.render,
+            { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: false },
+            'Failed to render video (fallback)'
+          );
+        }
         const { videoUrl } = renderResponse;
         
         if (renderResponse.cached) {

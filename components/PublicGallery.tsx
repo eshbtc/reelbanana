@@ -190,7 +190,7 @@ const PublicGallery: React.FC = () => {
                 playsInline
                 preload="metadata"
                 poster={selectedMovie.thumbnailUrl}
-                src={selectedMovie.videoUrl}
+                src={(selectedMovie.videoUrl || '').replace(/(^https?:\/\/firebasestorage\.googleapis\.com\/v0\/b\/)([^/]+)(\/o\/)([^?]+).*/i, (_, p1, b, p3, enc) => `https://storage.googleapis.com/${b}/${decodeURIComponent(enc)}`)}
               >
                 Your browser does not support the video tag.
               </video>

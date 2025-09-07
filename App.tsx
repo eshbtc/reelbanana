@@ -19,7 +19,7 @@ import { API_ENDPOINTS } from './config/apiConfig';
 import { authFetch } from './lib/authFetch';
 // Removed auto-publish; handled in MoviePlayer for one-click publish UX
 
-type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects' | 'demo' | 'meta-demo';
+type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects' | 'demo' | 'meta-demo' | 'hype';
 
 const App: React.FC = () => {
   // Defensive context usage to prevent null context errors
@@ -40,6 +40,7 @@ const App: React.FC = () => {
     if (path === '/projects') return 'projects';
     if (path === '/gallery') return 'gallery';
     if (path === '/dashboard') return 'dashboard';
+    if (path === '/hype') return 'hype';
     return 'editor';
   };
 
@@ -120,10 +121,9 @@ const App: React.FC = () => {
   const handleBackToEditor = useCallback(() => {
     setView('editor');
     setVideoUrl(null);
-    setProjectId(null);
   }, []);
 
-  const handleNavigate = useCallback((newView: 'editor' | 'gallery' | 'dashboard' | 'projects' | 'demo' | 'meta-demo') => {
+  const handleNavigate = useCallback((newView: 'editor' | 'gallery' | 'dashboard' | 'projects' | 'demo' | 'meta-demo' | 'hype') => {
     setView(newView);
     
     // Update URL
@@ -134,7 +134,6 @@ const App: React.FC = () => {
       setVideoUrl(null);
       setVideoUrlOriginal(null);
       setVideoUrlPolished(null);
-      setProjectId(null);
     }
   }, []);
 
@@ -145,8 +144,9 @@ const App: React.FC = () => {
       if (path === '/projects') setView('projects');
       else if (path === '/gallery') setView('gallery');
       else if (path === '/dashboard') setView('dashboard');
+      else if (path === '/hype') setView('hype');
       else setView('editor');
-    };
+  };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
@@ -198,6 +198,16 @@ const App: React.FC = () => {
             onFail={handleRenderFail}
           />
         );
+      case 'hype':
+        {
+          const HypeMode = require('./components/HypeMode').default;
+          return (
+            <HypeMode
+              onComplete={handleRenderComplete}
+              onFail={handleRenderFail}
+            />
+          );
+        }
       case 'editor':
       default:
         return (
@@ -257,6 +267,9 @@ const App: React.FC = () => {
                     Wizard Mode (Step-by-step control)
                   </label>
                 </div>
+                <button onClick={() => handleNavigate('hype')} className="ml-2 text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded">
+                  Hype Mode
+                </button>
                 <button onClick={() => setShowHelp(true)} className="ml-2 text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded">
                   Help
                 </button>
