@@ -80,44 +80,58 @@ const restoreImagesFromGCS = async (projectId: string, scenes: Scene[]): Promise
             return scenes;
         }
         
+        // Check if user is authenticated
+        const { getAuth } = await import('firebase/auth');
+        const auth = getAuth(firebaseApp);
+        if (!auth.currentUser) {
+            console.warn('User not authenticated, skipping image restoration');
+            return scenes;
+        }
+        
         // Create a map to store images by scene index
         const sceneImagesMap = new Map<number, string[]>();
         
-        // List all files in the project directory
-        const projectRef = ref(storage, projectId);
-        const listResult = await listAll(projectRef);
+        try {
+            // List all files in the project directory
+            const projectRef = ref(storage, projectId);
+            const listResult = await listAll(projectRef);
         
-        console.log(`📁 Found ${listResult.items.length} files in GCS for project ${projectId}`);
-        
-        // Filter and organize images by scene index
-        for (const itemRef of listResult.items) {
-            const fileName = itemRef.name;
-            // Match pattern: scene-{sceneIndex}-{imageIndex}.{ext}
-            const match = fileName.match(/^scene-(\d+)-(\d+)\.(png|jpg|jpeg|webp)$/i);
+            console.log(`📁 Found ${listResult.items.length} files in GCS for project ${projectId}`);
             
-            if (match) {
-                const sceneIndex = parseInt(match[1], 10);
-                const imageIndex = parseInt(match[2], 10);
+            // Filter and organize images by scene index
+            for (const itemRef of listResult.items) {
+                const fileName = itemRef.name;
+                // Match pattern: scene-{sceneIndex}-{imageIndex}.{ext}
+                const match = fileName.match(/^scene-(\d+)-(\d+)\.(png|jpg|jpeg|webp)$/i);
                 
-                try {
-                    const downloadURL = await getDownloadURL(itemRef);
+                if (match) {
+                    const sceneIndex = parseInt(match[1], 10);
+                    const imageIndex = parseInt(match[2], 10);
                     
-                    if (!sceneImagesMap.has(sceneIndex)) {
-                        sceneImagesMap.set(sceneIndex, []);
+                    try {
+                        const downloadURL = await getDownloadURL(itemRef);
+                        
+                        if (!sceneImagesMap.has(sceneIndex)) {
+                            sceneImagesMap.set(sceneIndex, []);
+                        }
+                        
+                        const images = sceneImagesMap.get(sceneIndex)!;
+                        // Ensure we have enough slots for the image
+                        while (images.length <= imageIndex) {
+                            images.push('');
+                        }
+                        images[imageIndex] = downloadURL;
+                        
+                        console.log(`📸 Restored image: ${fileName} for scene ${sceneIndex}, index ${imageIndex}`);
+                    } catch (error) {
+                        console.warn(`Failed to get download URL for ${fileName}:`, error);
                     }
-                    
-                    const images = sceneImagesMap.get(sceneIndex)!;
-                    // Ensure we have enough slots for the image
-                    while (images.length <= imageIndex) {
-                        images.push('');
-                    }
-                    images[imageIndex] = downloadURL;
-                    
-                    console.log(`📸 Restored image: ${fileName} for scene ${sceneIndex}, index ${imageIndex}`);
-                } catch (error) {
-                    console.warn(`Failed to get download URL for ${fileName}:`, error);
                 }
             }
+        } catch (storageError) {
+            console.warn(`Storage access failed for project ${projectId}:`, storageError);
+            // Return original scenes if storage access fails
+            return scenes;
         }
         
         // Restore images to scenes
@@ -160,18 +174,42 @@ export const getProject = async (projectId: string): Promise<ProjectData | null>
 
         if (docSnap.exists()) {
             const projectData = docSnap.data() as ProjectData;
-            
-            // Restore multiple images from GCS if scenes exist
-            if (projectData.scenes && projectData.scenes.length > 0) {
-                console.log(`🔄 Restoring images for project: ${projectId}`);
-                try {
-                    projectData.scenes = await restoreImagesFromGCS(projectId, projectData.scenes);
-                } catch (restoreError) {
-                    console.warn('Image restoration failed, using stored images:', restoreError);
-                    // Continue with original scenes if restoration fails
+
+            // Prefer scenes from subcollection (full carousel), fallback to stored scenes + GCS restore
+            try {
+                const scenesCol = collection(db, PROJECTS_COLLECTION, projectId, 'scenes');
+                const scenesSnap = await getDocs(scenesCol);
+                if (!scenesSnap.empty) {
+                    const sceneMap: Record<number, any> = {};
+                    scenesSnap.docs.forEach(d => {
+                        const s: any = d.data() || {};
+                        const idx = typeof s.index === 'number' ? s.index : parseInt(d.id, 10) || 0;
+                        sceneMap[idx] = {
+                            id: s.id || d.id,
+                            prompt: s.prompt || '',
+                            narration: s.narration || '',
+                            status: s.status || 'ready',
+                            duration: typeof s.duration === 'number' ? s.duration : 3,
+                            backgroundImage: s.backgroundImage || '',
+                            camera: s.camera || 'static',
+                            transition: s.transition || 'fade',
+                            imageUrls: Array.isArray(s.imageUrls) ? s.imageUrls.slice(0,3) : [],
+                        };
+                    });
+                    const sortedIdx = Object.keys(sceneMap).map(n => parseInt(n,10)).sort((a,b)=>a-b);
+                    projectData.scenes = sortedIdx.map(i => sceneMap[i]);
+                } else if (projectData.scenes && projectData.scenes.length > 0) {
+                    console.log(`🔄 Restoring images for project: ${projectId}`);
+                    try {
+                        projectData.scenes = await restoreImagesFromGCS(projectId, projectData.scenes);
+                    } catch (restoreError) {
+                        console.warn('Image restoration failed, using stored images:', restoreError);
+                    }
                 }
+            } catch (e) {
+                console.warn('Scenes subcollection load failed:', (e as any)?.message || e);
             }
-            
+
             return projectData;
         } else {
             console.warn(`Project with ID "${projectId}" not found.`);
@@ -257,7 +295,7 @@ export const updateProject = async (projectId: string, data: ProjectData): Promi
             rawData.characterOption = co;
         }
         
-        // For scenes, we'll store a lightweight version to avoid size limits
+        // For scenes, we'll store a lightweight version to avoid size limits in the main doc
         // Store only essential scene data, not full image URLs
         if (data.scenes && data.scenes.length > 0) {
             rawData.scenes = data.scenes.map(scene => {
@@ -279,6 +317,28 @@ export const updateProject = async (projectId: string, data: ProjectData): Promi
             });
             rawData.sceneCount = data.scenes.length;
             rawData.thumbnailUrl = rawData.scenes[0]?.imageUrls?.[0] || null;
+
+            // Also write full scenes to subcollection for full carousel restore (up to 3 images per scene)
+            const scenesCol = collection(db, PROJECTS_COLLECTION, projectId, 'scenes');
+            const writes = data.scenes.map((scene, index) => {
+                const s: any = {
+                    index,
+                    id: scene.id || String(index),
+                    prompt: scene.prompt || '',
+                    narration: scene.narration || '',
+                    status: scene.status || 'ready',
+                    duration: typeof scene.duration === 'number' ? scene.duration : 3,
+                    backgroundImage: scene.backgroundImage || '',
+                    camera: scene.camera || 'static',
+                    transition: scene.transition || 'fade',
+                    imageUrls: Array.isArray(scene.imageUrls)
+                        ? scene.imageUrls.filter((u: any)=>typeof u==='string' && u.trim()!=='').slice(0,3)
+                        : [],
+                    updatedAt: serverTimestamp(),
+                };
+                return setDoc(doc(scenesCol, String(index)), s, { merge: true });
+            });
+            await Promise.all(writes);
         }
 
         // Recursively remove all undefined values
