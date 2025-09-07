@@ -186,6 +186,10 @@ const PublicGallery: React.FC = () => {
                 className="w-full h-auto"
                 controls
                 autoPlay
+                muted
+                playsInline
+                preload="metadata"
+                poster={selectedMovie.thumbnailUrl}
                 src={selectedMovie.videoUrl}
               >
                 Your browser does not support the video tag.

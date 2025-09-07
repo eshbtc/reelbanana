@@ -348,6 +348,10 @@ const DemoUI: React.FC<DemoUIProps> = ({ onComplete, onFail }) => {
                     controls
                     className="w-full max-w-2xl mx-auto rounded-lg shadow-2xl"
                     poster={scenes[0]?.imageUrls?.[0]}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    autoPlay
                   >
                     Your browser does not support the video tag.
                   </video>

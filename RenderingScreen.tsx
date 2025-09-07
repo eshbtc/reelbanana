@@ -245,7 +245,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
             duration: scene.duration || 3,
         }));
         const renderResponse = await apiCall(API_ENDPOINTS.render, 
-          { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: true }, 
+          { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: true, veoPrompt: `Video depicting: ${narrationScript}` }, 
           'Failed to render video'
         );
         const { videoUrl } = renderResponse;

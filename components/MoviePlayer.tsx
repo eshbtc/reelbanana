@@ -27,6 +27,10 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
   const [playbackTracked, setPlaybackTracked] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const srcUrl = usePolished ? (polishedUrl || videoUrl || '') : (originalUrl || videoUrl || '');
+  const posterUrl = useMemo(() => {
+    const s = (scenes || []).find(sc => Array.isArray(sc.imageUrls) && sc.imageUrls.length > 0);
+    return s?.imageUrls?.[0] || undefined;
+  }, [scenes]);
   
   // Defensive context usage to prevent null context errors
   let toast: any = null;
@@ -177,6 +181,7 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
               className="absolute top-0 left-0 w-full h-full rounded-lg shadow-2xl bg-black"
               key={(usePolished ? 'polished-' : 'original-') + (srcUrl || 'empty')}
               src={srcUrl}
+              poster={posterUrl}
               controls
               autoPlay
               muted

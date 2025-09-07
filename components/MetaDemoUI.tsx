@@ -482,6 +482,10 @@ const MetaDemoUI: React.FC<MetaDemoUIProps> = ({ onComplete, onFail }) => {
                     controls
                     className="w-full max-w-2xl mx-auto rounded-lg shadow-2xl"
                     poster={scenes[0]?.imageUrls?.[0]}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    autoPlay
                     onError={(e) => {
                       const target = e.target as HTMLVideoElement;
                       console.error('Video loading error:', e);
