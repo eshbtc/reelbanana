@@ -14,6 +14,23 @@ if (!admin.apps.length) {
 }
 const storage = new Storage();
 
+// Retry utility with exponential backoff
+async function retryWithBackoff(operation, maxRetries = 3, baseDelay = 1000) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      const delay = baseDelay * Math.pow(2, attempt - 1);
+      console.log(`Attempt ${attempt} failed, retrying in ${delay}ms:`, error.message);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+
 // Observability
 const { randomUUID } = require('crypto');
 app.use((req, res, next) => {
@@ -246,13 +263,23 @@ app.post('/polish', appCheckVerification, async (req, res) => {
         const filename = `${projectId}/movie_polished.mp4`;
         const bucket = storage.bucket(outBucket);
         const file = bucket.file(filename);
-        const remoteRes = await fetch(currentUrl);
-        if (!remoteRes.ok) throw new Error(`Download failed: ${remoteRes.status}`);
-        const arrayBuffer = await remoteRes.arrayBuffer();
-        await file.save(Buffer.from(arrayBuffer), {
-          metadata: { contentType: 'video/mp4' },
+        const remoteRes = await retryWithBackoff(async () => {
+          const response = await fetch(currentUrl);
+          if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+          return response;
         });
-        await file.makePublic();
+        
+        const arrayBuffer = await remoteRes.arrayBuffer();
+        
+        await retryWithBackoff(async () => {
+          await file.save(Buffer.from(arrayBuffer), {
+            metadata: { contentType: 'video/mp4' },
+          });
+        });
+        
+        await retryWithBackoff(async () => {
+          await file.makePublic();
+        });
         const publicUrl = file.publicUrl();
         return res.status(200).json({ polishedUrl: publicUrl });
       } catch (e) {

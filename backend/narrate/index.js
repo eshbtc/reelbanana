@@ -75,6 +75,23 @@ const elevenlabs = new ElevenLabsClient({
 const storage = new Storage();
 const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
 
+// Retry utility with exponential backoff
+async function retryWithBackoff(operation, maxRetries = 3, baseDelay = 1000) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      const delay = baseDelay * Math.pow(2, attempt - 1);
+      console.log(`Attempt ${attempt} failed, retrying in ${delay}ms:`, error.message);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+
 /**
  * POST /narrate
  * Generates narration from a script and saves it to GCS.
@@ -155,40 +172,42 @@ app.post('/narrate', appCheckVerification, async (req, res) => {
 
     console.log(`ElevenLabs TTS stream created successfully for ${projectId}`);
 
-    // 2. Stream the audio directly to Google Cloud Storage  
+    // 2. Stream the audio directly to Google Cloud Storage with retry logic
     // Reuse the bucket, fileName, and file variables from the exists check above
-    const writeStream = file.createWriteStream({
-      metadata: { contentType: 'audio/mpeg' },
-    });
+    await retryWithBackoff(async () => {
+      return new Promise((resolve, reject) => {
+        const writeStream = file.createWriteStream({
+          metadata: { contentType: 'audio/mpeg' },
+        });
 
-    // Convert fetch ReadableStream to Node.js stream and pipe to GCS
-    const { Readable } = require('stream');
-    const audioStream = Readable.fromWeb(response.body);
-    
-    // Add error handling to the audio stream
-    audioStream.on('error', (streamError) => {
-      console.error(`ElevenLabs audio stream error for ${projectId}:`, streamError);
-      writeStream.destroy(streamError);
-    });
-
-    // Pipe the audio stream to the GCS write stream
-    audioStream.pipe(writeStream);
-
-    // Wait for the stream to finish writing
-    await new Promise((resolve, reject) => {
-      writeStream.on('finish', () => {
-        console.log(`Stream finished successfully for ${projectId}`);
-        resolve();
+        // Convert fetch ReadableStream to Node.js stream and pipe to GCS
+        const { Readable } = require('stream');
+        const audioStream = Readable.fromWeb(response.body);
+        
+        // Add error handling to the audio stream
+        audioStream.on('error', (streamError) => {
+          console.error(`ElevenLabs audio stream error for ${projectId}:`, streamError);
+          writeStream.destroy(streamError);
+          reject(streamError);
+        });
+        
+        writeStream.on('error', (writeError) => {
+          console.error(`GCS write error for ${projectId}:`, writeError);
+          reject(writeError);
+        });
+        
+        writeStream.on('finish', () => {
+          console.log(`Audio successfully streamed to GCS for ${projectId}`);
+          resolve();
+        });
+        
+        // Add timeout to prevent hanging
+        setTimeout(() => {
+          reject(new Error('Stream timeout after 60 seconds'));
+        }, 60000);
+        
+        audioStream.pipe(writeStream);
       });
-      writeStream.on('error', (writeError) => {
-        console.error(`GCS write stream error for ${projectId}:`, writeError);
-        reject(writeError);
-      });
-      
-      // Add timeout to prevent hanging
-      setTimeout(() => {
-        reject(new Error('Stream timeout after 60 seconds'));
-      }, 60000);
     });
 
     const gcsPath = `gs://${bucketName}/${fileName}`;
