@@ -194,7 +194,7 @@ const commonDependencyChecks = {
   
   elevenlabs: async () => {
     try {
-      const apiKey = process.env.ELEVENLABS_API_KEY || process.env.ELEVENLABS_MUSIC_API_KEY;
+      const apiKey = process.env.ELEVENLABS_MUSIC_API_KEY || process.env.ELEVENLABS_API_KEY;
       if (!apiKey) {
         throw new Error('ElevenLabs API key not configured');
       }
