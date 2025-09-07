@@ -7,7 +7,7 @@ import { initializeFirestore } from 'firebase/firestore';
 // Set debug token for development BEFORE initializing App Check
 if (import.meta.env.DEV) {
   // @ts-ignore - Set global debug token for development
-  (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = 'A767DE56-7486-4A78-8073-0156488A5007';
+  (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = process.env.VITE_APP_CHECK_DEBUG_TOKEN || 'your-debug-token-here';
 }
 
 // Initialize Firebase app once
