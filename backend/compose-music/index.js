@@ -182,10 +182,10 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
     const musicPrompt = await generateMusicPromptWithAI(narrationScript);
     console.log(`Generated music prompt: "${musicPrompt}"`);
 
-    // 2. Generate real music using Stability AI Stable Audio API
+    // 2. Generate real music using ElevenLabs Eleven Music API
     // Reuse bucket, fileName, and file variables from cache check above
     
-    console.log('🎵 Generating real music with Stability AI Stable Audio...');
+    console.log('🎵 Generating real music with ElevenLabs Eleven Music...');
     const audioBuffer = await generateRealMusic(musicPrompt);
     
     await file.save(audioBuffer, {
