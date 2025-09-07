@@ -76,8 +76,8 @@ const appCheckVerification = async (req, res, next) => {
 };
 
 const storage = new Storage();
-const inputBucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
-const outputBucketName = process.env.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
+const inputBucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
+const outputBucketName = process.env.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 
 // Retry utility with exponential backoff
 async function retryWithBackoff(operation, maxRetries = null, baseDelay = null) {

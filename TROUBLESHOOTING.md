@@ -6,8 +6,8 @@
 
 #### "No images found for scene X" in render service
 **Symptoms**: Render service fails with asset discovery errors
-**Root Cause**: ~~Bucket name mismatch - render uses `.firebasestorage.app`, others use `.appspot.com`~~ ✅ FIXED
-**Fix**: ✅ Updated `backend/render/index.js` bucket configuration to use `.appspot.com`
+**Root Cause**: ~~Bucket name mismatch - services used inconsistent bucket naming~~ ✅ FIXED
+**Fix**: ✅ Updated all services to use consistent bucket configuration with `.firebasestorage.app`
 
 #### Share links stop working after 1 hour
 **Symptoms**: Published movies show "Video not found" errors
@@ -84,12 +84,12 @@ curl https://[service-url]/health
 ### Verify bucket contents
 ```bash
 # List project assets
-gsutil ls gs://reel-banana-35a54.appspot.com/[project-id]/
+gsutil ls gs://reel-banana-35a54.firebasestorage.app/[project-id]/
 
 # Check specific files
-gsutil ls gs://reel-banana-35a54.appspot.com/[project-id]/scene-*
-gsutil ls gs://reel-banana-35a54.appspot.com/[project-id]/narration.mp3
-gsutil ls gs://reel-banana-35a54.appspot.com/[project-id]/captions.srt
+gsutil ls gs://reel-banana-35a54.firebasestorage.app/[project-id]/scene-*
+gsutil ls gs://reel-banana-35a54.firebasestorage.app/[project-id]/narration.mp3
+gsutil ls gs://reel-banana-35a54.firebasestorage.app/[project-id]/captions.srt
 ```
 
 ### Test E2E pipeline manually

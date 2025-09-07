@@ -107,7 +107,7 @@ const appCheckVerification = async (req, res, next) => {
 };
 
 const storage = new Storage();
-const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
+const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 
 // Initialize ElevenLabs client for music generation
 // Support both dedicated music key and fallback to general key
@@ -239,9 +239,9 @@ app.post('/compose-music', ...createExpensiveOperationLimiter('compose'), appChe
 // Health check endpoints
 createHealthEndpoints(app, 'compose-music', 
   {
-    aiConfigured: true, // Using Firebase AI Logic
+    aiConfigured: true, // Using Firebase Genkit + Vertex AI via ADC
     elevenLabsMusicConfigured: !!(process.env.ELEVENLABS_MUSIC_API_KEY || process.env.ELEVENLABS_API_KEY),
-    geminiConfigured: !!process.env.GEMINI_API_KEY,
+    aiCoreConfigured: true, // cosmetic: reflect server-side AI using service account
     bucket: bucketName,
     metrics: {
       musicGenerations: metrics.musicGenerations,
@@ -254,7 +254,6 @@ createHealthEndpoints(app, 'compose-music',
   {
     dependencies: {
       elevenlabs: () => commonDependencyChecks.elevenlabs(),
-      gemini: () => commonDependencyChecks.gemini(),
       gcs: () => commonDependencyChecks.gcs(bucketName),
       firebase: () => commonDependencyChecks.firebase()
     }

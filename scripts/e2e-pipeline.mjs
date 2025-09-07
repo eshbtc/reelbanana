@@ -57,7 +57,7 @@ const FIREBASE = {
   projectId: 'reel-banana-35a54',
   apiKey: 'AIzaSyCeZNdwsaZ_sBmOt8WY0FcUziq22-OVJjg',
   authDomain: 'reel-banana-35a54.firebaseapp.com',
-  storageBucket: 'reel-banana-35a54.appspot.com',
+  storageBucket: 'reel-banana-35a54.firebasestorage.app',
   appId: '1:223097908182:web:982c634d6aaeb3c805d277',
   recaptchaSiteKey: '6LfSNMArAAAAALXUYNGFmOSJN7O7W9c4Chp4oP1e',
 };

@@ -18,8 +18,8 @@ PORT_RENDER=8082
 PORT_COMPOSE=8084
 
 # Common envs
-export INPUT_BUCKET_NAME=${INPUT_BUCKET_NAME:-reel-banana-35a54.appspot.com}
-export OUTPUT_BUCKET_NAME=${OUTPUT_BUCKET_NAME:-reel-banana-35a54.appspot.com}
+export INPUT_BUCKET_NAME=${INPUT_BUCKET_NAME:-reel-banana-35a54.firebasestorage.app}
+export OUTPUT_BUCKET_NAME=${OUTPUT_BUCKET_NAME:-reel-banana-35a54.firebasestorage.app}
 
 # Start services
 ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-dummy} PORT=${PORT_NARRATE} node backend/narrate/index.js &

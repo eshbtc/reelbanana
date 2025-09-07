@@ -38,7 +38,7 @@ const PRODUCTION_CONFIG: ApiConfig = {
     projectId: 'reel-banana-35a54', // Not sensitive
     apiKey: 'AIzaSyCeZNdwsaZ_sBmOt8WY0FcUziq22-OVJjg',
     authDomain: 'reel-banana-35a54.firebaseapp.com',
-    storageBucket: 'reel-banana-35a54.appspot.com',
+    storageBucket: 'reel-banana-35a54.firebasestorage.app',
     messagingSenderId: '223097908182',
     appId: '1:223097908182:web:982c634d6aaeb3c805d277',
   },
@@ -59,7 +59,7 @@ const DEVELOPMENT_CONFIG: ApiConfig = {
     projectId: 'reel-banana-35a54',
     apiKey: 'AIzaSyCeZNdwsaZ_sBmOt8WY0FcUziq22-OVJjg',
     authDomain: 'reel-banana-35a54.firebaseapp.com',
-    storageBucket: 'reel-banana-35a54.appspot.com',
+    storageBucket: 'reel-banana-35a54.firebasestorage.app',
     messagingSenderId: '223097908182',
     appId: '1:223097908182:web:982c634d6aaeb3c805d277',
   },
@@ -80,7 +80,7 @@ const AI_STUDIO_CONFIG: ApiConfig = {
     projectId: 'reel-banana-35a54',
     apiKey: 'AIzaSyCeZNdwsaZ_sBmOt8WY0FcUziq22-OVJjg',
     authDomain: 'reel-banana-35a54.firebaseapp.com',
-    storageBucket: 'reel-banana-35a54.appspot.com',
+    storageBucket: 'reel-banana-35a54.firebasestorage.app',
     messagingSenderId: '223097908182',
     appId: '1:223097908182:web:982c634d6aaeb3c805d277',
   },
@@ -105,8 +105,8 @@ const validateConfig = (config: ApiConfig, envName: string): void => {
     errors.push('Missing required Firebase configuration fields');
   }
   
-  if (!firebase.storageBucket.endsWith('.appspot.com')) {
-    errors.push(`Storage bucket should end with .appspot.com: ${firebase.storageBucket}`);
+  if (!firebase.storageBucket.endsWith('.firebasestorage.app')) {
+    errors.push(`Storage bucket should end with .firebasestorage.app: ${firebase.storageBucket}`);
   }
   
   if (errors.length > 0) {

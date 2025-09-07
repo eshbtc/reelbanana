@@ -18,8 +18,8 @@ This document outlines a comprehensive 5-phase plan to address critical gaps ide
 ## 0.1 Infrastructure Configuration Fixes
 **Gap**: Mismatched service configurations preventing E2E flow
 - [x] **Standardize Bucket Names (CRITICAL)** ✅ COMPLETED
-  - ✅ Fixed `backend/render/index.js` to use `reel-banana-35a54.appspot.com` for both input/output buckets
-  - ✅ Verified all services use consistent bucket naming: `.appspot.com` not `.firebasestorage.app`
+  - ✅ Fixed `backend/render/index.js` to use `reel-banana-35a54.firebasestorage.app` for both input/output buckets
+  - ✅ Verified all services use consistent bucket naming: `.firebasestorage.app` not `.appspot.com`
   - [ ] Test asset discovery and download across all services
 - [ ] **Service Endpoint Configuration**
   - Resolve `config/apiConfig.ts` mismatch between 223097 vs 423229 project numbers
@@ -75,7 +75,7 @@ This document outlines a comprehensive 5-phase plan to address critical gaps ide
   - [ ] Test end-to-end authorization flow through polish service
 
 **Phase 0 Success Criteria:**
-- [x] ✅ **Infrastructure Fixed**: All services use consistent bucket configuration (`.appspot.com`)
+- [x] ✅ **Infrastructure Fixed**: All services use consistent bucket configuration (`.firebasestorage.app`)
 - [x] ✅ **Durable URLs**: Published videos use public URLs, draft videos use 7-day signed URLs
 - [x] ✅ **Share Flow Fixed**: Share button routes through publish flow to create `/share/:id` URLs
 - [x] ✅ **Audio Format Fixed**: Music service saves WAV files with correct content-type

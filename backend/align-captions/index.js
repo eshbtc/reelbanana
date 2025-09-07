@@ -74,7 +74,7 @@ const appCheckVerification = async (req, res, next) => {
 // --- CLIENT INITIALIZATION ---
 const speechClient = new SpeechClient();
 const storage = new Storage();
-const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
+const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 
 // --- HELPER FUNCTIONS ---
 

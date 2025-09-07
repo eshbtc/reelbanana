@@ -270,7 +270,7 @@ Backend enforcement (render/polish):
   - Development: when served from `localhost` or `127.0.0.1`, uses local service URLs (http://localhost:8080–8086).
   - Production: when built (`import.meta.env.PROD`), uses Cloud Run URLs.
   - AI Studio: set `VITE_TARGET_ENV=ai-studio` to target the AI Studio deployment URLs.
-- Firebase storage bucket now uses the canonical GCS name `reel-banana-35a54.appspot.com`.
+- Firebase storage bucket now uses the canonical GCS name `reel-banana-35a54.firebasestorage.app`.
 - Pipelines expect the input bucket `oneminute-movie-in` by default; override via `INPUT_BUCKET_NAME`.
 
 ### **Deployment**

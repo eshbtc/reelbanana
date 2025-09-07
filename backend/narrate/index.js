@@ -79,7 +79,7 @@ const elevenlabs = new ElevenLabsClient({
   apiKey: process.env.ELEVENLABS_API_KEY,
 });
 const storage = new Storage();
-const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
+const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 
 // Retry utility with exponential backoff
 async function retryWithBackoff(operation, maxRetries = 3, baseDelay = 1000) {

@@ -18,7 +18,7 @@ async function main() {
   }
   const storage = new Storage();
   const db = admin.firestore();
-  const bucketName = process.env.STORAGE_BUCKET || 'reel-banana-35a54.appspot.com';
+  const bucketName = process.env.STORAGE_BUCKET || 'reel-banana-35a54.firebasestorage.app';
   const bucket = storage.bucket(bucketName);
 
   const files = fs.readdirSync(dir).filter(f => /\.(png|jpg|jpeg)$/i.test(f));
