@@ -386,6 +386,7 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
             const renderDuration = Date.now() - renderStartTime;
             req.sliMonitor.recordSuccess('render', true, { projectId, cached: true });
             req.sliMonitor.recordLatency('render', renderDuration, { projectId, cached: true });
+            cacheMetrics.hits++;
             
             return res.status(200).json({ videoUrl, cached: true });
         }
@@ -821,6 +822,18 @@ app.get('/sli-dashboard', appCheckVerification, (req, res) => {
       message: error.message
     });
   }
+});
+
+// Cache status (protected)
+app.get('/cache-status', appCheckVerification, (req, res) => {
+  res.json({
+    service: 'render',
+    bucket: { input: inputBucketName, output: outputBucketName },
+    engine: renderEngineEnv || 'ffmpeg',
+    falModel: falRenderModel || null,
+    cache: cacheMetrics,
+    now: new Date().toISOString(),
+  });
 });
 
 // Playback tracking endpoint for SLI monitoring
