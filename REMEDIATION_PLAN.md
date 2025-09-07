@@ -83,10 +83,15 @@ This document outlines a comprehensive 5-phase plan to address critical gaps ide
 - [x] ✅ **Authorization Fixed**: Polish service forwards headers correctly
 - [x] ✅ **API Handler Fixed**: Consolidated duplicate `/get-api-key` handlers
 - [x] ✅ **Publish Integration**: MoviePlayer requests durable URLs before publishing
+- [x] ✅ **Share Handler Fixed**: Uses static asset for OG image instead of Cloud Run URL
+- [x] ✅ **STT Configuration**: Removed hardcoded sample rate for MP3 auto-detection
+- [x] ✅ **Render Audio Path**: Uses gsAudioPath instead of hardcoded narration.mp3
+- [x] ✅ **FFmpeg Dependencies**: Added libass-dev for subtitles filter support
+- [x] ✅ **Module Consistency**: Verified ESM/CJS usage is correct per service
 - [ ] **Testing Required**: 100% E2E pipeline success rate (upload → narrate → align → compose → render → share)
 - [ ] **Testing Required**: Zero broken shared links after 24+ hours (measured via synthetic tests)
 
-**🎉 PHASE 0 FULLY COMPLETED**: All critical production blockers have been fixed and refined! The system is now functional for end users with improved durability and user experience.
+**🎉 PHASE 0 FULLY COMPLETED**: All critical production blockers and edge cases have been fixed! The system is now robust and functional for end users with improved durability, reliability, and user experience.
 
 ---
 

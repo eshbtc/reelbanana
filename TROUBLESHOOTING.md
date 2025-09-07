@@ -36,6 +36,26 @@
 **Root Cause**: ~~WAV buffer saved as `.mp3` with `audio/mpeg` content-type~~ ✅ FIXED
 **Fix**: ✅ Save as `music.wav` with `audio/wav` content-type
 
+#### Share page OG image shows broken image
+**Symptoms**: Social media previews show broken image for shared videos
+**Root Cause**: ~~Share handler uses Cloud Run URL that may 404~~ ✅ FIXED
+**Fix**: ✅ Use static asset `/logo.png` from Firebase Hosting
+
+#### STT recognition accuracy issues
+**Symptoms**: Caption timing or text accuracy problems
+**Root Cause**: ~~Hardcoded sample rate may not match actual MP3~~ ✅ FIXED
+**Fix**: ✅ Let Google Speech-to-Text auto-detect sample rate for MP3
+
+#### Render service audio path issues
+**Symptoms**: Render fails when audio path doesn't match expected location
+**Root Cause**: ~~Hardcoded `${projectId}/narration.mp3` path~~ ✅ FIXED
+**Fix**: ✅ Derive audio path from `gsAudioPath` parameter
+
+#### FFmpeg subtitles filter failures
+**Symptoms**: Video rendering fails with subtitle-related errors
+**Root Cause**: ~~Missing libass library for subtitles filter~~ ✅ FIXED
+**Fix**: ✅ Added `libass-dev` to render service Docker image
+
 ### Configuration Issues
 
 #### Services routing to wrong backends

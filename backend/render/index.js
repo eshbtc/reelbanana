@@ -165,11 +165,25 @@ app.post('/render', appCheckVerification, async (req, res) => {
         const allProjectFiles = (await inputBucket.getFiles({ prefix: `${projectId}/` }))[0];
         console.log(`All project files (${allProjectFiles.length}):`, allProjectFiles.map(f => f.name));
         
-        // Resolve the correct remote music filename if provided
+        // Resolve the correct remote audio and music filenames
         let musicLocalPath = null;
+        let narrationLocalPath = path.join(tempDir, 'narration.mp3');
+        
+        // Derive audio path from gsAudioPath if provided
+        let remoteAudio = `${projectId}/narration.mp3`; // Default fallback
+        if (gsAudioPath) {
+            const prefix = `gs://${inputBucketName}/`;
+            if (gsAudioPath.startsWith(prefix)) {
+                const rel = gsAudioPath.substring(prefix.length);
+                if (rel && rel.includes(projectId + '/')) {
+                    remoteAudio = rel;
+                }
+            }
+        }
+        
         const downloadPromises = [
             ...imageFiles.map(file => file.download({ destination: path.join(tempDir, path.basename(file.name)) })),
-            inputBucket.file(`${projectId}/narration.mp3`).download({ destination: path.join(tempDir, 'narration.mp3') }),
+            inputBucket.file(remoteAudio).download({ destination: narrationLocalPath }),
             inputBucket.file(`${projectId}/captions.srt`).download({ destination: path.join(tempDir, 'captions.srt') }),
         ];
         
@@ -318,7 +332,7 @@ app.post('/render', appCheckVerification, async (req, res) => {
 
         await new Promise((resolve, reject) => {
             command
-                .input(path.join(tempDir, 'narration.mp3')) // narration audio track
+                .input(narrationLocalPath) // narration audio track
             
             if (musicLocalPath) {
                 command.input(musicLocalPath); // music track

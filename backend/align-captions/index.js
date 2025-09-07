@@ -179,7 +179,7 @@ app.post('/align', appCheckVerification, async (req, res) => {
             audio: { uri: gsAudioPath },
             config: {
                 encoding: 'MP3',
-                sampleRateHertz: 44100, // Matching ElevenLabs output
+                // Omit sampleRateHertz for MP3 to let the API auto-detect
                 languageCode: 'en-US',
                 enableWordTimeOffsets: true,
             },
