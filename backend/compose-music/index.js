@@ -3,8 +3,21 @@ const cors = require('cors');
 const { Storage } = require('@google-cloud/storage');
 const admin = require('firebase-admin');
 const { genkit } = require('genkit');
-const { firebase } = require('@genkit-ai/firebase');
-const { vertexAI, gemini15Flash } = require('@genkit-ai/vertexai');
+// Genkit plugins can differ by export shape between versions. Resolve safely.
+let firebasePluginFn = null;
+let vertexAIPluginFn = null;
+let gemini15Flash = null;
+try {
+  const firebasePlugin = require('@genkit-ai/firebase');
+  const vertexPlugin = require('@genkit-ai/vertexai');
+  // Try common export shapes
+  firebasePluginFn = firebasePlugin?.firebase || firebasePlugin?.default || null;
+  vertexAIPluginFn = vertexPlugin?.vertexAI || vertexPlugin?.default || null;
+  // Models may be named exports
+  gemini15Flash = vertexPlugin?.gemini15Flash || null;
+} catch (_) {
+  // Non-fatal; will fall back to heuristic prompts
+}
 const { randomUUID } = require('crypto');
 const { ElevenLabsClient } = require('elevenlabs');
 const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
@@ -27,19 +40,22 @@ if (!admin.apps.length) {
 }
 
 // Configure Firebase Genkit for server-side AI
-let ai;
+let ai = null;
 try {
-  ai = genkit({
-    plugins: [
-      firebase({ projectId: 'reel-banana-35a54' }),
-      vertexAI({ projectId: 'reel-banana-35a54', location: 'us-central1' })
-    ],
-    model: gemini15Flash,
-  });
-  console.log('✅ Firebase Genkit configured successfully');
+  if (typeof firebasePluginFn === 'function' && typeof vertexAIPluginFn === 'function' && gemini15Flash) {
+    ai = genkit({
+      plugins: [
+        firebasePluginFn({ projectId: 'reel-banana-35a54' }),
+        vertexAIPluginFn({ projectId: 'reel-banana-35a54', location: 'us-central1' })
+      ],
+      model: gemini15Flash,
+    });
+    console.log('✅ Firebase Genkit configured successfully');
+  } else {
+    console.warn('⚠️ Genkit plugins/models not available; AI prompt generation disabled.');
+  }
 } catch (error) {
-  console.error('❌ Failed to configure Firebase Genkit:', error);
-  process.exit(1);
+  console.warn('⚠️ Genkit initialization failed; AI prompt generation disabled:', error?.message || error);
 }
 
 // Observability & Error helpers
@@ -113,24 +129,19 @@ async function generateMusicPromptWithAI(narrationScript) {
   const prompt = `Analyze the following narration script and provide a short, descriptive musical prompt (e.g., "An upbeat, whimsical, adventurous orchestral score for a children's story, with a sense of wonder and a triumphant finish."). Only return the prompt text, nothing else. Script: "${narrationScript}"`;
   
   try {
+    if (!ai || typeof ai.generate !== 'function') {
+      return generateFallbackPrompt(narrationScript);
+    }
     console.log('🎵 Generating music prompt with Firebase Genkit + Vertex AI...');
-    
-    // Use Firebase Genkit with Vertex AI Gemini model
     const response = await ai.generate({
-      prompt: prompt,
-      config: {
-        maxOutputTokens: 100,
-        temperature: 0.7
-      }
+      prompt,
+      config: { maxOutputTokens: 100, temperature: 0.7 }
     });
-    
-    const aiResponse = response.text()?.trim();
+    const aiResponse = response?.text?.()?.trim();
     console.log('🎵 AI-generated music prompt:', aiResponse);
-    
     return aiResponse || generateFallbackPrompt(narrationScript);
-    
   } catch (error) {
-    console.log('🎵 AI generation failed, using fallback:', error.message);
+    console.log('🎵 AI generation failed, using fallback:', error?.message || error);
     return generateFallbackPrompt(narrationScript);
   }
 }

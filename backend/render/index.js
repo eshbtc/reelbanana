@@ -7,7 +7,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const admin = require('firebase-admin');
 const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
-const { createHealthEndpoints, commonDependencyChecks, appCheckVerification } = require('./shared/healthCheck');
+const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
 const { createSLIMiddleware, SLIMonitor } = require('./shared/sliMonitor');
 
 const app = express();
