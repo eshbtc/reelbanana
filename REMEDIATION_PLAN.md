@@ -41,7 +41,7 @@ This document outlines a comprehensive 5-phase plan to address critical gaps ide
   - ✅ Updated render service to use `file.makePublic()` and return `file.publicUrl()` for published videos
   - ✅ Implemented 7-day signed URLs for draft videos (vs 1-hour before)
   - ✅ Added `published` flag to render API to distinguish between draft and published videos
-  - [ ] Update `publishMovie()` in `firebaseService.ts` to store durable URLs
+  - ✅ MoviePlayer requests durable URL from render service before calling `publishMovie()` (implemented approach)
 - [x] **Fix Share Page URL Persistence** ✅ COMPLETED
   - ✅ Ensure `/share/:id` pages load videos with persistent URLs (via publish flow)
   - ✅ Test that shared videos remain playable after initial 1-hour window (public URLs)
