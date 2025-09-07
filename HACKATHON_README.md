@@ -8,7 +8,7 @@ ReelBanana is an AI-powered video creation platform that generates cinematic mov
 
 ### ✨ Key Features
 - **AI Story Generation**: Create compelling narratives from simple prompts
-- **Cinematic Image Generation**: Google Imagen 4.0 for high-quality visuals
+- **Cinematic Image Generation**: Google Gemini 2.5 Flash for high-quality visuals
 - **Professional Narration**: ElevenLabs text-to-speech with emotion control
 - **Background Music**: AI-generated music using ElevenLabs Eleven Music
 - **Video Assembly**: FFmpeg-powered video rendering with effects
@@ -32,8 +32,7 @@ ReelBanana is an AI-powered video creation platform that generates cinematic mov
 - **api-key-service**: Encrypted API key management
 
 ### AI Integration
-- **Google Gemini 2.5 Flash**: Story and prompt generation
-- **Google Imagen 4.0**: Image generation
+- **Google Gemini 2.5 Flash**: Story generation, prompt engineering, and image generation
 - **ElevenLabs**: Text-to-speech and music generation
 - **Google Speech-to-Text**: Caption alignment
 - **Fal AI**: Video upscaling and enhancement
