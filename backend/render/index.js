@@ -69,6 +69,23 @@ const storage = new Storage();
 const inputBucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
 const outputBucketName = process.env.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
 
+// Retry utility with exponential backoff
+async function retryWithBackoff(operation, maxRetries = 3, baseDelay = 1000) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      const delay = baseDelay * Math.pow(2, attempt - 1);
+      console.log(`Attempt ${attempt} failed, retrying in ${delay}ms:`, error.message);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+
 /**
  * POST /render
  * Orchestrates the entire video rendering process.
@@ -365,9 +382,11 @@ app.post('/render', appCheckVerification, async (req, res) => {
         // 4. Upload the final video to the output bucket
         console.log('Uploading final video...');
         // Reuse outputBucket variable from cache check above
-        const [uploadedFile] = await outputBucket.upload(outputVideoPath, {
-            destination: `${projectId}/movie.mp4`,
-            metadata: { contentType: 'video/mp4' },
+        const [uploadedFile] = await retryWithBackoff(async () => {
+            return await outputBucket.upload(outputVideoPath, {
+                destination: `${projectId}/movie.mp4`,
+                metadata: { contentType: 'video/mp4' },
+            });
         });
         
         // For published videos, make the file public for durable URLs
@@ -377,15 +396,19 @@ app.post('/render', appCheckVerification, async (req, res) => {
         let videoUrl;
         if (isPublished) {
             // Make file public for published videos (durable URLs)
-            await uploadedFile.makePublic();
+            await retryWithBackoff(async () => {
+                await uploadedFile.makePublic();
+            });
             videoUrl = uploadedFile.publicUrl();
             console.log(`Video uploaded and made public for published content`);
         } else {
             // Use signed URL with 7-day expiration for draft videos
-            const [signedUrl] = await uploadedFile.getSignedUrl({
-                version: 'v4',
-                action: 'read',
-                expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+            const [signedUrl] = await retryWithBackoff(async () => {
+                return await uploadedFile.getSignedUrl({
+                    version: 'v4',
+                    action: 'read',
+                    expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+                });
             });
             videoUrl = signedUrl;
             console.log(`Video uploaded with 7-day signed URL for draft content`);

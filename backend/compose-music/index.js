@@ -92,6 +92,15 @@ const elevenLabsClient = new ElevenLabsClient({
   apiKey: process.env.ELEVENLABS_API_KEY
 });
 
+// Observability counters
+const metrics = {
+  musicGenerations: 0,
+  musicGenerationTimeMs: 0,
+  musicRetries: 0,
+  musicFallbacks: 0,
+  cacheHits: 0
+};
+
 // AI-powered music prompt generation using Firebase Genkit with Vertex AI
 async function generateMusicPromptWithAI(narrationScript) {
   const prompt = `Analyze the following narration script and provide a short, descriptive musical prompt (e.g., "An upbeat, whimsical, adventurous orchestral score for a children's story, with a sense of wonder and a triumphant finish."). Only return the prompt text, nothing else. Script: "${narrationScript}"`;
@@ -171,6 +180,7 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
     if (exists) {
       const gsMusicPath = `gs://${bucketName}/${fileName}`;
       console.log(`Music already exists for ${projectId} at ${gsMusicPath}, skipping Gemini processing`);
+      metrics.cacheHits++;
       return res.status(200).json({ 
         gsMusicPath: gsMusicPath,
         musicPrompt: "Previously generated",
@@ -209,41 +219,94 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
 
 // Lightweight health check (no App Check required)
 app.get('/health', (req, res) => {
+  const elevenLabsConfigured = !!process.env.ELEVENLABS_API_KEY;
+  const geminiConfigured = !!process.env.GEMINI_API_KEY;
+  
   res.json({
     status: 'ok',
     service: 'compose-music',
     aiConfigured: true, // Using Firebase AI Logic
+    elevenLabsConfigured,
+    geminiConfigured,
     bucket: bucketName,
+    metrics: {
+      musicGenerations: metrics.musicGenerations,
+      avgGenerationTimeMs: metrics.musicGenerations > 0 ? Math.round(metrics.musicGenerationTimeMs / metrics.musicGenerations) : 0,
+      musicRetries: metrics.musicRetries,
+      musicFallbacks: metrics.musicFallbacks,
+      cacheHits: metrics.cacheHits
+    },
     time: new Date().toISOString()
   });
 });
 
 /**
- * Generate real music using ElevenLabs Eleven Music API
+ * Generate real music using ElevenLabs Eleven Music API with retry logic
  */
 async function generateRealMusic(musicPrompt) {
-  try {
-    console.log('🎵 Generating music with ElevenLabs Eleven Music...');
-    
-    // Call ElevenLabs Music API
-    const response = await elevenLabsClient.music.generate({
-      prompt: musicPrompt,
-      duration: 20, // 20 seconds to match our current duration
-      format: 'wav' // Request WAV format for better quality
-    });
-    
-    // Convert the response to a Buffer
-    const audioBuffer = Buffer.from(await response.arrayBuffer());
-    console.log('🎵 Successfully generated music with ElevenLabs');
-    
-    return audioBuffer;
-    
-  } catch (error) {
-    console.error('🎵 ElevenLabs music generation failed:', error);
-    console.log('🎵 Falling back to placeholder audio...');
-    
-    // Fallback to placeholder if ElevenLabs fails
-    return createWavPlaceholderAudio(musicPrompt);
+  const startTime = Date.now();
+  const maxRetries = 2;
+  const timeoutMs = 30000; // 30 second timeout
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🎵 Generating music with ElevenLabs Eleven Music (attempt ${attempt}/${maxRetries})...`);
+      
+      // Create timeout promise
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('ElevenLabs music generation timeout')), timeoutMs);
+      });
+      
+      // Call ElevenLabs Music API with timeout
+      const musicPromise = elevenLabsClient.music.generate({
+        prompt: musicPrompt,
+        duration: 20, // 20 seconds to match our current duration
+        format: 'wav' // Request WAV format for better quality
+      });
+      
+      const response = await Promise.race([musicPromise, timeoutPromise]);
+      
+      // Handle different response types (Buffer, Response, or Readable)
+      let audioBuffer;
+      if (Buffer.isBuffer(response)) {
+        audioBuffer = response;
+      } else if (response && typeof response.arrayBuffer === 'function') {
+        audioBuffer = Buffer.from(await response.arrayBuffer());
+      } else if (response && typeof response.pipe === 'function') {
+        // Handle Node.js Readable stream
+        const chunks = [];
+        for await (const chunk of response) {
+          chunks.push(chunk);
+        }
+        audioBuffer = Buffer.concat(chunks);
+      } else {
+        throw new Error('Unexpected response type from ElevenLabs music API');
+      }
+      
+      // Track successful generation metrics
+      const generationTime = Date.now() - startTime;
+      metrics.musicGenerations++;
+      metrics.musicGenerationTimeMs += generationTime;
+      
+      console.log(`🎵 Successfully generated music with ElevenLabs (${audioBuffer.length} bytes, ${generationTime}ms)`);
+      return audioBuffer;
+      
+    } catch (error) {
+      console.error(`🎵 ElevenLabs music generation attempt ${attempt} failed:`, error.message);
+      
+      if (attempt < maxRetries) {
+        metrics.musicRetries++;
+        // Wait before retry (exponential backoff)
+        const delay = 1000 * Math.pow(2, attempt - 1);
+        console.log(`🎵 Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        // All attempts failed, track fallback
+        metrics.musicFallbacks++;
+        console.log('🎵 All ElevenLabs attempts failed, falling back to placeholder audio...');
+        return createWavPlaceholderAudio(musicPrompt);
+      }
+    }
   }
 }
 
