@@ -36,6 +36,7 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
   const [targetSeconds, setTargetSeconds] = useState<number>(120);
   const [includeCallouts, setIncludeCallouts] = useState<boolean>(true);
   const [includeCta, setIncludeCta] = useState<boolean>(true);
+  const [includeTechBeat, setIncludeTechBeat] = useState<boolean>(true);
   const [genClips, setGenClips] = useState<boolean>(true);
   const [clipCount, setClipCount] = useState<number>(5);
   const [clipSeconds, setClipSeconds] = useState<number>(12);
@@ -155,8 +156,19 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
       setStep('preprocess');
       setStatus('Creating project…');
 
+      // Build working list of scenes (user entries + optional tech beat + CTA handled later)
+      const techBeat: Entry[] = includeTechBeat ? [
+        { kind: 'ai', prompt: 'Logos: Google Cloud Run + Firebase; minimal icons on dark gradient; amber accent; credibility beat' },
+        { kind: 'ai', prompt: 'ElevenLabs narration and music — waveform + musical notes; modern tech aesthetic' },
+        { kind: 'ai', prompt: 'FAL Veo 3 Fast — image-to-video motion; sleek brand visuals; subtle glow' },
+        { kind: 'ai', prompt: 'Security & delivery: Firebase App Check + durable GCS URLs; clean badges; dark UI' },
+        { kind: 'ai', prompt: 'Built under 48 hours — bold typography; kinetic motion; dark gradient' },
+      ] : [];
+
+      const workingEntries: Entry[] = [...entries, ...techBeat];
+
       // Create project with placeholder scenes
-      const scenesSeed: Scene[] = entries.map((_, i) => ({
+      const scenesSeed: Scene[] = workingEntries.map((_, i) => ({
         id: `hype-${i}`,
         prompt: 'Cinematic parallax over UI; soft glow; modern tech vibe; slow zoom-in.',
         narration: '',
@@ -167,10 +179,10 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
 
       // Upload or stylize images per scene
       const uploadedUrls: string[][] = [];
-      for (let i = 0; i < entries.length; i++) {
-        setStatus(`Preparing scene ${i + 1} of ${entries.length}…`);
-        setProgress(Math.round((i / Math.max(1, entries.length)) * 30));
-        const entry = entries[i];
+      for (let i = 0; i < workingEntries.length; i++) {
+        setStatus(`Preparing scene ${i + 1} of ${workingEntries.length}…`);
+        setProgress(Math.round((i / Math.max(1, workingEntries.length)) * 30));
+        const entry = workingEntries[i];
         if (entry.kind === 'file') {
           if (!stylize) {
             let base64 = await fileToDataUri(entry.file);
@@ -219,16 +231,14 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
 
       // CTA end frame (optional)
       if (includeCta) {
-        const i = entries.length;
+        const i = workingEntries.length;
         setStatus('Adding CTA frame…');
         const base = await makeCtaImage();
         await apiCall(API_ENDPOINTS.upload, { projectId: pid, fileName: `scene-${i}-0.jpeg`, base64Image: base }, 'Upload failed');
         const bucket = 'reel-banana-35a54.firebasestorage.app';
         const url = `https://storage.googleapis.com/${bucket}/${pid}/scene-${i}-0.jpeg`;
         uploadedUrls.push([url]);
-        setDurations(d => [...d, 8]);
-        // Also extend entries to keep counts aligned
-        setEntries(prev => [...prev, { kind: 'ai', prompt: 'CTA' }]);
+        // Note: we don't mutate entries state here; durations handled locally below
       }
 
       setStep('processing');
@@ -264,8 +274,16 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
       }
 
       // Build scenes payload
-      const renderScenes = (includeCta ? [...entries, { kind: 'ai', prompt: 'CTA' }] : entries).map((_, i) => ({
-        duration: Math.max(3, Math.min(12, durations[i] || 8)),
+      const durationsWorking: number[] = (() => {
+        const d = [...durations];
+        if (includeTechBeat) d.push(...techBeat.map(() => 8));
+        if (includeCta) d.push(8);
+        return d;
+      })();
+
+      const totalEntries = workingEntries.length + (includeCta ? 1 : 0);
+      const renderScenes = Array.from({ length: totalEntries }).map((_, i) => ({
+        duration: Math.max(3, Math.min(12, durationsWorking[i] || 8)),
         camera: i % 3 === 0 ? 'zoom-in' : i % 3 === 1 ? 'zoom-out' : 'pan-left',
         transition: i === 0 ? 'fade' : (i % 2 === 0 ? 'wipe' : 'fade')
       }));
@@ -364,6 +382,7 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
             <label className="flex items-center gap-4 text-gray-300">
               <span className="flex items-center gap-2"><input type="checkbox" checked={includeCallouts} onChange={(e)=>setIncludeCallouts(e.target.checked)} /> Overlay callouts per scene</span>
               <span className="flex items-center gap-2"><input type="checkbox" checked={includeCta} onChange={(e)=>setIncludeCta(e.target.checked)} /> Include CTA end frame</span>
+              <span className="flex items-center gap-2"><input type="checkbox" checked={includeTechBeat} onChange={(e)=>setIncludeTechBeat(e.target.checked)} /> Include Tech Beat (stack + 48h)</span>
             </label>
             <p className="text-xs text-gray-500 mt-1">Callouts: {defaultCallouts.join(' • ')}. CTA adds a branded end card with logo + URL.</p>
           </div>
