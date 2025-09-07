@@ -72,7 +72,12 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
     const startRenderingProcess = async () => {
       // 1. Initialize project
       setStage('initializing');
+      
+      // Use provided project ID or create a new one only if none exists
       const projectId = providedProjectId || `movie-${Date.now()}`;
+      
+      console.log('🎬 RenderingScreen: Starting with projectId:', projectId);
+      console.log('🎬 RenderingScreen: providedProjectId was:', providedProjectId);
       
       try {
         // 2. Upload all images
@@ -214,7 +219,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
             duration: scene.duration || 3,
         }));
         const renderResponse = await apiCall(API_ENDPOINTS.render, 
-          { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath }, 
+          { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: true }, 
           'Failed to render video'
         );
         const { videoUrl } = renderResponse;

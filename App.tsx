@@ -84,12 +84,13 @@ const App: React.FC = () => {
   const handlePlayMovie = useCallback((movieScenes: Scene[]) => {
     const scenesWithImages = movieScenes.filter(s => s.imageUrls && s.imageUrls.length > 0 && s.status === 'success');
     if (scenesWithImages.length > 0) {
+      console.log('🎬 App: handlePlayMovie called with projectId:', projectId);
       setScenes(scenesWithImages);
       setView('rendering');
     } else {
       toast.info('Please generate images for your scenes before creating a movie.', 3000);
     }
-  }, []);
+  }, [projectId]);
 
   const handleRenderComplete = useCallback(async (url: string, projectId?: string) => {
     setVideoUrl(url);
@@ -244,7 +245,10 @@ const App: React.FC = () => {
             </div>
             <StoryboardEditor 
               onPlayMovie={handlePlayMovie} 
-              onProjectIdChange={(id) => setProjectId(id || null)} 
+              onProjectIdChange={(id) => {
+                console.log('🎬 App: onProjectIdChange called with:', id);
+                setProjectId(id || null);
+              }} 
               demoMode={demoMode}
               onExitDemo={() => setDemoMode(false)}
             />

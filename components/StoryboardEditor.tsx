@@ -131,6 +131,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                 const projectData = await getProject(id);
                 if (projectData) {
                     setProjectId(id);
+                    try { onProjectIdChange?.(id); } catch {}
                     setTopic(projectData.topic);
                     setCharacterAndStyle(projectData.characterAndStyle);
                     setScenes(projectData.scenes);
