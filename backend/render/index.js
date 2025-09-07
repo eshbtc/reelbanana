@@ -137,7 +137,9 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
     
     try {
         // Check if we should use FAL rendering engine
-        const useFalEngine = (renderEngineEnv === 'fal') || !!useFal;
+        // Request body overrides env so the client can force FFmpeg fallback
+        const useFalEngine = (typeof useFal === 'boolean') ? !!useFal : (renderEngineEnv === 'fal');
+        console.log(`Render engine selected: ${useFalEngine ? 'FAL' : 'FFmpeg'} (env=${renderEngineEnv}, body.useFal=${useFal})`);
         if (useFalEngine) {
             if (!falApiKey) {
                 return sendError(req, res, 500, 'CONFIG', 'FAL_API_KEY is not configured');
@@ -563,15 +565,13 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
             // Use the first image for the scene (or we could create a sequence)
             const firstImage = sceneImages[0];
             const localImagePath = path.join(tempDir, path.basename(firstImage.name));
-            const sceneOutput = `scene_clip_${sceneIndex}`;
             const duration = scene.duration || 3;
             
             console.log(`Processing scene ${sceneIndex} with image: ${localImagePath}`);
             
             command.input(localImagePath)
                 .inputOptions(['-loop 1']) // Loop the single image
-                .inputOptions([`-t ${duration}`]) // Duration in seconds
-                .videoCodec('libx264');
+                .inputOptions([`-t ${duration}`]); // Duration in seconds
 
             // Dynamic camera movement based on user selection
             let zoomEffect;
@@ -652,8 +652,8 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         const outputVideoPath = path.join(tempDir, 'final_movie.mp4');
 
         await new Promise((resolve, reject) => {
-            command
-                .input(narrationLocalPath) // narration audio track
+            // Add audio inputs
+            command.input(narrationLocalPath); // narration audio track
             
             if (musicLocalPath) {
                 command.input(musicLocalPath); // music track
