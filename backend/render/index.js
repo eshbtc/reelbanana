@@ -364,15 +364,9 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
               console.warn('FAL render cache write failed:', e.message);
             }
 
-            let videoUrl;
-            const isPublished = req.body.published || false;
-            if (isPublished) {
-                try { await file.makePublic(); } catch (_) {}
-                videoUrl = file.publicUrl();
-            } else {
-                const [signedUrl] = await file.getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 7*24*60*60*1000 });
-                videoUrl = signedUrl;
-            }
+            // FAL videos are uploaded to public bucket for direct GCS URL access
+            const videoUrl = file.publicUrl();
+            console.log(`FAL video uploaded to public bucket for direct access`);
 
             req.sliMonitor.recordSuccess('render', true, { projectId, cached: false, engine: 'fal' });
             req.sliMonitor.recordLatency('render', Date.now() - renderStartTime, { projectId, cached: false, engine: 'fal' });
@@ -723,30 +717,9 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
             console.warn('Render cache write failed:', e.message);
         }
 
-        // For published videos, make the file public for durable URLs
-        // For draft videos, use signed URLs with longer expiration
-        const isPublished = req.body.published || false;
-        
-        let videoUrl;
-        if (isPublished) {
-            // Make file public for published videos (durable URLs)
-            await retryWithBackoff(async () => {
-                await uploadedFile.makePublic();
-            });
-            videoUrl = uploadedFile.publicUrl();
-            console.log(`Video uploaded and made public for published content`);
-        } else {
-            // Use signed URL with 7-day expiration for draft videos
-            const [signedUrl] = await retryWithBackoff(async () => {
-                return await uploadedFile.getSignedUrl({
-                    version: 'v4',
-                    action: 'read',
-                    expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
-                });
-            });
-            videoUrl = signedUrl;
-            console.log(`Video uploaded with 7-day signed URL for draft content`);
-        }
+        // Videos are uploaded to public bucket for direct GCS URL access
+        const videoUrl = uploadedFile.publicUrl();
+        console.log(`Video uploaded to public bucket for direct access`);
         
         // Record successful fresh render SLI
         const renderDuration = Date.now() - renderStartTime;

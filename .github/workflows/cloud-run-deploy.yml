@@ -109,7 +109,7 @@ jobs:
           gcloud run deploy reel-banana-render --source backend/render --allow-unauthenticated $ENV_FLAGS
         env:
           INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
-          OUTPUT_BUCKET_NAME: ${{ secrets.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
+          OUTPUT_BUCKET_NAME: ${{ secrets.OUTPUT_BUCKET_NAME || 'reel-banana-videos-public' }}
           FAL_RENDER_MODEL: ${{ secrets.FAL_RENDER_MODEL || 'fal-ai/ltxv-13b-098-distilled/image-to-video' }}
           RENDER_ENGINE: ${{ secrets.RENDER_ENGINE || 'fal' }}
 
