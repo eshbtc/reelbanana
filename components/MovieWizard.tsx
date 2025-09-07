@@ -263,25 +263,54 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
 
   // Step execution functions
   const executeUpload = async () => {
-    // Filter for data URI images only (HTTPS images are already persisted)
-    const imagesToUpload = scenes.flatMap((scene, sceneIndex) =>
-      (scene.imageUrls || [])
-        .filter((url: string) => url.startsWith('data:image/'))
-        .map((url: string, imageIndex: number) => ({
-          base64Image: url,
-          fileName: `scene-${sceneIndex}-${imageIndex}.jpeg`,
-        }))
-    );
+    // Ensure every scene image is present in Storage for this project.
+    // Convert HTTP URLs to data URIs when needed and upload all frames.
+    const toDataUri = async (url: string): Promise<string> => {
+      if (url.startsWith('data:image/')) return url;
+      if (!/^https?:\/\//i.test(url)) return url; // skip invalid
+      try {
+        const resp = await fetch(url, { cache: 'no-store' });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const blob = await resp.blob();
+        const reader = new FileReader();
+        const dataUri: string = await new Promise((resolve, reject) => {
+          reader.onerror = () => reject(new Error('FileReader failed'));
+          reader.onloadend = () => resolve(String(reader.result || ''));
+          reader.readAsDataURL(blob);
+        });
+        if (!dataUri.startsWith('data:image/')) throw new Error('Invalid data URI');
+        return dataUri;
+      } catch (e) {
+        console.warn('Upload: failed to convert HTTPS URL to data URI, skipping', url, e);
+        return url; // leave as-is; upload will be skipped for non-data URIs
+      }
+    };
+
+    // Build upload list for all frames
+    const imagesToUpload: Array<{ base64Image: string; fileName: string }> = [];
+    for (let sceneIndex = 0; sceneIndex < scenes.length; sceneIndex++) {
+      const list = scenes[sceneIndex]?.imageUrls || [];
+      for (let imageIndex = 0; imageIndex < list.length; imageIndex++) {
+        const url: string = list[imageIndex];
+        const base64Image = await toDataUri(url);
+        if (typeof base64Image === 'string' && base64Image.startsWith('data:image/')) {
+          imagesToUpload.push({
+            base64Image,
+            fileName: `scene-${sceneIndex}-${imageIndex}.jpeg`,
+          });
+        }
+      }
+    }
 
     if (imagesToUpload.length === 0) {
       return { message: 'No images to upload (using persisted images)', cached: true };
     }
 
-    const uploadPromises = imagesToUpload.map(image =>
-      apiCall(API_ENDPOINTS.upload, { projectId, ...image }, 'Failed to upload image')
+    await Promise.all(
+      imagesToUpload.map(image =>
+        apiCall(API_ENDPOINTS.upload, { projectId, ...image }, 'Failed to upload image')
+      )
     );
-    
-    await Promise.all(uploadPromises);
     return { message: `Uploaded ${imagesToUpload.length} images` };
   };
 
@@ -339,10 +368,22 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       duration: scene.duration || 3,
     }));
 
-    return await apiCall(API_ENDPOINTS.render,
-      { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: true },
-      'Failed to render video'
-    );
+    const narrationScript = scenes.map((s: any) => s.narration).join(' ');
+    try {
+      return await apiCall(
+        API_ENDPOINTS.render,
+        { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: false, veoPrompt: `Video depicting: ${narrationScript}` },
+        'Failed to render video'
+      );
+    } catch (err: any) {
+      const msg = String(err?.message || err || '');
+      console.warn('Wizard: FAL render failed, retrying with FFmpeg fallback…', msg);
+      return await apiCall(
+        API_ENDPOINTS.render,
+        { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: false },
+        'Failed to render video (fallback)'
+      );
+    }
   };
 
   const executePolish = async () => {

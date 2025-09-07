@@ -142,7 +142,7 @@ const DemoUI: React.FC<DemoUIProps> = ({ onComplete, onFail }) => {
       const renderResult = await apiCall(API_ENDPOINTS.render, {
         projectId: newProjectId,
         emotion: 'adventurous',
-        useFal: true
+        useFal: false
       }, 'Video rendering failed');
       
       // Apply polish
@@ -344,7 +344,7 @@ const DemoUI: React.FC<DemoUIProps> = ({ onComplete, onFail }) => {
               {videoUrl && (
                 <div className="mb-8">
                   <video
-                    src={videoUrl}
+                    src={(videoUrl || '').replace(/(^https?:\/\/firebasestorage\.googleapis\.com\/v0\/b\/)([^/]+)(\/o\/)([^?]+).*/i, (_, p1, b, p3, enc) => `https://storage.googleapis.com/${b}/${decodeURIComponent(enc)}`)}
                     controls
                     className="w-full max-w-2xl mx-auto rounded-lg shadow-2xl"
                     poster={scenes[0]?.imageUrls?.[0]}
