@@ -17,7 +17,17 @@ const app = express();
 app.set('trust proxy', true);
 
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://reelbanana.ai',
+    'https://reel-banana-35a54.web.app',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Firebase-AppCheck']
+}));
 
 // SLI monitoring middleware
 app.use(createSLIMiddleware('render'));

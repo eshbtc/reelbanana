@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["https://reelbanana.ai", "https://reel-banana-35a54.web.app", "http://localhost:5173", "http://localhost:3000"],
+    "method": ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"],
+    "responseHeader": ["Content-Type", "Access-Control-Allow-Origin", "Access-Control-Allow-Methods", "Access-Control-Allow-Headers"],
+    "maxAgeSeconds": 3600
+  }
+]
