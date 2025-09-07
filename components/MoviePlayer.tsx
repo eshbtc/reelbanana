@@ -254,6 +254,7 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
       <div className="w-full max-w-4xl">
         <div className="relative mb-6" style={{ paddingBottom: '56.25%' /* 16:9 aspect ratio */ }}>
           {(videoUrl || originalUrl || polishedUrl) ? (
+            <>
             <video
               ref={videoRef}
               className="absolute top-0 left-0 w-full h-full rounded-lg shadow-2xl bg-black"
@@ -266,6 +267,11 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
               playsInline
               preload="metadata"
               loop
+              onClick={() => {
+                if (videoRef.current) {
+                  videoRef.current.muted = false;
+                }
+              }}
               onError={(e) => {
                 const target = e.target as HTMLVideoElement;
                 console.error('🎬 MoviePlayer: Video loading error:', e);
@@ -283,6 +289,16 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
             >
               Your browser does not support the video tag.
             </video>
+            {/* Unmute indicator */}
+            <div className="absolute top-4 right-4 bg-black bg-opacity-50 text-white px-3 py-1 rounded-full text-sm cursor-pointer hover:bg-opacity-70 transition-all"
+                 onClick={() => {
+                   if (videoRef.current) {
+                     videoRef.current.muted = false;
+                   }
+                 }}>
+              🔊 Click to unmute
+            </div>
+            </>
           ) : (
             <div className="absolute top-0 left-0 w-full h-full rounded-lg bg-gray-800 flex items-center justify-center">
               <p className="text-gray-400">No video to display.</p>
