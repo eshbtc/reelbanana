@@ -65,13 +65,18 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
   
   // Debug logging for video URL
   useEffect(() => {
-    if (srcUrl) {
-      console.log('🎬 MoviePlayer: Video URL normalized:', srcUrl);
-      console.log('🎬 MoviePlayer: Original videoUrl:', videoUrl);
-      console.log('🎬 MoviePlayer: OriginalUrl:', originalUrl);
-      console.log('🎬 MoviePlayer: PolishedUrl:', polishedUrl);
-      console.log('🎬 MoviePlayer: UsePolished:', usePolished);
-    }
+    const actualVideoUrl = getActualUrl(videoUrl);
+    const actualOriginalUrl = getActualUrl(originalUrl);
+    const actualPolishedUrl = getActualUrl(polishedUrl);
+    
+    console.log('🎬 MoviePlayer: Video URL normalized:', srcUrl);
+    console.log('🎬 MoviePlayer: Original videoUrl (raw):', videoUrl);
+    console.log('🎬 MoviePlayer: Original videoUrl (extracted):', actualVideoUrl);
+    console.log('🎬 MoviePlayer: OriginalUrl (raw):', originalUrl);
+    console.log('🎬 MoviePlayer: OriginalUrl (extracted):', actualOriginalUrl);
+    console.log('🎬 MoviePlayer: PolishedUrl (raw):', polishedUrl);
+    console.log('🎬 MoviePlayer: PolishedUrl (extracted):', actualPolishedUrl);
+    console.log('🎬 MoviePlayer: UsePolished:', usePolished);
   }, [srcUrl, videoUrl, originalUrl, polishedUrl, usePolished]);
   const posterUrl = useMemo(() => {
     const s = (scenes || []).find(sc => Array.isArray(sc.imageUrls) && sc.imageUrls.length > 0);
