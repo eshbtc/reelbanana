@@ -9,13 +9,13 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onNavigate, currentView = 'editor' }) => {
   return (
-    <header className="bg-gray-900/50 backdrop-blur-sm border-b border-gray-700 sticky top-0 z-10">
+    <header className="bg-gradient-to-r from-gray-900/90 to-gray-800/90 backdrop-blur-sm border-b border-amber-500/20 sticky top-0 z-10 shadow-lg">
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Logo className="w-10 h-10" />
+          <Logo className="w-12 h-12" />
           <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Reel Banana</h1>
-            <p className="text-gray-400">AI-Powered Storytelling</p>
+            <h1 className="text-4xl font-bold text-white tracking-tight bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">ReelBanana</h1>
+            <p className="text-gray-300 font-medium">AI-Powered Cinematic Storytelling</p>
           </div>
         </div>
         
