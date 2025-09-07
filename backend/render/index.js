@@ -606,7 +606,7 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
 
         // Chain all scene clips together with dynamic transitions
         let currentStream = sceneOutputs[0];
-        let totalDuration = 0;
+        let accumulatedDuration = 0;
         
         for (let i = 1; i < sceneOutputs.length; i++) {
             const nextStream = sceneOutputs[i];
@@ -617,8 +617,8 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
             const transitionDuration = 0.75;
             
             // Calculate offset based on actual scene durations
-            totalDuration += currentScene.duration || 3;
-            const offset = totalDuration - transitionDuration;
+            accumulatedDuration += currentScene.duration || 3;
+            const offset = accumulatedDuration - transitionDuration;
             
             if (transition === 'none') {
                 // No transition, just concatenate
