@@ -44,6 +44,7 @@ const inspirationCategories = [
 const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProjectIdChange, demoMode = false, onExitDemo }) => {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [topic, setTopic] = useState('');
+  const [projectName, setProjectName] = useState('');
   const [characterAndStyle, setCharacterAndStyle] = useState('');
   const [characterRefs, setCharacterRefs] = useState<string[]>([]);
   const [scenes, setScenes] = useState<Scene[]>([]);
@@ -133,6 +134,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                     setProjectId(id);
                     try { onProjectIdChange?.(id); } catch {}
                     setTopic(projectData.topic);
+                    setProjectName(projectData.topic); // Use topic as project name for existing projects
                     setCharacterAndStyle(projectData.characterAndStyle);
                     setScenes(projectData.scenes);
                 } else {
@@ -208,8 +210,9 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       }));
 
       // Create a new project in Firestore
+      const finalProjectName = projectName.trim() || storyTopic;
       const newProjectId = await createProject({
-          topic: storyTopic,
+          topic: finalProjectName,
           characterAndStyle: characterStyle, // Auto-generated
           scenes: initialScenes
       });
@@ -217,6 +220,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       setProjectId(newProjectId);
       try { onProjectIdChange?.(newProjectId); } catch {}
       setTopic(storyTopic);
+      setProjectName(finalProjectName);
       setCharacterAndStyle(characterStyle); // Auto-generated
       setScenes(initialScenes);
       setSaveStatus('saved');
@@ -614,6 +618,15 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                        value={topic}
                        onChange={(e) => setTopic(e.target.value)}
                        placeholder="Or write your own story idea, e.g., A banana who wants to be a superhero"
+                       className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition"
+                       disabled={isLoadingStory}
+                   />
+                   
+                   <input
+                       type="text"
+                       value={projectName}
+                       onChange={(e) => setProjectName(e.target.value)}
+                       placeholder="Project name (optional - will use story topic if empty)"
                        className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition"
                        disabled={isLoadingStory}
                    />

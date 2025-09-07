@@ -18,6 +18,9 @@ const MyProjectsPage: React.FC = () => {
   const [filterText, setFilterText] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [sortBy, setSortBy] = useState<'updatedAt' | 'createdAt' | 'topic'>('updatedAt');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   const load = async () => {
     if (!user) {
@@ -30,13 +33,48 @@ const MyProjectsPage: React.FC = () => {
     try {
       const userProjects = await listMyProjects(user.uid, 50);
       setProjects(userProjects);
-      setFiltered(userProjects);
+      applyFiltersAndSort(userProjects);
     } catch (err) {
       console.error('Error loading projects:', err);
       setError('Failed to load projects. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const applyFiltersAndSort = (projectsList: ProjectSummary[] = projects) => {
+    // Filter by search text
+    let filtered = projectsList;
+    if (filterText.trim()) {
+      filtered = projectsList.filter(p => 
+        p.topic.toLowerCase().includes(filterText.toLowerCase())
+      );
+    }
+
+    // Sort the filtered results
+    filtered.sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortBy) {
+        case 'updatedAt':
+          const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+          const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+          comparison = aTime - bTime;
+          break;
+        case 'createdAt':
+          const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          comparison = aCreated - bCreated;
+          break;
+        case 'topic':
+          comparison = a.topic.localeCompare(b.topic);
+          break;
+      }
+      
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    setFiltered(filtered);
   };
 
   // Set up authentication state listener
@@ -55,6 +93,11 @@ const MyProjectsPage: React.FC = () => {
       load();
     }
   }, [user, authLoading]);
+
+  // Apply filters and sort when options change
+  useEffect(() => {
+    applyFiltersAndSort();
+  }, [filterText, sortBy, sortOrder]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -125,8 +168,6 @@ const MyProjectsPage: React.FC = () => {
 
   const handleFilter = (value: string) => {
     setFilterText(value);
-    const v = value.toLowerCase();
-    setFiltered(projects.filter(p => (p.topic || '').toLowerCase().includes(v)));
     setFocusedIndex(-1);
   };
 
@@ -251,17 +292,71 @@ const MyProjectsPage: React.FC = () => {
         {!authLoading && user && (
           <>
             {/* Controls */}
-        <div className="flex items-center gap-4 mb-6">
-          <input
-            type="text"
-            placeholder="Search by title..."
-            value={filterText}
-            onChange={(e) => handleFilter(e.target.value)}
-            className="flex-1 bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:ring-amber-500 focus:border-amber-500"
-          />
-          <button onClick={load} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">
-            Refresh
-          </button>
+        <div className="flex flex-col gap-4 mb-6">
+          {/* Top row: Search and main actions */}
+          <div className="flex items-center gap-4">
+            <input
+              type="text"
+              placeholder="Search by title..."
+              value={filterText}
+              onChange={(e) => handleFilter(e.target.value)}
+              className="flex-1 bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:ring-amber-500 focus:border-amber-500"
+            />
+            <button onClick={load} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">
+              Refresh
+            </button>
+          </div>
+          
+          {/* Bottom row: View mode and sorting */}
+          <div className="flex items-center gap-4">
+            {/* View Mode Toggle */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-400">View:</span>
+              <div className="flex bg-gray-800 rounded">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`px-3 py-1 text-sm rounded-l transition-colors ${
+                    viewMode === 'grid' 
+                      ? 'bg-amber-600 text-white' 
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  Grid
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`px-3 py-1 text-sm rounded-r transition-colors ${
+                    viewMode === 'list' 
+                      ? 'bg-amber-600 text-white' 
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  List
+                </button>
+              </div>
+            </div>
+
+            {/* Sort Options */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-400">Sort by:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'updatedAt' | 'createdAt' | 'topic')}
+                className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm text-white focus:ring-amber-500 focus:border-amber-500"
+              >
+                <option value="updatedAt">Last Modified</option>
+                <option value="createdAt">Created Date</option>
+                <option value="topic">Title</option>
+              </select>
+              <button
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                className="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm"
+                title={`Sort ${sortOrder === 'asc' ? 'Descending' : 'Ascending'}`}
+              >
+                {sortOrder === 'asc' ? '↑' : '↓'}
+              </button>
+            </div>
+          </div>
 
           {filtered.length > 0 && (
             <>
@@ -300,7 +395,7 @@ const MyProjectsPage: React.FC = () => {
               </button>
             )}
           </div>
-        ) : (
+        ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filtered.map((p, idx) => (
               <div key={p.id} className={`group bg-gray-800 rounded-lg border border-gray-700 hover:border-gray-600 transition-all duration-200 ${focusedIndex === idx ? 'ring-2 ring-amber-500' : ''}`}>
@@ -383,6 +478,101 @@ const MyProjectsPage: React.FC = () => {
                     >
                       Open Project
                     </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          /* List View */
+          <div className="space-y-2">
+            {filtered.map((p, idx) => (
+              <div key={p.id} className={`group bg-gray-800 rounded-lg border border-gray-700 hover:border-gray-600 transition-all duration-200 ${focusedIndex === idx ? 'ring-2 ring-amber-500' : ''}`}>
+                <div className="flex items-center gap-4 p-4">
+                  {/* Checkbox */}
+                  <input 
+                    type="checkbox" 
+                    checked={selectedIds.has(p.id)} 
+                    onChange={() => toggleSelect(p.id)} 
+                    className="accent-amber-500" 
+                  />
+                  
+                  {/* Thumbnail */}
+                  {p.thumbnailUrl && (
+                    <div className="flex-shrink-0">
+                      <img 
+                        src={p.thumbnailUrl} 
+                        alt="Project thumbnail" 
+                        className="w-16 h-16 object-cover rounded border border-gray-700" 
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Project Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        {renamingId === p.id ? (
+                          <input
+                            type="text"
+                            value={renameText}
+                            onChange={(e) => setRenameText(e.target.value)}
+                            onBlur={() => handleRename(p.id, renameText)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleRename(p.id, renameText);
+                              if (e.key === 'Escape') { setRenamingId(null); setRenameText(''); }
+                            }}
+                            className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-white focus:ring-amber-500 focus:border-amber-500"
+                            autoFocus
+                          />
+                        ) : (
+                          <h3 className="font-medium text-white mb-1 truncate">{p.topic}</h3>
+                        )}
+                        <div className="flex items-center gap-4 text-xs text-gray-400">
+                          <span>{p.sceneCount} scenes</span>
+                          <span>
+                            {p.updatedAt ? new Date(p.updatedAt).toLocaleDateString() : 'Recently created'}
+                          </span>
+                          {p.createdAt && (
+                            <span>
+                              Created: {new Date(p.createdAt).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Actions */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => startRename(p.id, p.topic)}
+                          className="p-1 text-gray-400 hover:text-white transition-colors"
+                          title="Rename (F2)"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => handleDuplicate(p.id)}
+                          disabled={duplicatingId === p.id}
+                          className="p-1 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+                          title="Duplicate (D)"
+                        >
+                          {duplicatingId === p.id ? '⏳' : '📋'}
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(p.id)}
+                          className="p-1 text-gray-400 hover:text-red-400 transition-colors"
+                          title="Delete (Del)"
+                        >
+                          🗑️
+                        </button>
+                        <button
+                          onClick={() => handleOpen(p.id)}
+                          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded text-sm transition-colors duration-200"
+                        >
+                          Open
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
