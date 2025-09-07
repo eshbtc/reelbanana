@@ -2,8 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
 const { Storage } = require('@google-cloud/storage');
-const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
-const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
+const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 const app = express();

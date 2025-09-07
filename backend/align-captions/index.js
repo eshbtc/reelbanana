@@ -3,8 +3,8 @@ const cors = require('cors');
 const { SpeechClient } = require('@google-cloud/speech');
 const { Storage } = require('@google-cloud/storage');
 const admin = require('firebase-admin');
-const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
-const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
+const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
 
 const app = express();
 

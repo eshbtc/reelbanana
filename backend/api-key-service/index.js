@@ -4,8 +4,8 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const admin = require('firebase-admin');
 const { KeyManagementServiceClient } = require('@google-cloud/kms');
-const { getUserQuotaStatus } = require('../shared/rateLimiter');
-const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
+const { getUserQuotaStatus } = require('./shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
 
 const app = express();
 const PORT = process.env.PORT || 8080;

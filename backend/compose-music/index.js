@@ -7,8 +7,8 @@ const { firebase } = require('@genkit-ai/firebase');
 const { vertexAI, gemini15Flash } = require('@genkit-ai/vertexai');
 const { randomUUID } = require('crypto');
 const { ElevenLabsClient } = require('elevenlabs');
-const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
-const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
+const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
 
 const app = express();
 

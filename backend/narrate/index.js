@@ -5,8 +5,8 @@ const { ElevenLabsClient } = require('elevenlabs');
 const { Storage } = require('@google-cloud/storage');
 // Update ElevenLabs API key - trigger redeployment
 const admin = require('firebase-admin');
-const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
-const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
+const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
 
 const app = express();
 
