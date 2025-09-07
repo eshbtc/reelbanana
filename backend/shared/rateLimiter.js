@@ -22,8 +22,29 @@ setInterval(() => {
 
 /**
  * Get user quota limits based on user type/plan
+ * In production, this would fetch the user's actual plan from Firestore
  */
-function getUserQuotaLimits(userId, userPlan = 'free') {
+async function getUserQuotaLimits(userId, userPlan = null) {
+  // If no plan provided, try to fetch from Firestore
+  if (!userPlan && userId) {
+    try {
+      const admin = require('firebase-admin');
+      const db = admin.firestore();
+      const userDoc = await db.collection('users').doc(userId).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        userPlan = userData.plan || userData.subscription?.plan || 'free';
+      } else {
+        userPlan = 'free'; // Default for new users
+      }
+    } catch (error) {
+      console.warn('Failed to fetch user plan, defaulting to free:', error.message);
+      userPlan = 'free';
+    }
+  }
+  
+  // Fallback to free if still no plan
+  userPlan = userPlan || 'free';
   const quotas = {
     free: {
       narrate: { daily: 10, hourly: 3 },
@@ -57,7 +78,7 @@ function getUserQuotaLimits(userId, userPlan = 'free') {
 /**
  * Check if user has exceeded quota for a specific operation
  */
-function checkUserQuota(userId, operation) {
+async function checkUserQuota(userId, operation) {
   if (!userId) return { allowed: true, remaining: 0 };
   
   const now = Date.now();
@@ -72,8 +93,8 @@ function checkUserQuota(userId, operation) {
     userQuota.operations = {};
   }
   
-  // Get user's quota limits (in production, fetch from user profile)
-  const limits = getUserQuotaLimits(userId);
+  // Get user's quota limits (fetch from user profile)
+  const limits = await getUserQuotaLimits(userId);
   const operationLimits = limits[operation];
   
   if (!operationLimits) {
@@ -138,7 +159,7 @@ function createOperationRateLimiter(operation, options = {}) {
       }
       
       // Check user quota
-      const quotaCheck = checkUserQuota(userId, operation);
+      const quotaCheck = await checkUserQuota(userId, operation);
       
       if (!quotaCheck.allowed) {
         const resetTime = new Date(quotaCheck.resetTime).toISOString();
@@ -226,13 +247,13 @@ function createExpensiveOperationLimiter(operation) {
 /**
  * Get quota status for a user (for dashboard/UI)
  */
-function getUserQuotaStatus(userId) {
+async function getUserQuotaStatus(userId) {
   if (!userId) return null;
   
   const userQuota = userQuotas.get(userId);
   if (!userQuota) return null;
   
-  const limits = getUserQuotaLimits(userId);
+  const limits = await getUserQuotaLimits(userId);
   const status = {};
   
   for (const [operation, operationLimits] of Object.entries(limits)) {

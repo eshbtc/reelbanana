@@ -7,6 +7,10 @@ const { createHealthEndpoints, commonDependencyChecks } = require('../shared/hea
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 const app = express();
+
+// Trust proxy for Cloud Run (fixes X-Forwarded-For header issue for IP rate limiting)
+app.set('trust proxy', true);
+
 app.use(express.json());
 app.use(cors());
 

@@ -371,7 +371,7 @@ app.get('/quota-status', appCheckVerification, verifyToken, async (req, res) => 
       return sendError(req, res, 401, 'UNAUTHORIZED', 'User not authenticated');
     }
     
-    const quotaStatus = getUserQuotaStatus(userId);
+    const quotaStatus = await getUserQuotaStatus(userId);
     res.json({
       userId,
       quotaStatus,

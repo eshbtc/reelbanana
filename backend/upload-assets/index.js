@@ -7,6 +7,10 @@ const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
 const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
 
 const app = express();
+
+// Trust proxy for Cloud Run (fixes X-Forwarded-For header issue for IP rate limiting)
+app.set('trust proxy', true);
+
 app.use(express.json({ limit: '10mb' })); // Limit for a single base64 image
 app.use(cors());
 

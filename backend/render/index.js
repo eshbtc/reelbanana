@@ -11,6 +11,10 @@ const { createHealthEndpoints, commonDependencyChecks, appCheckVerification } = 
 const { createSLIMiddleware, SLIMonitor } = require('../shared/sliMonitor');
 
 const app = express();
+
+// Trust proxy for Cloud Run (fixes X-Forwarded-For header issue for IP rate limiting)
+app.set('trust proxy', true);
+
 app.use(express.json());
 app.use(cors());
 
