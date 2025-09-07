@@ -7,11 +7,15 @@ const fs = require('fs/promises');
 const path = require('path');
 const admin = require('firebase-admin');
 const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
-const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
+const { createHealthEndpoints, commonDependencyChecks, appCheckVerification } = require('../shared/healthCheck');
+const { createSLIMiddleware, SLIMonitor } = require('../shared/sliMonitor');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+// SLI monitoring middleware
+app.use(createSLIMiddleware('render'));
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
@@ -108,6 +112,7 @@ async function retryWithBackoff(operation, maxRetries = null, baseDelay = null) 
  * }
  */
 app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerification, async (req, res) => {
+    const renderStartTime = Date.now();
     const { projectId, scenes, gsAudioPath, srtPath, gsMusicPath } = req.body;
 
     if (!projectId) {
@@ -148,6 +153,11 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                 console.log(`Returning 7-day signed URL for draft video`);
             }
 
+            // Record successful cached render SLI
+            const renderDuration = Date.now() - renderStartTime;
+            req.sliMonitor.recordSuccess('render', true, { projectId, cached: true });
+            req.sliMonitor.recordLatency('render', renderDuration, { projectId, cached: true });
+            
             return res.status(200).json({ videoUrl, cached: true });
         }
 
@@ -419,10 +429,22 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
             console.log(`Video uploaded with 7-day signed URL for draft content`);
         }
         
+        // Record successful fresh render SLI
+        const renderDuration = Date.now() - renderStartTime;
+        req.sliMonitor.recordSuccess('render', true, { projectId, cached: false });
+        req.sliMonitor.recordLatency('render', renderDuration, { projectId, cached: false });
+        
         res.status(200).json({ videoUrl });
 
     } catch (error) {
         console.error(`Error rendering video for projectId ${projectId}:`, error);
+        
+        // Record failed render SLI
+        const renderDuration = Date.now() - renderStartTime;
+        req.sliMonitor.recordSuccess('render', false, { projectId, error: error.message });
+        req.sliMonitor.recordLatency('render', renderDuration, { projectId, error: error.message });
+        req.sliMonitor.recordError('render', error.name || 'unknown', { projectId });
+        
         if (error && error.message === 'FFMPEG_FAILURE') {
           return sendError(req, res, 500, 'FFMPEG_FAILURE', 'FFmpeg failed to render the video.');
         }
@@ -454,6 +476,58 @@ createHealthEndpoints(app, 'render',
     }
   }
 );
+
+// SLI dashboard endpoint
+app.get('/sli-dashboard', appCheckVerification, (req, res) => {
+  try {
+    const monitor = new SLIMonitor('render');
+    const dashboard = monitor.getHealthSummary();
+    res.json(dashboard);
+  } catch (error) {
+    console.error('SLI dashboard error:', error);
+    res.status(500).json({
+      error: 'Failed to generate SLI dashboard',
+      message: error.message
+    });
+  }
+});
+
+// Playback tracking endpoint for SLI monitoring
+app.post('/playback-tracking', appCheckVerification, (req, res) => {
+  try {
+    const { projectId, success, error, timestamp, videoType } = req.body;
+    
+    if (!projectId) {
+      return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing projectId');
+    }
+    
+    // Record playback success/failure for SLI tracking
+    const monitor = new SLIMonitor('render');
+    monitor.recordSuccess('playback', success, { 
+      projectId, 
+      videoType: videoType || 'unknown',
+      timestamp: timestamp || new Date().toISOString()
+    });
+    
+    if (!success && error) {
+      monitor.recordError('playback', 'playback_failure', { 
+        projectId, 
+        error,
+        videoType: videoType || 'unknown'
+      });
+    }
+    
+    res.json({ 
+      status: 'tracked',
+      projectId,
+      success,
+      requestId: req.requestId
+    });
+  } catch (error) {
+    console.error('Playback tracking error:', error);
+    sendError(req, res, 500, 'INTERNAL', 'Failed to track playback', error.message);
+  }
+});
 
 
 const PORT = process.env.PORT || 8080;

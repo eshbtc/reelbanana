@@ -1,5 +1,5 @@
 // MoviePlayer component with social sharing capabilities
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useToast } from './ToastProvider';
 import { Scene } from '../types';
 import { publishMovie } from '../services/firebaseService';
@@ -24,6 +24,9 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
   const [description, setDescription] = useState('');
   const [published, setPublished] = useState(false);
   const [usePolished, setUsePolished] = useState<boolean>(true);
+  const [playbackTracked, setPlaybackTracked] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  
   // Defensive context usage to prevent null context errors
   let toast: any = null;
   
@@ -41,6 +44,58 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
       .filter((v): v is string => !!v && v !== 'none')));
     return styles;
   }, [scenes]);
+
+  // Track playback success for SLI monitoring
+  const trackPlaybackSuccess = async (success: boolean, error?: string) => {
+    if (!projectId || playbackTracked) return;
+    
+    try {
+      // Send playback tracking to a monitoring endpoint
+      await apiCall(API_ENDPOINTS.playbackTracking, {
+        projectId,
+        success,
+        error,
+        timestamp: new Date().toISOString(),
+        videoType: usePolished ? 'polished' : 'original'
+      }, 'Failed to track playback');
+      
+      setPlaybackTracked(true);
+    } catch (error) {
+      console.warn('Failed to track playback:', error);
+    }
+  };
+
+  // Video event handlers for playback tracking
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleCanPlay = () => {
+      trackPlaybackSuccess(true);
+    };
+
+    const handleError = (e: Event) => {
+      const error = e.target instanceof HTMLVideoElement ? 
+        `Video error: ${e.target.error?.message || 'Unknown error'}` : 
+        'Unknown video error';
+      trackPlaybackSuccess(false, error);
+    };
+
+    const handleLoadStart = () => {
+      // Reset tracking when video starts loading
+      setPlaybackTracked(false);
+    };
+
+    video.addEventListener('canplay', handleCanPlay);
+    video.addEventListener('error', handleError);
+    video.addEventListener('loadstart', handleLoadStart);
+
+    return () => {
+      video.removeEventListener('canplay', handleCanPlay);
+      video.removeEventListener('error', handleError);
+      video.removeEventListener('loadstart', handleLoadStart);
+    };
+  }, [videoUrl, usePolished, projectId, playbackTracked]);
 
   const handleShare = async () => {
     // Always route through publish flow to create proper /share/:id URLs
@@ -110,6 +165,7 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
         <div className="relative mb-6" style={{ paddingBottom: '56.25%' /* 16:9 aspect ratio */ }}>
           {(videoUrl || originalUrl || polishedUrl) ? (
             <video
+              ref={videoRef}
               className="absolute top-0 left-0 w-full h-full rounded-lg shadow-2xl bg-black"
               src={usePolished ? (polishedUrl || videoUrl || '') : (originalUrl || videoUrl || '')}
               controls

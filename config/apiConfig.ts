@@ -178,6 +178,8 @@ export const API_ENDPOINTS = {
   render: `${apiConfig.baseUrls.render}/render`,
   compose: `${apiConfig.baseUrls.compose}/compose-music`,
   polish: `${apiConfig.baseUrls.polish}/polish`,
+  playbackTracking: `${apiConfig.baseUrls.render}/playback-tracking`,
+  sliDashboard: `${apiConfig.baseUrls.render}/sli-dashboard`,
   apiKey: {
     store: `${apiConfig.baseUrls.apiKey}/store-api-key`,
     use: `${apiConfig.baseUrls.apiKey}/use-api-key`,

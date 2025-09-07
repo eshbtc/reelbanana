@@ -5,7 +5,8 @@
   "main": "rateLimiter.js",
   "files": [
     "rateLimiter.js",
-    "healthCheck.js"
+    "healthCheck.js",
+    "sliMonitor.js"
   ],
   "dependencies": {
     "express-rate-limit": "^7.1.5",
