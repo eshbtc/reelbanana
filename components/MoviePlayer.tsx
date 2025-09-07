@@ -26,7 +26,46 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
   const [usePolished, setUsePolished] = useState<boolean>(true);
   const [playbackTracked, setPlaybackTracked] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const srcUrl = usePolished ? (polishedUrl || videoUrl || '') : (originalUrl || videoUrl || '');
+  const normalizeToGcs = (url?: string | null): string => {
+    if (!url) return '';
+    try {
+      // Handle Firebase Storage URLs
+      const firebaseMatch = url.match(/^https?:\/\/firebasestorage\.googleapis\.com\/v0\/b\/([^/]+)\/o\/([^?]+)\?/i);
+      if (firebaseMatch) {
+        const bucket = firebaseMatch[1];
+        const encodedPath = firebaseMatch[2];
+        const path = decodeURIComponent(encodedPath);
+        return `https://storage.googleapis.com/${bucket}/${path}`;
+      }
+      
+      // Handle direct GCS URLs (already in correct format)
+      const gcsMatch = url.match(/^https?:\/\/storage\.googleapis\.com\//i);
+      if (gcsMatch) {
+        return url; // Already in correct format
+      }
+      
+      // Handle other GCS URL formats
+      const otherGcsMatch = url.match(/^https?:\/\/([^/]+)\.storage\.googleapis\.com\/(.+)/i);
+      if (otherGcsMatch) {
+        const bucket = otherGcsMatch[1];
+        const path = otherGcsMatch[2];
+        return `https://storage.googleapis.com/${bucket}/${path}`;
+      }
+    } catch {}
+    return url;
+  };
+  const srcUrl = normalizeToGcs(usePolished ? (polishedUrl || videoUrl || '') : (originalUrl || videoUrl || ''));
+  
+  // Debug logging for video URL
+  useEffect(() => {
+    if (srcUrl) {
+      console.log('🎬 MoviePlayer: Video URL normalized:', srcUrl);
+      console.log('🎬 MoviePlayer: Original videoUrl:', videoUrl);
+      console.log('🎬 MoviePlayer: OriginalUrl:', originalUrl);
+      console.log('🎬 MoviePlayer: PolishedUrl:', polishedUrl);
+      console.log('🎬 MoviePlayer: UsePolished:', usePolished);
+    }
+  }, [srcUrl, videoUrl, originalUrl, polishedUrl, usePolished]);
   const posterUrl = useMemo(() => {
     const s = (scenes || []).find(sc => Array.isArray(sc.imageUrls) && sc.imageUrls.length > 0);
     return s?.imageUrls?.[0] || undefined;
@@ -188,6 +227,20 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
               playsInline
               preload="metadata"
               loop
+              onError={(e) => {
+                const target = e.target as HTMLVideoElement;
+                console.error('🎬 MoviePlayer: Video loading error:', e);
+                console.error('🎬 MoviePlayer: Video URL:', srcUrl);
+                console.error('🎬 MoviePlayer: Video error details:', target.error);
+                console.error('🎬 MoviePlayer: Video network state:', target.networkState);
+                console.error('🎬 MoviePlayer: Video ready state:', target.readyState);
+              }}
+              onLoadStart={() => {
+                console.log('🎬 MoviePlayer: Video load started for URL:', srcUrl);
+              }}
+              onCanPlay={() => {
+                console.log('🎬 MoviePlayer: Video can play, duration:', videoRef.current?.duration);
+              }}
             >
               Your browser does not support the video tag.
             </video>
