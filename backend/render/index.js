@@ -171,7 +171,7 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                 }
                 req.sliMonitor.recordSuccess('render', true, { projectId, cached: true, engine: 'fal' });
                 req.sliMonitor.recordLatency('render', Date.now() - renderStartTime, { projectId, cached: true, engine: 'fal' });
-                return res.status(200).json({ videoUrl: videoUrlCached, cached: true });
+                return res.status(200).json({ videoUrl: videoUrlCached, cached: true, skipPolish: true });
             }
 
             if (!scenes || !gsAudioPath || !srtPath) {
@@ -295,7 +295,7 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
               else { const [u] = await finalVideoFile.getSignedUrl({ version:'v4', action:'read', expires: Date.now()+7*24*60*60*1000 }); url = u; }
               req.sliMonitor.recordSuccess('render', true, { projectId, cached: true, engine: 'fal', cacheId: falManifestHash });
               req.sliMonitor.recordLatency('render', Date.now() - renderStartTime, { projectId, cached: true, engine: 'fal' });
-              return res.status(200).json({ videoUrl: url, cached: true, engine: 'fal' });
+              return res.status(200).json({ videoUrl: url, cached: true, engine: 'fal', skipPolish: true });
             }
 
             // Call FAL (queue API for long-running models like Veo 3 Fast)
@@ -362,7 +362,7 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
 
             req.sliMonitor.recordSuccess('render', true, { projectId, cached: false, engine: 'fal' });
             req.sliMonitor.recordLatency('render', Date.now() - renderStartTime, { projectId, cached: false, engine: 'fal' });
-            return res.status(200).json({ videoUrl, engine: 'fal' });
+            return res.status(200).json({ videoUrl, engine: 'fal', skipPolish: true });
         }
         // Early path: if a final video already exists, allow "publish-only" requests
         // This supports calling /render with just { projectId, published: true }
