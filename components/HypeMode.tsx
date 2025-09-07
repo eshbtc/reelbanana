@@ -391,7 +391,7 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
             <textarea className="w-full h-32 bg-gray-900 border border-gray-700 rounded p-3 text-white text-sm" value={narration} onChange={(e) => setNarration(e.target.value)} />
           </div>
           <div>
-            <button onClick={start} disabled={files.length === 0} className="bg-amber-500 hover:bg-amber-600 text-black font-bold px-6 py-3 rounded disabled:opacity-50">Build Hype Video</button>
+            <button onClick={start} disabled={entries.length === 0} className="bg-amber-500 hover:bg-amber-600 text-black font-bold px-6 py-3 rounded disabled:opacity-50">Build Hype Video</button>
           </div>
         </div>
       )}
