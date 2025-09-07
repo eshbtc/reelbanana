@@ -767,39 +767,83 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         
         const outputVideoPath = path.join(tempDir, 'final_movie.mp4');
 
-        await new Promise((resolve, reject) => {
-            // Add audio inputs
-            command.input(narrationLocalPath); // narration audio track
-            
-            if (musicLocalPath) {
-                command.input(musicLocalPath); // music track
+        // Retry mechanism: try with subtitles first, then without if that fails
+        let ffmpegSuccess = false;
+        let lastError = null;
+        
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                console.log(`FFmpeg attempt ${attempt}: ${attempt === 1 ? 'with subtitles' : 'without subtitles'}`);
+                
+                // Create a fresh command for each attempt
+                const command = ffmpeg();
+                
+                // For second attempt, remove subtitles from the filter
+                let currentComplexFilter = [...complexFilter];
+                if (attempt === 2) {
+                    // Remove the subtitles filter and replace with simple passthrough
+                    currentComplexFilter = currentComplexFilter.map(filter => {
+                        if (filter.includes('subtitles=')) {
+                            // Replace subtitles filter with simple passthrough
+                            return filter.replace(/subtitles=[^:]+:[^[]+/, 'null');
+                        }
+                        return filter;
+                    });
+                    console.log('Retrying without subtitles overlay');
+                }
+                
+                await new Promise((resolve, reject) => {
+                    // Add audio inputs
+                    command.input(narrationLocalPath); // narration audio track
+                    
+                    if (musicLocalPath) {
+                        command.input(musicLocalPath); // music track
+                    }
+                    
+                    command
+                        .complexFilter(currentComplexFilter)
+                        .map(finalVideoOutput) // Map the final video stream
+                        .map('[final_audio]') // Map the mixed audio stream
+                        .outputOptions([
+                            '-c:v libx264',
+                            '-preset slow',
+                            '-crf 22',
+                            '-c:a aac',
+                            '-b:a 192k',
+                            '-pix_fmt yuv420p',
+                            // Move moov atom to the beginning for progressive playback
+                            '-movflags +faststart',
+                            '-shortest' // Finish encoding when the shortest input (audio) ends
+                        ])
+                        .on('end', () => {
+                            console.log(`FFmpeg processing finished on attempt ${attempt}.`);
+                            resolve();
+                        })
+                        .on('error', (err) => {
+                            console.error(`FFmpeg error on attempt ${attempt}:`, err.message);
+                            console.error('FFmpeg stderr:', err.stderr);
+                            reject(new Error(`FFMPEG_FAILURE_ATTEMPT_${attempt}`));
+                        })
+                        .save(outputVideoPath);
+                });
+                
+                ffmpegSuccess = true;
+                break; // Success, exit retry loop
+                
+            } catch (error) {
+                lastError = error;
+                console.error(`FFmpeg attempt ${attempt} failed:`, error.message);
+                if (attempt === 1) {
+                    console.log('Will retry without subtitles...');
+                } else {
+                    console.error('Both FFmpeg attempts failed');
+                }
             }
-            
-            command
-                .complexFilter(complexFilter)
-                .map(finalVideoOutput) // Map the final video stream
-                .map('[final_audio]') // Map the mixed audio stream
-                .outputOptions([
-                    '-c:v libx264',
-                    '-preset slow',
-                    '-crf 22',
-                    '-c:a aac',
-                    '-b:a 192k',
-                    '-pix_fmt yuv420p',
-                    // Move moov atom to the beginning for progressive playback
-                    '-movflags +faststart',
-                    '-shortest' // Finish encoding when the shortest input (audio) ends
-                ])
-                .on('end', () => {
-                    console.log('FFmpeg processing finished.');
-                    resolve();
-                })
-                .on('error', (err) => {
-                    console.error('FFmpeg error:', err.message);
-                    reject(new Error('FFMPEG_FAILURE'));
-                })
-                .save(outputVideoPath);
-        });
+        }
+        
+        if (!ffmpegSuccess) {
+            throw lastError || new Error('FFMPEG_FAILURE_ALL_ATTEMPTS');
+        }
 
         // 4. Upload the final video to the output bucket
         console.log('Uploading final video...');
