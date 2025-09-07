@@ -65,11 +65,10 @@ jobs:
         if: steps.changes.outputs.narrate == 'true'
         run: |
           ENV_FLAGS=""
-          [[ -n "$ELEVENLABS_API_KEY" ]] && ENV_FLAGS+=" --set-env-vars=ELEVENLABS_API_KEY=$ELEVENLABS_API_KEY"
           [[ -n "$INPUT_BUCKET_NAME" ]] && ENV_FLAGS+=" --set-env-vars=INPUT_BUCKET_NAME=$INPUT_BUCKET_NAME"
+          ENV_FLAGS+=" --set-secrets=ELEVENLABS_API_KEY=ELEVENLABS_API_KEY:latest"
           gcloud run deploy reel-banana-narrate --source backend/narrate --allow-unauthenticated $ENV_FLAGS
         env:
-          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
 
       - name: Deploy align-captions
