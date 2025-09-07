@@ -86,7 +86,7 @@ app.post('/polish', appCheckVerification, async (req, res) => {
           headers: {
             'Content-Type': 'application/json',
             'X-Firebase-AppCheck': req.header('X-Firebase-AppCheck'),
-            'Authorization': `Bearer ${req.header('Authorization')}`
+            'Authorization': req.header('Authorization')
           },
           body: JSON.stringify({ keyType: 'fal' })
         });

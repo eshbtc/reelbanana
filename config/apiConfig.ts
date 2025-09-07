@@ -118,6 +118,11 @@ const validateConfig = (config: ApiConfig, envName: string): void => {
 };
 
 // Determine which configuration to use based on environment
+// Environment Selection Logic:
+// 1. PRODUCTION: Built with Vite (import.meta.env.PROD = true) → uses 223097908182 services
+// 2. AI_STUDIO: Set VITE_TARGET_ENV=ai-studio → uses 423229273041 services  
+// 3. DEVELOPMENT: localhost/127.0.0.1 → uses local services (ports 8080-8086)
+// 4. FALLBACK: Any other case → defaults to PRODUCTION (223097908182)
 const getConfig = (): ApiConfig => {
   let selectedConfig: ApiConfig;
   let envName: string;

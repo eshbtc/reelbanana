@@ -66,8 +66,8 @@ const appCheckVerification = async (req, res, next) => {
 };
 
 const storage = new Storage();
-const inputBucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
-const outputBucketName = process.env.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
+const inputBucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
+const outputBucketName = process.env.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
 
 /**
  * POST /render
@@ -88,8 +88,8 @@ const outputBucketName = process.env.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.fi
 app.post('/render', appCheckVerification, async (req, res) => {
     const { projectId, scenes, gsAudioPath, srtPath, gsMusicPath } = req.body;
 
-    if (!projectId || !scenes || !gsAudioPath || !srtPath) {
-        return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required fields for rendering.');
+    if (!projectId) {
+        return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required field: projectId');
     }
 
     console.log(`Received render request for projectId: ${projectId}`);
@@ -99,23 +99,39 @@ app.post('/render', appCheckVerification, async (req, res) => {
     console.log('🔧 Render service: tempDir scope fix applied');
     
     try {
-        // Check if final video already exists to avoid re-processing
+        // Early path: if a final video already exists, allow "publish-only" requests
+        // This supports calling /render with just { projectId, published: true }
         const outputBucket = storage.bucket(outputBucketName);
         const finalVideoFile = outputBucket.file(`${projectId}/movie.mp4`);
-        
         const [exists] = await finalVideoFile.exists();
         if (exists) {
-            console.log(`Final video already exists for ${projectId}, skipping render processing`);
-            // Generate a V4 signed URL for the existing video
-            const [signedUrl] = await finalVideoFile.getSignedUrl({
-                version: 'v4',
-                action: 'read',
-                expires: Date.now() + 60 * 60 * 1000, // 1 hour
-            });
-            return res.status(200).json({ 
-                videoUrl: signedUrl,
-                cached: true 
-            });
+            console.log(`Final video already exists for ${projectId}, evaluating URL type (published vs draft)`);
+
+            const isPublished = req.body.published || false;
+            let videoUrl;
+
+            if (isPublished) {
+                try {
+                    await finalVideoFile.makePublic();
+                } catch (_) {}
+                videoUrl = finalVideoFile.publicUrl();
+                console.log(`Returning durable public URL for published video: ${videoUrl}`);
+            } else {
+                const [signedUrl] = await finalVideoFile.getSignedUrl({
+                    version: 'v4',
+                    action: 'read',
+                    expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+                });
+                videoUrl = signedUrl;
+                console.log(`Returning 7-day signed URL for draft video`);
+            }
+
+            return res.status(200).json({ videoUrl, cached: true });
+        }
+
+        // Validate required fields for a fresh render only if no cached video exists
+        if (!scenes || !gsAudioPath || !srtPath) {
+            return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required fields for rendering.');
         }
         
         tempDir = path.join('/tmp', projectId);
@@ -160,21 +176,26 @@ app.post('/render', appCheckVerification, async (req, res) => {
         if (gsMusicPath) {
             try {
                 const prefix = `gs://${inputBucketName}/`;
-                let remoteMusic = `${projectId}/music.mp3`;
+                let remoteMusic = `${projectId}/music.wav`; // Default to WAV now
                 if (gsMusicPath.startsWith(prefix)) {
                     const rel = gsMusicPath.substring(prefix.length);
                     if (rel && rel.includes(projectId + '/')) {
                         remoteMusic = rel;
                     }
                 }
-                const ext = path.extname(remoteMusic) || '.mp3';
+                const ext = path.extname(remoteMusic) || '.wav';
                 const localName = `music${ext}`;
                 musicLocalPath = path.join(tempDir, localName);
                 downloadPromises.push(inputBucket.file(remoteMusic).download({ destination: musicLocalPath }));
             } catch (_) {
-                // Fallback: try default mp3 name
-                musicLocalPath = path.join(tempDir, 'music.mp3');
-                downloadPromises.push(inputBucket.file(`${projectId}/music.mp3`).download({ destination: musicLocalPath }));
+                // Fallback: try both WAV and MP3
+                try {
+                    musicLocalPath = path.join(tempDir, 'music.wav');
+                    downloadPromises.push(inputBucket.file(`${projectId}/music.wav`).download({ destination: musicLocalPath }));
+                } catch (__) {
+                    musicLocalPath = path.join(tempDir, 'music.mp3');
+                    downloadPromises.push(inputBucket.file(`${projectId}/music.mp3`).download({ destination: musicLocalPath }));
+                }
             }
         }
         
@@ -335,15 +356,28 @@ app.post('/render', appCheckVerification, async (req, res) => {
             metadata: { contentType: 'video/mp4' },
         });
         
-        // Generate a V4 signed URL instead of making the file public
-        const [signedUrl] = await uploadedFile.getSignedUrl({
-            version: 'v4',
-            action: 'read',
-            expires: Date.now() + 60 * 60 * 1000, // 1 hour
-        });
+        // For published videos, make the file public for durable URLs
+        // For draft videos, use signed URLs with longer expiration
+        const isPublished = req.body.published || false;
         
-        console.log(`Video uploaded successfully with signed URL`);
-        res.status(200).json({ videoUrl: signedUrl });
+        let videoUrl;
+        if (isPublished) {
+            // Make file public for published videos (durable URLs)
+            await uploadedFile.makePublic();
+            videoUrl = uploadedFile.publicUrl();
+            console.log(`Video uploaded and made public for published content`);
+        } else {
+            // Use signed URL with 7-day expiration for draft videos
+            const [signedUrl] = await uploadedFile.getSignedUrl({
+                version: 'v4',
+                action: 'read',
+                expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+            });
+            videoUrl = signedUrl;
+            console.log(`Video uploaded with 7-day signed URL for draft content`);
+        }
+        
+        res.status(200).json({ videoUrl });
 
     } catch (error) {
         console.error(`Error rendering video for projectId ${projectId}:`, error);

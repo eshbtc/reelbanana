@@ -213,7 +213,7 @@ app.post('/store-api-key', appCheckVerification, verifyToken, async (req, res) =
 
 // Securely return user's API key to trusted backends (server-to-server only)
 // NOTE: This endpoint is intended for backend services (e.g., polish) and must be protected by App Check + Auth.
-// Body: { keyType: 'fal' | 'google' }
+// Body: { keyType: 'fal' | 'google' } - defaults to 'fal' for backward compatibility
 app.post('/get-api-key', appCheckVerification, verifyToken, async (req, res) => {
   try {
     const { keyType = 'fal' } = req.body || {};
@@ -237,7 +237,11 @@ app.post('/get-api-key', appCheckVerification, verifyToken, async (req, res) => 
 
     const apiKey = await decryptApiKey(encrypted, userId);
     // Do not log or echo beyond response body
-    res.json({ apiKey, provider: keyType, requestId: req.requestId });
+    res.json({ 
+      apiKey, 
+      keyType: keyType,  // Use consistent field name
+      requestId: req.requestId 
+    });
   } catch (error) {
     console.error('Error getting API key:', error);
     return sendError(req, res, 500, 'INTERNAL', 'Failed to retrieve API key');
@@ -356,41 +360,6 @@ app.delete('/remove-api-key', appCheckVerification, verifyToken, async (req, res
   }
 });
 
-// Get API key for service use (supports both Google and FAL keys)
-app.post('/get-api-key', appCheckVerification, verifyToken, async (req, res) => {
-  try {
-    const { keyType = 'google' } = req.body;
-    const userId = req.user.uid;
-    const db = admin.firestore();
-    
-    const keyDoc = await db.collection('user_api_keys').doc(userId).get();
-    if (!keyDoc.exists) {
-      return sendError(req, res, 404, 'NOT_FOUND', 'No API key found');
-    }
-    
-    const keyData = keyDoc.data();
-    if (!keyData[`hasApiKey_${keyType}`]) {
-      return sendError(req, res, 404, 'NOT_FOUND', `No ${keyType} API key found`);
-    }
-    
-    const encryptedKey = keyData[`encryptedApiKey_${keyType}`];
-    if (!encryptedKey) {
-      return sendError(req, res, 404, 'NOT_FOUND', 'Encrypted API key not found');
-    }
-    
-    // Decrypt the API key
-    const decryptedKey = await decryptApiKey(encryptedKey, userId);
-    
-    res.json({ 
-      apiKey: decryptedKey, 
-      keyType: keyType,
-      requestId: req.requestId 
-    });
-  } catch (error) {
-    console.error('Error retrieving API key:', error);
-    return sendError(req, res, 500, 'INTERNAL', 'Failed to retrieve API key');
-  }
-});
 
 // Health check
 app.get('/health', (req, res) => {

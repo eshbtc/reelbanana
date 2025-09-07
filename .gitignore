@@ -24,6 +24,9 @@ dist-ssr
 *.sln
 *.sw?
 
+# Cursor AI rules and configuration
+.cursor/
+
 # History files (from AI Studio and other editors)
 .history/
 *.history
@@ -39,6 +42,9 @@ dist-ssr
 .claude-changelog/
 .claude-sessions/
 *.claude-session
+claude.md
+agents.md
+gemini.md
 
 # Firebase cache and build files
 .firebase/

@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useToast } from './ToastProvider';
 import { Scene } from '../types';
 import { publishMovie } from '../services/firebaseService';
+import { API_ENDPOINTS, apiCall } from '../config/apiConfig';
 
 interface MoviePlayerProps {
   scenes: Scene[];
@@ -42,21 +43,13 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
   }, [scenes]);
 
   const handleShare = async () => {
-    if (!projectId) {
-      // Generate a shareable URL
-      const shareId = `share-${Date.now()}`;
-      const baseUrl = window.location.origin;
-      const url = `${baseUrl}/?share=${shareId}`;
-      setShareUrl(url);
+    // Always route through publish flow to create proper /share/:id URLs
+    if (!published) {
+      // If not published yet, open publish modal first
+      setShowPublishModal(true);
+    } else {
+      // If already published, show share modal
       setShowShareModal(true);
-      
-      // Copy to clipboard
-      try {
-        await navigator.clipboard.writeText(url);
-        // Could add a toast notification here
-      } catch (err) {
-        console.error('Failed to copy to clipboard:', err);
-      }
     }
   };
 
@@ -85,13 +78,21 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
   };
 
   const handlePublish = async () => {
-    if (!videoUrl) return;
+    if (!videoUrl || !projectId) return;
     setPublishing(true);
     try {
+      // Ensure a durable URL by asking render service to mark as published
+      let durableUrl = videoUrl;
+      try {
+        const r = await apiCall(API_ENDPOINTS.render, { projectId, published: true }, 'Failed to finalize published video URL');
+        durableUrl = r?.videoUrl || videoUrl;
+      } catch (e) {
+        console.warn('Durable URL request failed, falling back to current URL:', e);
+      }
+
       const thumb = scenes[0]?.imageUrls?.[0];
-      const id = await publishMovie({ title, description, videoUrl, thumbnailUrl: thumb });
+      const id = await publishMovie({ title, description, videoUrl: durableUrl, thumbnailUrl: thumb });
       setPublished(true);
-      // Build friendly share URL served by Cloud Function with OG tags
       const origin = window?.location?.origin || '';
       setShareUrl(`${origin}/share/${id}`);
       setShowPublishModal(false);

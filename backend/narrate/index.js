@@ -73,7 +73,7 @@ const elevenlabs = new ElevenLabsClient({
   apiKey: process.env.ELEVENLABS_API_KEY,
 });
 const storage = new Storage();
-const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
+const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
 
 /**
  * POST /narrate
@@ -114,7 +114,10 @@ app.post('/narrate', appCheckVerification, async (req, res) => {
     if (exists) {
       const gcsPath = `gs://${bucketName}/${fileName}`;
       console.log(`Narration already exists for ${projectId} at ${gcsPath}, skipping ElevenLabs API call`);
-      return res.status(200).json({ gsAudioPath: gcsPath });
+      return res.status(200).json({ 
+        gsAudioPath: gcsPath,
+        cached: true 
+      });
     }
     
     // Map simple emotion tags to ElevenLabs settings

@@ -68,7 +68,7 @@ const appCheckVerification = async (req, res, next) => {
 // --- CLIENT INITIALIZATION ---
 const speechClient = new SpeechClient();
 const storage = new Storage();
-const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
+const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
 
 // --- HELPER FUNCTIONS ---
 
@@ -169,7 +169,11 @@ app.post('/align', appCheckVerification, async (req, res) => {
         if (exists) {
             const gcsPath = `gs://${bucketName}/${fileName}`;
             console.log(`Captions already exist for ${projectId} at ${gcsPath}, skipping Speech-to-Text processing`);
-            return res.status(200).json({ srtPath: gcsPath, requestId: req.requestId });
+            return res.status(200).json({ 
+                srtPath: gcsPath, 
+                requestId: req.requestId,
+                cached: true 
+            });
         }
     const request = {
             audio: { uri: gsAudioPath },

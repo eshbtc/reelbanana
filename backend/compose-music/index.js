@@ -84,7 +84,7 @@ const appCheckVerification = async (req, res, next) => {
 };
 
 const storage = new Storage();
-const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
+const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
 
 // AI-powered music prompt generation using Firebase Genkit with Vertex AI
 async function generateMusicPromptWithAI(narrationScript) {
@@ -158,7 +158,7 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
   try {
     // Check if music file already exists to avoid re-processing
     const bucket = storage.bucket(bucketName);
-    const fileName = `${projectId}/music.mp3`;
+    const fileName = `${projectId}/music.wav`;
     const file = bucket.file(fileName);
     
     const [exists] = await file.exists();
@@ -184,7 +184,7 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
     const audioBuffer = createWavPlaceholderAudio(musicPrompt);
     
     await file.save(audioBuffer, {
-      metadata: { contentType: 'audio/mpeg' },
+      metadata: { contentType: 'audio/wav' },
     });
 
     const gsMusicPath = `gs://${bucketName}/${fileName}`;

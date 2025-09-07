@@ -67,7 +67,7 @@ const appCheckVerification = async (req, res, next) => {
 
 const storage = new Storage();
 // Use the Firebase Storage bucket for the project
-const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
+const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
 
 // Validate bucket exists and is accessible
 const validateBucket = async () => {
@@ -111,7 +111,7 @@ validateBucket().catch(error => {
  * Response:
  * {
  *   "message": "Image uploaded successfully."
- *   "gcsPath": "gs://reel-banana-35a54.firebasestorage.app/projectId/fileName"
+ *   "gcsPath": "gs://reel-banana-35a54.appspot.com/projectId/fileName"
  * }
  */
 app.post('/upload-image', appCheckVerification, async (req, res) => {

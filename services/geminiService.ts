@@ -202,7 +202,7 @@ export const generateCharacterAndStyle = async (topic: string, forceUseApiKey?: 
             console.log('Using Firebase AI Logic for character and style generation');
             try {
                 const model = getGenerativeModel(ai, { 
-                    model: "gemini-2.5-flash",
+            model: "gemini-2.5-flash",
                     generationConfig: {
                         responseMimeType: "text/plain",
                     }
@@ -678,10 +678,10 @@ Return ONLY a JSON object with this exact format:
         if (aiService === 'firebase') {
             // Use Firebase AI Logic for shot director
             const shotDirectorModel = getGenerativeModel(ai, { 
-                model: "gemini-2.5-flash",
+            model: "gemini-2.5-flash",
                 systemInstruction: directorSystemInstruction,
                 generationConfig: {
-                    responseMimeType: "application/json",
+                responseMimeType: "application/json",
                 }
             });
             
@@ -773,7 +773,7 @@ Return ONLY a JSON object with this exact format:
                     }
                 } catch (err) {
                     console.error('Image generation failed:', err);
-                    throw new Error(`An image in the sequence failed to generate for prompt: "${prompt}"`);
+                throw new Error(`An image in the sequence failed to generate for prompt: "${prompt}"`);
                 }
                 } catch (firebaseError: any) {
                     console.log('❌ Firebase AI Logic image generation failed:', firebaseError.message);
@@ -979,7 +979,7 @@ export const editImageSequence = async (base64Images: string[], editPrompt: stri
 
         for (const image of base64Images) {
             const imagePart = fileToGenerativePart(image);
-
+            
             if (aiService === 'custom') {
                 // BYO path via secure proxy
                 const resp = await authFetch(API_ENDPOINTS.apiKey.use, {
@@ -1013,13 +1013,13 @@ export const editImageSequence = async (base64Images: string[], editPrompt: stri
             // Firebase AI Logic path
             try {
                 const editModel = getGenerativeModel(ai, { 
-                    model: 'gemini-2.5-flash-image-preview',
+                model: 'gemini-2.5-flash-image-preview',
                     generationConfig: {
                         responseModalities: [ResponseModality.IMAGE, ResponseModality.TEXT],
                     }
                 });
                 const response = await editModel.generateContent([
-                    imagePart,
+                        imagePart,
                     { text: editPrompt }
                 ]);
                 const tokenUsage = extractTokenUsage(response, 'gemini-2.5-flash-image-preview');
@@ -1030,7 +1030,7 @@ export const editImageSequence = async (base64Images: string[], editPrompt: stri
                     if (inlineDataParts?.[0]) {
                         const editedImage = inlineDataParts[0].inlineData;
                         editedImages.push(`data:${editedImage.mimeType};base64,${editedImage.data}`);
-                    } else {
+            } else {
                         const candidates = response.response.candidates;
                         if (candidates?.[0]?.content?.parts) {
                             for (const part of candidates[0].content.parts) {
