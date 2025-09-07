@@ -15,18 +15,21 @@ if (!admin.apps.length) {
 const storage = new Storage();
 
 // Retry utility with exponential backoff
-async function retryWithBackoff(operation, maxRetries = 3, baseDelay = 1000) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+async function retryWithBackoff(operation, maxRetries = null, baseDelay = null) {
+  const retries = maxRetries || parseInt(process.env.RETRY_MAX || '3', 10);
+  const delay = baseDelay || parseInt(process.env.RETRY_BASE_DELAY_MS || '1000', 10);
+  
+  for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       return await operation();
     } catch (error) {
-      if (attempt === maxRetries) {
+      if (attempt === retries) {
         throw error;
       }
       
-      const delay = baseDelay * Math.pow(2, attempt - 1);
-      console.log(`Attempt ${attempt} failed, retrying in ${delay}ms:`, error.message);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      const backoffDelay = delay * Math.pow(2, attempt - 1);
+      console.log(`Attempt ${attempt} failed, retrying in ${backoffDelay}ms:`, error.message);
+      await new Promise(resolve => setTimeout(resolve, backoffDelay));
     }
   }
 }
@@ -264,9 +267,22 @@ app.post('/polish', appCheckVerification, async (req, res) => {
         const bucket = storage.bucket(outBucket);
         const file = bucket.file(filename);
         const remoteRes = await retryWithBackoff(async () => {
-          const response = await fetch(currentUrl);
-          if (!response.ok) throw new Error(`Download failed: ${response.status}`);
-          return response;
+          const timeoutMs = parseInt(process.env.REMOTE_FETCH_TIMEOUT_MS || '30000', 10);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+          
+          try {
+            const response = await fetch(currentUrl, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+            return response;
+          } catch (error) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+              throw new Error(`Remote fetch timeout after ${timeoutMs}ms`);
+            }
+            throw error;
+          }
         });
         
         const arrayBuffer = await remoteRes.arrayBuffer();

@@ -1,0 +1,52 @@
+name: Compose Music Smoke Test
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'backend/compose-music/**'
+      - 'scripts/test-compose-music.js'
+      - '.github/workflows/compose-music-smoke-test.yml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'backend/compose-music/**'
+      - 'scripts/test-compose-music.js'
+      - '.github/workflows/compose-music-smoke-test.yml'
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd backend/compose-music
+          npm ci
+
+      - name: Run Compose Music Smoke Test
+        run: |
+          node scripts/test-compose-music.js
+        env:
+          ELEVENLABS_MUSIC_API_KEY: ${{ secrets.ELEVENLABS_MUSIC_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Test Health Endpoint
+        run: |
+          # This would test the actual service if it were running
+          echo "Health endpoint test would go here"
+          echo "Expected: elevenLabsMusicConfigured: true, geminiConfigured: true"
+
+      - name: Test Music Generation (if API key available)
+        if: ${{ secrets.ELEVENLABS_MUSIC_API_KEY || secrets.ELEVENLABS_API_KEY }}
+        run: |
+          echo "Music generation test would go here"
+          echo "Expected: Non-silent WAV file with RMS > threshold"

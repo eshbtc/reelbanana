@@ -70,18 +70,21 @@ const inputBucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.apps
 const outputBucketName = process.env.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
 
 // Retry utility with exponential backoff
-async function retryWithBackoff(operation, maxRetries = 3, baseDelay = 1000) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+async function retryWithBackoff(operation, maxRetries = null, baseDelay = null) {
+  const retries = maxRetries || parseInt(process.env.RETRY_MAX || '3', 10);
+  const delay = baseDelay || parseInt(process.env.RETRY_BASE_DELAY_MS || '1000', 10);
+  
+  for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       return await operation();
     } catch (error) {
-      if (attempt === maxRetries) {
+      if (attempt === retries) {
         throw error;
       }
       
-      const delay = baseDelay * Math.pow(2, attempt - 1);
-      console.log(`Attempt ${attempt} failed, retrying in ${delay}ms:`, error.message);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      const backoffDelay = delay * Math.pow(2, attempt - 1);
+      console.log(`Attempt ${attempt} failed, retrying in ${backoffDelay}ms:`, error.message);
+      await new Promise(resolve => setTimeout(resolve, backoffDelay));
     }
   }
 }
