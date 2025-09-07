@@ -3,7 +3,7 @@ import { Scene } from '../types';
 import { createProject } from '../services/firebaseService';
 import { generateImageSequence } from '../services/geminiService';
 import { API_ENDPOINTS, apiCall } from '../config/apiConfig';
-import { useToast } from './ToastProvider';
+// Toast is optional; we fallback to console if provider is missing
 
 interface HypeModeProps {
   onComplete: (result: { videoUrl: string; projectId: string }) => void;
@@ -45,9 +45,12 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
     ['Generate Story', 'Images', 'Narration', 'Captions', 'Music', 'Render & Polish', 'Publish & Share', 'Results']
   ), []);
 
-  // Toast (defensive)
-  let toast: any = null;
-  try { toast = useToast().toast; } catch { toast = { info: () => {}, success: () => {}, error: () => {} }; }
+  // Minimal notify layer (no hooks) — avoids invalid hook calls if provider is missing
+  const notify = {
+    info: (m: string) => { try { (window as any)?.rbToast?.({ type: 'info', message: m }); } catch {} console.info(m); },
+    success: (m: string) => { try { (window as any)?.rbToast?.({ type: 'success', message: m }); } catch {} console.log(m); },
+    error: (m: string) => { try { (window as any)?.rbToast?.({ type: 'error', message: m }); } catch {} console.error(m); },
+  };
 
   const onFilesSelected = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
@@ -288,14 +291,14 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
       setStatus('Done');
       setProgress(100);
       setStep('complete');
-      toast.success('Hype video ready!');
+      notify.success('Hype video ready!');
       onComplete({ videoUrl: finalUrl, projectId: pid });
     } catch (e: any) {
       const msg = String(e?.message || e);
-      toast.error(msg);
+      notify.error(msg);
       onFail(msg);
     }
-  }, [files, durations, stylize, narration, onComplete, onFail]);
+  }, [entries, durations, stylize, narration, onComplete, onFail]);
 
   const totalSeconds = useMemo(() => durations.reduce((s, d) => s + (d || 0), 0), [durations]);
   const autoDistribute = () => {

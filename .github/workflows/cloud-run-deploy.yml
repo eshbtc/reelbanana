@@ -106,6 +106,7 @@ jobs:
           [[ -n "$RENDER_ENGINE" ]] && ENV_FLAGS+=" --set-env-vars=RENDER_ENGINE=$RENDER_ENGINE"
           ENV_FLAGS+=" --set-env-vars=DEV_MODE=true"
           ENV_FLAGS+=" --set-secrets=FAL_RENDER_API_KEY=FAL_RENDER_API_KEY:latest"
+
           gcloud run deploy reel-banana-render --source backend/render --region us-central1 --platform managed --allow-unauthenticated $ENV_FLAGS
         env:
           INPUT_BUCKET_NAME: ${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}
