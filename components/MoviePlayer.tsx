@@ -297,6 +297,29 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
                 console.log('🎬 MoviePlayer: Video can play, duration:', videoRef.current?.duration);
                 console.log('🎬 MoviePlayer: Audio tracks:', videoRef.current?.audioTracks?.length || 0);
                 console.log('🎬 MoviePlayer: Has audio:', !videoRef.current?.muted && videoRef.current?.audioTracks?.length > 0);
+                
+                // Additional audio detection after video can play
+                if (videoRef.current) {
+                  const video = videoRef.current;
+                  console.log('🎬 MoviePlayer: Video ready for playback');
+                  
+                  // Try to detect audio by checking if the video has audio tracks
+                  // Some browsers don't populate audioTracks until the video is ready to play
+                  if (video.audioTracks && video.audioTracks.length > 0) {
+                    console.log('🎬 MoviePlayer: Audio tracks detected:', video.audioTracks.length);
+                  } else {
+                    console.log('🎬 MoviePlayer: No audio tracks detected, but video may still have audio');
+                    // Force a brief unmute/mute cycle to help browser detect audio
+                    const wasMuted = video.muted;
+                    video.muted = false;
+                    setTimeout(() => {
+                      if (videoRef.current) {
+                        videoRef.current.muted = wasMuted;
+                        console.log('🎬 MoviePlayer: Audio detection cycle completed');
+                      }
+                    }, 50);
+                  }
+                }
               }}
               onLoadedMetadata={() => {
                 console.log('🎬 MoviePlayer: Metadata loaded');
@@ -315,6 +338,17 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
                     console.log('🎬 MoviePlayer: Video has duration, likely has audio');
                     // Don't auto-unmute, but ensure controls are enabled
                     video.controls = true;
+                    
+                    // Force the video to load audio tracks by temporarily unmuting and muting
+                    // This helps the browser detect audio tracks properly
+                    const wasMuted = video.muted;
+                    video.muted = false;
+                    setTimeout(() => {
+                      if (videoRef.current) {
+                        videoRef.current.muted = wasMuted;
+                        console.log('🎬 MoviePlayer: Audio tracks detection completed');
+                      }
+                    }, 100);
                   }
                 }
               }}
