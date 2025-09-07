@@ -61,7 +61,7 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
     return '';
   };
   
-  const srcUrl = normalizeToGcs(usePolished ? (polishedUrl || getActualUrl(videoUrl) || '') : (originalUrl || getActualUrl(videoUrl) || ''));
+  const srcUrl = normalizeToGcs(usePolished ? (getActualUrl(polishedUrl) || getActualUrl(videoUrl) || '') : (getActualUrl(originalUrl) || getActualUrl(videoUrl) || ''));
   
   // Debug logging for video URL
   useEffect(() => {
@@ -70,6 +70,7 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
     const actualPolishedUrl = getActualUrl(polishedUrl);
     
     console.log('🎬 MoviePlayer: Video URL normalized:', srcUrl);
+    console.log('🎬 MoviePlayer: Video URL normalized type:', typeof srcUrl);
     console.log('🎬 MoviePlayer: Original videoUrl (raw):', videoUrl);
     console.log('🎬 MoviePlayer: Original videoUrl (extracted):', actualVideoUrl);
     console.log('🎬 MoviePlayer: OriginalUrl (raw):', originalUrl);
