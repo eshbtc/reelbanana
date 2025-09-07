@@ -74,12 +74,20 @@ const restoreImagesFromGCS = async (projectId: string, scenes: Scene[]): Promise
     try {
         console.log(`🔄 Restoring images from GCS for project: ${projectId}`);
         
+        // Check if storage is properly initialized
+        if (!storage) {
+            console.warn('Firebase Storage not initialized, skipping image restoration');
+            return scenes;
+        }
+        
         // Create a map to store images by scene index
         const sceneImagesMap = new Map<number, string[]>();
         
         // List all files in the project directory
         const projectRef = ref(storage, projectId);
         const listResult = await listAll(projectRef);
+        
+        console.log(`📁 Found ${listResult.items.length} files in GCS for project ${projectId}`);
         
         // Filter and organize images by scene index
         for (const itemRef of listResult.items) {
@@ -104,6 +112,8 @@ const restoreImagesFromGCS = async (projectId: string, scenes: Scene[]): Promise
                         images.push('');
                     }
                     images[imageIndex] = downloadURL;
+                    
+                    console.log(`📸 Restored image: ${fileName} for scene ${sceneIndex}, index ${imageIndex}`);
                 } catch (error) {
                     console.warn(`Failed to get download URL for ${fileName}:`, error);
                 }
@@ -154,7 +164,12 @@ export const getProject = async (projectId: string): Promise<ProjectData | null>
             // Restore multiple images from GCS if scenes exist
             if (projectData.scenes && projectData.scenes.length > 0) {
                 console.log(`🔄 Restoring images for project: ${projectId}`);
-                projectData.scenes = await restoreImagesFromGCS(projectId, projectData.scenes);
+                try {
+                    projectData.scenes = await restoreImagesFromGCS(projectId, projectData.scenes);
+                } catch (restoreError) {
+                    console.warn('Image restoration failed, using stored images:', restoreError);
+                    // Continue with original scenes if restoration fails
+                }
             }
             
             return projectData;
@@ -275,8 +290,6 @@ export const updateProject = async (projectId: string, data: ProjectData): Promi
         // Additional validation for arrays and Firestore compatibility
         if (cleanData.scenes && Array.isArray(cleanData.scenes)) {
             cleanData.scenes = cleanData.scenes.map((scene: any, index: number) => {
-                console.log(`Scene ${index}:`, scene);
-                
                 // Create a clean scene object with only valid Firestore types
                 const cleanScene: any = {};
                 
@@ -298,7 +311,6 @@ export const updateProject = async (projectId: string, data: ProjectData): Promi
                         .slice(0, 1); // Only keep first image URL to avoid size limits
                 }
                 
-                console.log(`Clean scene ${index}:`, cleanScene);
                 return cleanScene;
             });
         }
