@@ -3,6 +3,7 @@ const cors = require('cors');
 const { Storage } = require('@google-cloud/storage');
 // Trigger Cloud Run deployment after rendering pipeline fixes
 const admin = require('firebase-admin');
+const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
 
 const app = express();
 app.use(express.json({ limit: '10mb' })); // Limit for a single base64 image
@@ -131,7 +132,7 @@ validateBucket().catch(error => {
  *   "gcsPath": "gs://reel-banana-35a54.appspot.com/projectId/fileName"
  * }
  */
-app.post('/upload-image', appCheckVerification, async (req, res) => {
+app.post('/upload-image', ...createExpensiveOperationLimiter('upload'), appCheckVerification, async (req, res) => {
   const { projectId, fileName, base64Image } = req.body;
 
   if (!projectId || !fileName || !base64Image) {

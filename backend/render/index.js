@@ -6,6 +6,7 @@ const ffmpeg = require('fluent-ffmpeg');
 const fs = require('fs/promises');
 const path = require('path');
 const admin = require('firebase-admin');
+const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
 
 const app = express();
 app.use(express.json());
@@ -105,7 +106,7 @@ async function retryWithBackoff(operation, maxRetries = null, baseDelay = null) 
  *   "videoUrl": "https://storage.googleapis.com/..."
  * }
  */
-app.post('/render', appCheckVerification, async (req, res) => {
+app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerification, async (req, res) => {
     const { projectId, scenes, gsAudioPath, srtPath, gsMusicPath } = req.body;
 
     if (!projectId) {

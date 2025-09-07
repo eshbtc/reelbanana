@@ -1,0 +1,13 @@
+{
+  "name": "reelbanana-shared",
+  "version": "1.0.0",
+  "description": "Shared utilities for ReelBanana backend services",
+  "main": "rateLimiter.js",
+  "dependencies": {
+    "express-rate-limit": "^7.1.5",
+    "firebase-admin": "^12.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

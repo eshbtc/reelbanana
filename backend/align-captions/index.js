@@ -3,6 +3,7 @@ const cors = require('cors');
 const { SpeechClient } = require('@google-cloud/speech');
 const { Storage } = require('@google-cloud/storage');
 const admin = require('firebase-admin');
+const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
 
 const app = express();
 app.use(express.json());
@@ -150,7 +151,7 @@ const convertToSrt = (words) => {
  *   "srtPath": "gs://bucket-name/project-id/captions.srt"
  * }
  */
-app.post('/align', appCheckVerification, async (req, res) => {
+app.post('/align', ...createExpensiveOperationLimiter('align'), appCheckVerification, async (req, res) => {
     const { projectId, gsAudioPath } = req.body;
 
     if (!projectId || !gsAudioPath) {

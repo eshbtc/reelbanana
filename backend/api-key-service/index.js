@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const admin = require('firebase-admin');
 const { KeyManagementServiceClient } = require('@google-cloud/kms');
+const { getUserQuotaStatus } = require('../shared/rateLimiter');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -360,6 +361,26 @@ app.delete('/remove-api-key', appCheckVerification, verifyToken, async (req, res
   }
 });
 
+
+// Quota status endpoint
+app.get('/quota-status', appCheckVerification, verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.uid;
+    if (!userId) {
+      return sendError(req, res, 401, 'UNAUTHORIZED', 'User not authenticated');
+    }
+    
+    const quotaStatus = getUserQuotaStatus(userId);
+    res.json({
+      userId,
+      quotaStatus,
+      requestId: req.requestId
+    });
+  } catch (error) {
+    console.error('Quota status error:', error);
+    sendError(req, res, 500, 'INTERNAL_ERROR', 'Failed to get quota status');
+  }
+});
 
 // Health check
 app.get('/health', (req, res) => {

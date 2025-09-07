@@ -1,12 +1,13 @@
-import express from 'express';
-import cors from 'cors';
-import { Storage } from '@google-cloud/storage';
-import admin from 'firebase-admin';
-import { genkit } from 'genkit';
-import { firebase } from '@genkit-ai/firebase';
-import { vertexAI, gemini15Flash } from '@genkit-ai/vertexai';
-import { randomUUID } from 'crypto';
-import { ElevenLabsClient } from 'elevenlabs';
+const express = require('express');
+const cors = require('cors');
+const { Storage } = require('@google-cloud/storage');
+const admin = require('firebase-admin');
+const { genkit } = require('genkit');
+const { firebase } = require('@genkit-ai/firebase');
+const { vertexAI, gemini15Flash } = require('@genkit-ai/vertexai');
+const { randomUUID } = require('crypto');
+const { ElevenLabsClient } = require('elevenlabs');
+const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
 
 const app = express();
 app.use(express.json());
@@ -161,7 +162,7 @@ function generateFallbackPrompt(narrationScript) {
  *   "gsMusicPath": "gs://bucket-name/project-id/music.mp3"
  * }
  */
-app.post('/compose-music', appCheckVerification, async (req, res) => {
+app.post('/compose-music', ...createExpensiveOperationLimiter('compose'), appCheckVerification, async (req, res) => {
   const { projectId, narrationScript } = req.body;
 
   if (!projectId || !narrationScript) {

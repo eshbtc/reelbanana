@@ -2,7 +2,6 @@
   "name": "reel-banana-compose-music-service",
   "version": "1.0.0",
   "description": "Microservice to generate musical scores using AI and save to GCS.",
-  "type": "module",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -12,6 +11,7 @@
     "cors": "^2.8.5",
     "elevenlabs": "^0.6.0",
     "express": "^4.19.2",
+    "express-rate-limit": "^7.1.5",
     "firebase-admin": "^12.6.0",
     "google-auth-library": "^9.14.1",
     "genkit": "^0.9.0",

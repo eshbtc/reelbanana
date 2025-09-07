@@ -5,6 +5,7 @@ const { ElevenLabsClient } = require('elevenlabs');
 const { Storage } = require('@google-cloud/storage');
 // Update ElevenLabs API key - trigger redeployment
 const admin = require('firebase-admin');
+const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
 
 const app = express();
 app.use(express.json());
@@ -107,7 +108,7 @@ async function retryWithBackoff(operation, maxRetries = 3, baseDelay = 1000) {
  *   "gsAudioPath": "gs://bucket-name/project-id/narration.mp3"
  * }
  */
-app.post('/narrate', appCheckVerification, async (req, res) => {
+app.post('/narrate', ...createExpensiveOperationLimiter('narrate'), appCheckVerification, async (req, res) => {
   const { projectId, narrationScript, emotion } = req.body;
 
   if (!projectId || !narrationScript) {
