@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, getDocs, orderBy, limit, query } from 'firebase/firestore';
 import { getFirestore } from 'firebase/firestore';
 import { firebaseApp } from '../lib/firebase';
+import { getAppCheckToken } from '../lib/appCheck';
 
 // Use centralized Firebase app for consistency and App Check
 const db = getFirestore(firebaseApp);
@@ -25,6 +26,18 @@ const PublicGallery: React.FC = () => {
   useEffect(() => {
     const fetchMovies = async () => {
       try {
+        // Try to get App Check token for better compatibility
+        try {
+          const appCheckToken = await getAppCheckToken();
+          if (appCheckToken) {
+            console.log('🔐 PublicGallery: App Check token available for public access');
+          } else {
+            console.warn('🔐 PublicGallery: No App Check token available');
+          }
+        } catch (appCheckError) {
+          console.warn('🔐 PublicGallery: App Check token error:', appCheckError);
+        }
+
         const col = collection(db, 'public_movies');
         const q = query(col, orderBy('createdAt', 'desc'), limit(18));
         const snap = await getDocs(q);
@@ -42,8 +55,11 @@ const PublicGallery: React.FC = () => {
           };
         });
         setMovies(items);
+        console.log('✅ PublicGallery: Successfully fetched', items.length, 'movies');
       } catch (error) {
-        console.error('Error fetching movies:', error);
+        console.error('❌ Error fetching movies:', error);
+        // Set empty array on error to show empty state
+        setMovies([]);
       } finally {
         setLoading(false);
       }

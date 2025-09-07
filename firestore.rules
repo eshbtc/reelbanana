@@ -27,10 +27,10 @@ service cloud.firestore {
     }
     
     // Public movies (gallery)
-    // - Allow public reads so the gallery is visible without auth
+    // - Allow public reads so the gallery is visible without auth (even with App Check)
     // - Allow authenticated users to create/update/delete their own entries
     match /public_movies/{movieId} {
-      allow read: if true;
+      allow read: if true; // Allow public access even with App Check enabled
       allow create: if request.auth != null && 
         request.auth.uid == request.resource.data.userId &&
         // Validate required fields
