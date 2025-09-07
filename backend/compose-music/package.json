@@ -10,6 +10,7 @@
   "dependencies": {
     "@google-cloud/storage": "^7.11.0",
     "cors": "^2.8.5",
+    "elevenlabs": "^0.6.0",
     "express": "^4.19.2",
     "firebase-admin": "^12.6.0",
     "google-auth-library": "^9.14.1",

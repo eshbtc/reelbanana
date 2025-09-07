@@ -69,6 +69,23 @@ const storage = new Storage();
 // Use the Firebase Storage bucket for the project
 const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
 
+// Retry utility with exponential backoff
+async function retryWithBackoff(operation, maxRetries = 3, baseDelay = 1000) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      const delay = baseDelay * Math.pow(2, attempt - 1);
+      console.log(`Attempt ${attempt} failed, retrying in ${delay}ms:`, error.message);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+
 // Validate bucket exists and is accessible
 const validateBucket = async () => {
   try {
@@ -157,8 +174,15 @@ app.post('/upload-image', appCheckVerification, async (req, res) => {
     
     console.log(`📤 Uploading image: ${safeName} (${(imageBuffer.length / 1024).toFixed(1)}KB) for project ${safeProjectId}`);
     
-    await file.save(imageBuffer, { metadata: { contentType: mime } });
-    await file.makePublic();
+    // Upload with retry logic
+    await retryWithBackoff(async () => {
+      await file.save(imageBuffer, { metadata: { contentType: mime } });
+    });
+    
+    // Make public with retry logic
+    await retryWithBackoff(async () => {
+      await file.makePublic();
+    });
 
     const gcsPath = `gs://${bucketName}/${fullPath}`;
     const publicUrl = `https://storage.googleapis.com/${bucketName}/${fullPath}`;

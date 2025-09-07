@@ -6,6 +6,7 @@ import { genkit } from 'genkit';
 import { firebase } from '@genkit-ai/firebase';
 import { vertexAI, gemini15Flash } from '@genkit-ai/vertexai';
 import { randomUUID } from 'crypto';
+import { ElevenLabsClient } from 'elevenlabs';
 
 const app = express();
 app.use(express.json());
@@ -85,6 +86,11 @@ const appCheckVerification = async (req, res, next) => {
 
 const storage = new Storage();
 const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.appspot.com';
+
+// Initialize ElevenLabs client for music generation
+const elevenLabsClient = new ElevenLabsClient({
+  apiKey: process.env.ELEVENLABS_API_KEY
+});
 
 // AI-powered music prompt generation using Firebase Genkit with Vertex AI
 async function generateMusicPromptWithAI(narrationScript) {
@@ -176,12 +182,11 @@ app.post('/compose-music', appCheckVerification, async (req, res) => {
     const musicPrompt = await generateMusicPromptWithAI(narrationScript);
     console.log(`Generated music prompt: "${musicPrompt}"`);
 
-    // 2. For hackathon demo, create a placeholder audio file
-    // In production, you would use a music generation API here
+    // 2. Generate real music using Stability AI Stable Audio API
     // Reuse bucket, fileName, and file variables from cache check above
     
-    // Create a simple WAV audio file (placeholder - in production, use actual music generation)
-    const audioBuffer = createWavPlaceholderAudio(musicPrompt);
+    console.log('🎵 Generating real music with Stability AI Stable Audio...');
+    const audioBuffer = await generateRealMusic(musicPrompt);
     
     await file.save(audioBuffer, {
       metadata: { contentType: 'audio/wav' },
@@ -214,8 +219,37 @@ app.get('/health', (req, res) => {
 });
 
 /**
+ * Generate real music using ElevenLabs Eleven Music API
+ */
+async function generateRealMusic(musicPrompt) {
+  try {
+    console.log('🎵 Generating music with ElevenLabs Eleven Music...');
+    
+    // Call ElevenLabs Music API
+    const response = await elevenLabsClient.music.generate({
+      prompt: musicPrompt,
+      duration: 20, // 20 seconds to match our current duration
+      format: 'wav' // Request WAV format for better quality
+    });
+    
+    // Convert the response to a Buffer
+    const audioBuffer = Buffer.from(await response.arrayBuffer());
+    console.log('🎵 Successfully generated music with ElevenLabs');
+    
+    return audioBuffer;
+    
+  } catch (error) {
+    console.error('🎵 ElevenLabs music generation failed:', error);
+    console.log('🎵 Falling back to placeholder audio...');
+    
+    // Fallback to placeholder if ElevenLabs fails
+    return createWavPlaceholderAudio(musicPrompt);
+  }
+}
+
+/**
  * Create a placeholder WAV audio file based on mood analysis
- * In production, replace with actual music generation
+ * Fallback when ElevenLabs music generation fails
  */
 function createWavPlaceholderAudio(musicPrompt) {
   const lower = (musicPrompt || '').toLowerCase();
