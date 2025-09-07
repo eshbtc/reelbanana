@@ -345,6 +345,12 @@ export const updateProject = async (projectId: string, data: ProjectData): Promi
         
         await setDoc(docRef, cleanData, { merge: true });
     } catch (error) {
+        const msg = (error as any)?.message || '';
+        const code = (error as any)?.code || '';
+        if (code === 'permission-denied' || /Missing or insufficient permissions/i.test(msg)) {
+            console.warn('updateProject: permission denied; skipping save (non-owner or rules)', { projectId });
+            return; // Non-fatal for autosave flows
+        }
         console.error("Error updating project in Firestore:", error);
         throw new Error("Could not save the project.");
     }
@@ -502,17 +508,28 @@ interface PublicMovie {
 export const publishMovie = async (movie: Omit<PublicMovie, 'createdAt'>): Promise<string> => {
     try {
         const currentUser = getCurrentUser();
-        const docRef = await addDoc(collection(db, 'public_movies'), {
+        console.log('🎬 publishMovie: Current user:', currentUser?.uid);
+        console.log('🎬 publishMovie: Movie data:', movie);
+        
+        if (!currentUser?.uid) {
+            throw new Error('User must be authenticated to publish movies');
+        }
+        
+        const movieData = {
             ...movie,
-            userId: currentUser?.uid,
+            userId: currentUser.uid,
             createdAt: serverTimestamp(),
             views: 0,
             likes: 0,
-        } as any);
-        console.log('Published movie with id', docRef.id);
+        };
+        
+        console.log('🎬 publishMovie: Final movie data:', movieData);
+        
+        const docRef = await addDoc(collection(db, 'public_movies'), movieData as any);
+        console.log('🎬 publishMovie: Published movie with id', docRef.id);
         return docRef.id;
     } catch (error) {
-        console.error('Error publishing movie:', error);
+        console.error('🎬 publishMovie: Error publishing movie:', error);
         // Non-fatal for user flow
         throw error;
     }

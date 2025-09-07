@@ -54,7 +54,14 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
     } catch {}
     return url;
   };
-  const srcUrl = normalizeToGcs(usePolished ? (polishedUrl || videoUrl || '') : (originalUrl || videoUrl || ''));
+  // Extract actual URL from object if needed
+  const getActualUrl = (url: any): string => {
+    if (typeof url === 'string') return url;
+    if (url && typeof url === 'object' && url.videoUrl) return url.videoUrl;
+    return '';
+  };
+  
+  const srcUrl = normalizeToGcs(usePolished ? (polishedUrl || getActualUrl(videoUrl) || '') : (originalUrl || getActualUrl(videoUrl) || ''));
   
   // Debug logging for video URL
   useEffect(() => {
@@ -192,7 +199,13 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
     console.log('🎬 MoviePlayer: title:', title);
     console.log('🎬 MoviePlayer: description:', description);
     
-    if (!videoUrl || !projectId) {
+    const actualVideoUrl = getActualUrl(videoUrl);
+    const actualProjectId = (typeof projectId === 'object' && projectId?.projectId) ? projectId.projectId : projectId;
+    
+    console.log('🎬 MoviePlayer: actualVideoUrl:', actualVideoUrl);
+    console.log('🎬 MoviePlayer: actualProjectId:', actualProjectId);
+    
+    if (!actualVideoUrl || !actualProjectId) {
       console.error('🎬 MoviePlayer: Cannot publish - missing videoUrl or projectId');
       toast.error('Cannot publish: Video URL or project ID is missing');
       return;
@@ -201,11 +214,11 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
     setPublishing(true);
     try {
       // Ensure a durable URL by asking render service to mark as published
-      let durableUrl = videoUrl;
+      let durableUrl = actualVideoUrl;
       try {
         console.log('🎬 MoviePlayer: Requesting durable URL from render service...');
-        const r = await apiCall(API_ENDPOINTS.render, { projectId, published: true }, 'Failed to finalize published video URL');
-        durableUrl = r?.videoUrl || videoUrl;
+        const r = await apiCall(API_ENDPOINTS.render, { projectId: actualProjectId, published: true }, 'Failed to finalize published video URL');
+        durableUrl = r?.videoUrl || actualVideoUrl;
         console.log('🎬 MoviePlayer: Durable URL received:', durableUrl);
       } catch (e) {
         console.warn('🎬 MoviePlayer: Durable URL request failed, falling back to current URL:', e);
