@@ -158,7 +158,8 @@ const App: React.FC = () => {
             projectId={projectId || 'default-project'}
             demoMode={demoMode}
             onComplete={handleRenderComplete} 
-            onFail={handleRenderFail} 
+            onFail={handleRenderFail}
+            onBack={handleBackToEditor}
           />;
         } else {
           return <RenderingScreen 

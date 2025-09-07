@@ -24,6 +24,7 @@ interface MovieWizardProps {
   demoMode?: boolean;
   onComplete: (result: { videoUrl: string; projectId: string }) => void;
   onFail: (error: string) => void;
+  onBack?: () => void;
 }
 
 const WIZARD_STEPS: Omit<WizardStep, 'status' | 'result' | 'error'>[] = [
@@ -66,7 +67,8 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
   projectId, 
   demoMode = false,
   onComplete, 
-  onFail 
+  onFail,
+  onBack 
 }) => {
   const [steps, setSteps] = useState<WizardStep[]>(() =>
     WIZARD_STEPS.map(step => ({
@@ -333,7 +335,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
     }));
 
     return await apiCall(API_ENDPOINTS.render,
-      { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath },
+      { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: true },
       'Failed to render video'
     );
   };
@@ -435,7 +437,20 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
 
   return (
     <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-3xl font-bold text-white mb-8 text-center">Movie Production Wizard</h1>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold text-white">Movie Production Wizard</h1>
+        {onBack && (
+          <button 
+            onClick={onBack}
+            className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            Back to Project
+          </button>
+        )}
+      </div>
       
       {/* Progress Steps */}
       <div className="mb-8">
