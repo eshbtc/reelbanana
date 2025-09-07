@@ -186,3 +186,57 @@ exports.secureDataHandler = onCall(
 );
 // CI/CD test - Sat Sep  6 13:34:57 CDT 2025
 // CI/CD test with fixed permissions - Sat Sep  6 13:39:53 CDT 2025
+
+/**
+ * listPublicMovies (fallback for gallery)
+ * Public endpoint that returns a paginated list of published public_movies.
+ * Uses Admin SDK; enforces safe limits and returns a minimal shape for the gallery.
+ * Optional App Check verification if header is present; does not require auth.
+ * Query params: limit (default 24, max 50), startAfter (createdAt ISO)
+ */
+exports.listPublicMovies = onRequest(async (req, res) => {
+  try {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, X-Firebase-AppCheck');
+    if (req.method === 'OPTIONS') return res.status(204).send('');
+
+    // Best-effort App Check verification when header present
+    const appCheckHeader = req.header('X-Firebase-AppCheck');
+    if (appCheckHeader) {
+      try { await admin.appCheck().verifyToken(appCheckHeader); } catch (e) {
+        // Non-fatal for public gallery; log and continue
+        console.warn('listPublicMovies: App Check verification failed (continuing as public):', e.message);
+      }
+    }
+
+    const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit || '24'), 10) || 24));
+    const startAfterIso = req.query.startAfter ? String(req.query.startAfter) : null;
+    let q = admin.firestore().collection('public_movies')
+      .orderBy('createdAt', 'desc')
+      .limit(limit);
+    if (startAfterIso) {
+      const start = new Date(startAfterIso);
+      if (!isNaN(start.valueOf())) {
+        q = q.startAfter(start);
+      }
+    }
+
+    const snap = await q.get();
+    const items = snap.docs.map(d => {
+      const x = d.data() || {};
+      return {
+        id: d.id,
+        title: x.title || 'Untitled',
+        description: x.description || '',
+        thumbnailUrl: x.thumbnailUrl || null,
+        videoUrl: x.videoUrl || null,
+        createdAt: x.createdAt ? (x.createdAt.toDate ? x.createdAt.toDate().toISOString() : x.createdAt) : null,
+      };
+    });
+    res.json({ items, count: items.length });
+  } catch (e) {
+    console.error('listPublicMovies error:', e);
+    res.status(500).json({ code: 'INTERNAL', message: 'Failed to list public movies' });
+  }
+});

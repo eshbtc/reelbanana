@@ -301,7 +301,8 @@ createHealthEndpoints(app, 'compose-music',
       avgGenerationTimeMs: metrics.musicGenerations > 0 ? Math.round(metrics.musicGenerationTimeMs / metrics.musicGenerations) : 0,
       musicRetries: metrics.musicRetries,
       musicFallbacks: metrics.musicFallbacks,
-      cacheHits: metrics.cacheHits
+      cacheHits: metrics.cacheHits,
+      cacheWrites: metrics.cacheWrites || 0
     }
   },
   {
@@ -312,6 +313,25 @@ createHealthEndpoints(app, 'compose-music',
     }
   }
 );
+
+// Admin-only (DEV_MODE) cache clear endpoint
+app.post('/cache-clear', appCheckVerification, async (req, res) => {
+  try {
+    if (process.env.DEV_MODE !== 'true') {
+      return res.status(403).json({ code: 'FORBIDDEN', message: 'Cache clear allowed only in DEV_MODE' });
+    }
+    const { projectId, cacheId, cacheNormId } = req.body || {};
+    const bucket = storage.bucket(bucketName);
+    const result = { deleted: [] };
+    const safeDelete = async (path) => { try { const f = bucket.file(path); const [ex] = await f.exists(); if (ex) { await f.delete(); result.deleted.push(path); } } catch {} };
+    if (projectId) await safeDelete(`${projectId}/music.wav`);
+    if (cacheId) await safeDelete(`cache/music/exact/${cacheId}.wav`);
+    if (cacheNormId) await safeDelete(`cache/music/norm/${cacheNormId}.wav`);
+    res.json({ status: 'ok', ...result });
+  } catch (e) {
+    res.status(500).json({ code: 'INTERNAL', message: 'Failed to clear cache', details: e?.message });
+  }
+});
 
 /**
  * Generate real music using ElevenLabs Eleven Music API with retry logic

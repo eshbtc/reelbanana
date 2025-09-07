@@ -160,7 +160,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
     } catch {}
   }, [steps, currentStepIndex, projectId]);
 
-  // Resume wizard state
+  // Resume wizard state (only if there was real progress)
   useEffect(() => {
     (async () => {
       try {
@@ -168,7 +168,9 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
         const raw = sessionStorage.getItem(key);
         if (!raw) return;
         const saved = JSON.parse(raw);
-        if (saved && Array.isArray(saved.steps)) {
+        // Only offer resume if any step has progressed beyond 'pending'
+        const hasProgress = Array.isArray(saved?.steps) && saved.steps.some((s: any) => s?.status && s.status !== 'pending');
+        if (saved && Array.isArray(saved.steps) && hasProgress) {
           const ok = await confirm({ title: 'Resume Wizard?', message: 'Resume previous wizard session?', confirmText: 'Resume', cancelText: 'Start Fresh' });
           if (ok) {
             setSteps(saved.steps);
@@ -176,6 +178,9 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
           } else {
             sessionStorage.removeItem(key);
           }
+        } else {
+          // No meaningful progress, clear and start fresh silently
+          sessionStorage.removeItem(key);
         }
       } catch {}
     })();

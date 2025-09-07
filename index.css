@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* App base styles */
+html, body, #root {
+  height: 100%;
+}
+body {
+  background-color: rgb(17 24 39); /* bg-gray-900 */
+}

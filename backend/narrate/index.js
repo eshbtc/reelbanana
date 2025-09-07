@@ -307,6 +307,33 @@ app.get('/cache-status', appCheckVerification, (req, res) => {
   });
 });
 
+// Admin-only (DEV_MODE) cache clear endpoint
+app.post('/cache-clear', appCheckVerification, async (req, res) => {
+  try {
+    if (process.env.DEV_MODE !== 'true') {
+      return sendError(req, res, 403, 'FORBIDDEN', 'Cache clear allowed only in DEV_MODE');
+    }
+    const { projectId, cacheId } = req.body || {};
+    const bucket = storage.bucket(bucketName);
+    const result = { deleted: [] };
+
+    const safeDelete = async (path) => {
+      try { const f = bucket.file(path); const [ex] = await f.exists(); if (ex) { await f.delete(); result.deleted.push(path); } } catch {}
+    };
+
+    if (projectId) {
+      await safeDelete(`${projectId}/narration.mp3`);
+    }
+    if (cacheId) {
+      await safeDelete(`cache/narrate/exact/${cacheId}.mp3`);
+      await safeDelete(`cache/narrate/norm/${cacheId}.mp3`);
+    }
+    res.json({ status: 'ok', ...result });
+  } catch (e) {
+    sendError(req, res, 500, 'INTERNAL', 'Failed to clear cache', e?.message);
+  }
+});
+
 // Note: No music generation endpoint is included here as per the latest stable implementation.
 
 const PORT = process.env.PORT || 8080;

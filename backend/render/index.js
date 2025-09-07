@@ -836,6 +836,29 @@ app.get('/cache-status', appCheckVerification, (req, res) => {
   });
 });
 
+// Admin-only (DEV_MODE) cache clear endpoint
+app.post('/cache-clear', appCheckVerification, async (req, res) => {
+  try {
+    if (process.env.DEV_MODE !== 'true') {
+      return sendError(req, res, 403, 'FORBIDDEN', 'Cache clear allowed only in DEV_MODE');
+    }
+    const { projectId, cacheId } = req.body || {};
+    const outBucket = storage.bucket(outputBucketName);
+    const result = { deleted: [] };
+    const safeDelete = async (file) => { try { const [ex] = await file.exists(); if (ex) { await file.delete(); result.deleted.push(file.name); } } catch {} };
+    if (projectId) {
+      await safeDelete(outBucket.file(`${projectId}/movie.mp4`));
+      await safeDelete(outBucket.file(`${projectId}/movie_polished.mp4`));
+    }
+    if (cacheId) {
+      await safeDelete(outBucket.file(`cache/render/${cacheId}.mp4`));
+    }
+    res.json({ status: 'ok', ...result });
+  } catch (e) {
+    sendError(req, res, 500, 'INTERNAL', 'Failed to clear cache', e?.message);
+  }
+});
+
 // Playback tracking endpoint for SLI monitoring
 app.post('/playback-tracking', appCheckVerification, (req, res) => {
   try {

@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { ToastProvider } from './components/ToastProvider';
 import { ConfirmProvider } from './components/ConfirmProvider';
+import './index.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

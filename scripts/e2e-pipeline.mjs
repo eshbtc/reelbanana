@@ -186,6 +186,40 @@ async function post(url, body, tokens, label) {
   return res.json();
 }
 
+// Headless share page check (Hosting) with fallback to direct function URL
+async function openShareAndCheck(shareId) {
+  const hostingUrl = `https://reel-banana-35a54.web.app/share/${encodeURIComponent(shareId)}`;
+  try {
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    const resp = await page.goto(hostingUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    const status = resp?.status() || 0;
+    const tags = await page.evaluate(() => {
+      const get = (sel, attr) => (document.querySelector(sel)?.getAttribute(attr)) || null;
+      return {
+        ogTitle: get('meta[property="og:title"]', 'content'),
+        ogDesc: get('meta[property="og:description"]', 'content'),
+        ogImage: get('meta[property="og:image"]', 'content'),
+        ogUrl: get('meta[property="og:url"]', 'content'),
+        twCard: get('meta[name="twitter:card"]', 'content'),
+      };
+    });
+    await browser.close();
+    const ok = status === 200 && !!tags.ogTitle && !!tags.ogImage && !!tags.ogUrl;
+    return { url: hostingUrl, ok, status, tags };
+  } catch (e) {
+    const fnUrl = `https://us-central1-reel-banana-35a54.cloudfunctions.net/shareHandler/${encodeURIComponent(shareId)}`;
+    try {
+      const res = await fetch(fnUrl);
+      const html = await res.text();
+      const ok = res.ok && /<meta\s+property=\"og:title\"/i.test(html);
+      return { url: fnUrl, ok, status: res.status };
+    } catch (err) {
+      return { url: fnUrl, ok: false, status: 0, error: String(err?.message || err) };
+    }
+  }
+}
+
 (async () => {
   console.log('E2E pipeline starting...');
   console.log('Base URLs:', BASE_URLS);
@@ -278,7 +312,7 @@ async function post(url, body, tokens, label) {
   // 7) Cloud Functions checks
   const secureData = await callSecureDataHandler(process.env.APPCHECK_DEBUG_SECRET);
   console.log('secureDataHandler:', secureData);
-  const shareCheck = await fetchSharePage(projectId);
+  const shareCheck = await openShareAndCheck(projectId);
   console.log('shareHandler:', shareCheck);
 
   console.log('E2E pipeline complete.');

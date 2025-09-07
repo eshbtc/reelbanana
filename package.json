@@ -20,6 +20,9 @@
   "devDependencies": {
     "@fal-ai/client": "^1.6.2",
     "@types/node": "^22.14.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.13",
     "playwright": "^1.55.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"

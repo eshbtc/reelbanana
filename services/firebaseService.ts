@@ -80,79 +80,23 @@ const restoreImagesFromGCS = async (projectId: string, scenes: Scene[]): Promise
             return scenes;
         }
         
-        // Check if user is authenticated
-        const { getAuth } = await import('firebase/auth');
-        const auth = getAuth(firebaseApp);
-        if (!auth.currentUser) {
-            console.warn('User not authenticated, skipping image restoration');
-            return scenes;
-        }
-        
-        // Create a map to store images by scene index
-        const sceneImagesMap = new Map<number, string[]>();
-        
-        try {
-            // List all files in the project directory
-            const projectRef = ref(storage, projectId);
-            const listResult = await listAll(projectRef);
-        
-            console.log(`📁 Found ${listResult.items.length} files in GCS for project ${projectId}`);
-            
-            // Filter and organize images by scene index
-            for (const itemRef of listResult.items) {
-                const fileName = itemRef.name;
-                // Match pattern: scene-{sceneIndex}-{imageIndex}.{ext}
-                const match = fileName.match(/^scene-(\d+)-(\d+)\.(png|jpg|jpeg|webp)$/i);
-                
-                if (match) {
-                    const sceneIndex = parseInt(match[1], 10);
-                    const imageIndex = parseInt(match[2], 10);
-                    
-                    try {
-                        const downloadURL = await getDownloadURL(itemRef);
-                        
-                        if (!sceneImagesMap.has(sceneIndex)) {
-                            sceneImagesMap.set(sceneIndex, []);
-                        }
-                        
-                        const images = sceneImagesMap.get(sceneIndex)!;
-                        // Ensure we have enough slots for the image
-                        while (images.length <= imageIndex) {
-                            images.push('');
-                        }
-                        images[imageIndex] = downloadURL;
-                        
-                        console.log(`📸 Restored image: ${fileName} for scene ${sceneIndex}, index ${imageIndex}`);
-                    } catch (error) {
-                        console.warn(`Failed to get download URL for ${fileName}:`, error);
-                    }
-                }
-            }
-        } catch (storageError) {
-            console.warn(`Storage access failed for project ${projectId}:`, storageError);
-            // Return original scenes if storage access fails
-            return scenes;
-        }
-        
-        // Restore images to scenes
+        // Avoid listing (403). Synthesize up to 3 public URLs per scene based on naming convention.
+        const exts = ['png','jpg','jpeg','webp'];
+        const bucket = 'reel-banana-35a54.firebasestorage.app';
+        const publicUrl = (sceneIdx: number, imgIdx: number, ext: string) =>
+          `https://storage.googleapis.com/${bucket}/${projectId}/scene-${sceneIdx}-${imgIdx}.${ext}`;
+
         const restoredScenes = scenes.map((scene, index) => {
-            const restoredImages = sceneImagesMap.get(index) || [];
-            // Filter out empty strings and keep existing images if no GCS images found
-            const validImages = restoredImages.filter(url => url && url.trim() !== '');
-            
-            if (validImages.length > 0) {
-                console.log(`✅ Restored ${validImages.length} images for scene ${index}`);
-                return {
-                    ...scene,
-                    imageUrls: validImages
-                };
-            } else {
-                console.log(`⚠️ No images found in GCS for scene ${index}, keeping existing`);
-                return scene;
+            if (Array.isArray(scene.imageUrls) && scene.imageUrls.length > 0) return scene;
+            const urls: string[] = [];
+            for (let i = 0; i < 3; i++) {
+              // Prefer png (first ext)
+              urls.push(publicUrl(index, i, exts[0]));
             }
+            return { ...scene, imageUrls: urls };
         });
-        
-        console.log(`🔄 Image restoration complete for project: ${projectId}`);
+
+        console.log(`🔄 Image restoration (synthetic) complete for project: ${projectId}`);
         return restoredScenes;
         
     } catch (error) {

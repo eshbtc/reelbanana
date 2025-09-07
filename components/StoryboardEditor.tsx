@@ -218,6 +218,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       });
       
       setProjectId(newProjectId);
+      try { sessionStorage.removeItem(`wizard:${newProjectId}`); } catch {}
       try { onProjectIdChange?.(newProjectId); } catch {}
       setTopic(storyTopic);
       setProjectName(finalProjectName);
