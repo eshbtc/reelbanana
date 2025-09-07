@@ -15,12 +15,14 @@ import {
     deleteDoc,
     updateDoc
 } from 'firebase/firestore';
+import { getStorage, ref, listAll, getDownloadURL } from 'firebase/storage';
 import { Scene } from '../types';
 import { firebaseApp } from '../lib/firebase';
 import { getCurrentUser } from './authService';
 
 // Use centralized Firebase app for consistency and App Check
 const db = getFirestore(firebaseApp);
+const storage = getStorage(firebaseApp);
 
 const PROJECTS_COLLECTION = 'projects';
 
@@ -63,9 +65,83 @@ export const createProject = async (data: ProjectData): Promise<string> => {
 };
 
 /**
- * Retrieves a project document from Firestore.
+ * Restores multiple images from Google Cloud Storage for a project.
+ * @param projectId The ID of the project.
+ * @param scenes The scenes to restore images for.
+ * @returns Scenes with restored image URLs.
+ */
+const restoreImagesFromGCS = async (projectId: string, scenes: Scene[]): Promise<Scene[]> => {
+    try {
+        console.log(`🔄 Restoring images from GCS for project: ${projectId}`);
+        
+        // Create a map to store images by scene index
+        const sceneImagesMap = new Map<number, string[]>();
+        
+        // List all files in the project directory
+        const projectRef = ref(storage, projectId);
+        const listResult = await listAll(projectRef);
+        
+        // Filter and organize images by scene index
+        for (const itemRef of listResult.items) {
+            const fileName = itemRef.name;
+            // Match pattern: scene-{sceneIndex}-{imageIndex}.{ext}
+            const match = fileName.match(/^scene-(\d+)-(\d+)\.(png|jpg|jpeg|webp)$/i);
+            
+            if (match) {
+                const sceneIndex = parseInt(match[1], 10);
+                const imageIndex = parseInt(match[2], 10);
+                
+                try {
+                    const downloadURL = await getDownloadURL(itemRef);
+                    
+                    if (!sceneImagesMap.has(sceneIndex)) {
+                        sceneImagesMap.set(sceneIndex, []);
+                    }
+                    
+                    const images = sceneImagesMap.get(sceneIndex)!;
+                    // Ensure we have enough slots for the image
+                    while (images.length <= imageIndex) {
+                        images.push('');
+                    }
+                    images[imageIndex] = downloadURL;
+                } catch (error) {
+                    console.warn(`Failed to get download URL for ${fileName}:`, error);
+                }
+            }
+        }
+        
+        // Restore images to scenes
+        const restoredScenes = scenes.map((scene, index) => {
+            const restoredImages = sceneImagesMap.get(index) || [];
+            // Filter out empty strings and keep existing images if no GCS images found
+            const validImages = restoredImages.filter(url => url && url.trim() !== '');
+            
+            if (validImages.length > 0) {
+                console.log(`✅ Restored ${validImages.length} images for scene ${index}`);
+                return {
+                    ...scene,
+                    imageUrls: validImages
+                };
+            } else {
+                console.log(`⚠️ No images found in GCS for scene ${index}, keeping existing`);
+                return scene;
+            }
+        });
+        
+        console.log(`🔄 Image restoration complete for project: ${projectId}`);
+        return restoredScenes;
+        
+    } catch (error) {
+        console.error("Error restoring images from GCS:", error);
+        // Return original scenes if restoration fails
+        return scenes;
+    }
+};
+
+/**
+ * Retrieves a project document from Firestore and restores images from GCS.
  * @param projectId The ID of the project to fetch.
- * @returns The project data or null if not found.
+ * @returns The project data with restored images or null if not found.
  */
 export const getProject = async (projectId: string): Promise<ProjectData | null> => {
     try {
@@ -73,9 +149,15 @@ export const getProject = async (projectId: string): Promise<ProjectData | null>
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
-            // We cast here, assuming the data structure is correct.
-            // Add validation here for more robustness.
-            return docSnap.data() as ProjectData;
+            const projectData = docSnap.data() as ProjectData;
+            
+            // Restore multiple images from GCS if scenes exist
+            if (projectData.scenes && projectData.scenes.length > 0) {
+                console.log(`🔄 Restoring images for project: ${projectId}`);
+                projectData.scenes = await restoreImagesFromGCS(projectId, projectData.scenes);
+            }
+            
+            return projectData;
         } else {
             console.warn(`Project with ID "${projectId}" not found.`);
             return null;
@@ -257,26 +339,41 @@ export const listMyProjects = async (userId: string, limit: number = 20): Promis
         console.log('🔍 listMyProjects: Executing query...');
         const snap = await getDocs(q);
         console.log('🔍 listMyProjects: Query successful, found', snap.docs.length, 'documents');
-        const projects = snap.docs.map(d => {
+        const projects = await Promise.all(snap.docs.map(async d => {
             const data: any = d.data();
+            const projectId = d.id;
+            
             // Try to build up to 3 thumbs from the first images of the first few scenes
             const thumbs: string[] = [];
             if (Array.isArray(data.scenes)) {
-                for (let i = 0; i < data.scenes.length && thumbs.length < 3; i++) {
-                    const s = data.scenes[i];
-                    if (s?.imageUrls?.[0]) thumbs.push(s.imageUrls[0]);
+                // For project listing, we'll try to restore a few images from GCS for better thumbnails
+                try {
+                    const restoredScenes = await restoreImagesFromGCS(projectId, data.scenes.slice(0, 3));
+                    for (const scene of restoredScenes) {
+                        if (scene.imageUrls && scene.imageUrls.length > 0 && thumbs.length < 3) {
+                            thumbs.push(scene.imageUrls[0]);
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`Failed to restore images for project ${projectId} in listing:`, error);
+                    // Fallback to stored thumbnails
+                    for (let i = 0; i < data.scenes.length && thumbs.length < 3; i++) {
+                        const s = data.scenes[i];
+                        if (s?.imageUrls?.[0]) thumbs.push(s.imageUrls[0]);
+                    }
                 }
             }
+            
             return {
-                id: d.id,
+                id: projectId,
                 topic: data.topic || 'Untitled',
                 createdAt: data.createdAt?.toDate?.()?.toISOString?.() || undefined,
                 updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || undefined,
                 sceneCount: Array.isArray(data.scenes) ? data.scenes.length : 0,
-                thumbnailUrl: Array.isArray(data.scenes) && data.scenes[0]?.imageUrls?.[0] ? data.scenes[0].imageUrls[0] : undefined,
+                thumbnailUrl: thumbs[0] || (Array.isArray(data.scenes) && data.scenes[0]?.imageUrls?.[0] ? data.scenes[0].imageUrls[0] : undefined),
                 thumbs,
             } as ProjectSummary;
-        });
+        }));
         
         // Sort by updatedAt in memory (most recent first)
         projects.sort((a, b) => {
