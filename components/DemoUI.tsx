@@ -141,8 +141,7 @@ const DemoUI: React.FC<DemoUIProps> = ({ onComplete, onFail }) => {
       updateProgress(96, 'Rendering video...');
       const renderResult = await apiCall(API_ENDPOINTS.render, {
         projectId: newProjectId,
-        emotion: 'adventurous',
-        useFal: false
+        emotion: 'adventurous'
       }, 'Video rendering failed');
       
       // Apply polish

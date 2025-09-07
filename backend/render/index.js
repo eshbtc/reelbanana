@@ -136,10 +136,17 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
     console.log('🔧 Render service: tempDir scope fix applied');
     
     try {
-        // Check if we should use FAL rendering engine
-        // Request body overrides env so the client can force FFmpeg fallback
-        const useFalEngine = (typeof useFal === 'boolean') ? !!useFal : (renderEngineEnv === 'fal');
-        console.log(`Render engine selected: ${useFalEngine ? 'FAL' : 'FFmpeg'} (env=${renderEngineEnv}, body.useFal=${useFal})`);
+        // Smart engine selection: Use FAL only for specific use cases, default to FFmpeg for full videos
+        // FAL is good for: short clips, single images, experimental features
+        // FFmpeg is better for: full-length videos, multiple scenes, production content
+        const totalDuration = (scenes || []).reduce((sum, s) => sum + (s?.duration || 3), 0);
+        const isShortVideo = totalDuration <= 10; // 10 seconds or less
+        const isSingleScene = (scenes || []).length <= 1;
+        
+        // Use FAL only if explicitly requested AND it's a short video/single scene
+        const useFalEngine = (typeof useFal === 'boolean') ? !!useFal && (isShortVideo || isSingleScene) : false;
+        console.log(`Render engine selected: ${useFalEngine ? 'FAL' : 'FFmpeg'} (env=${renderEngineEnv}, body.useFal=${useFal}, duration=${totalDuration}s, scenes=${(scenes || []).length})`);
+        
         if (useFalEngine) {
             if (!falApiKey) {
                 return sendError(req, res, 500, 'CONFIG', 'FAL_API_KEY is not configured');

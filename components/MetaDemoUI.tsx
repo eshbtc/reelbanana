@@ -194,8 +194,7 @@ const MetaDemoUI: React.FC<MetaDemoUIProps> = ({ onComplete, onFail }) => {
         projectId: newProjectId,
         scenes: generatedScenes,
         gsAudioPath: narrateResult.gsAudioPath,
-        srtPath: `gs://reel-banana-35a54.firebasestorage.app/${newProjectId}/captions.srt`,
-        useFal: false
+        srtPath: `gs://reel-banana-35a54.firebasestorage.app/${newProjectId}/captions.srt`
       }, 'Video rendering failed');
       
       // Apply polish
