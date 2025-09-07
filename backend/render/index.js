@@ -649,201 +649,88 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         await Promise.all(downloadPromises);
         console.log('Asset download complete.');
 
-        // 3. FFmpeg processing (prefer per-scene video clips if available)
-        console.log('Starting FFmpeg processing...');
-        const command = ffmpeg();
-        const complexFilter = [];
-        let sceneOutputs = [];
+        // 3. Per-scene processing (generate a video per scene with captions), then concatenate and add audio
+        console.log('Starting per-scene FFmpeg processing...');
 
-        // Pre-fetch per-scene clips if present
+        // Helpers to parse and format SRT
+        const parseSrt = (text) => {
+          const blocks = String(text || '').split(/\r?\n\r?\n/);
+          const toSeconds = (h,m,s,ms)=>parseInt(h,10)*3600+parseInt(m,10)*60+parseInt(s,10)+parseInt(ms,10)/1000;
+          const entries=[]; for(const b of blocks){ const lines=b.trim().split(/\r?\n/); if(lines.length<2) continue; const m=(lines[1]||'').match(/(\d{2}):(\d{2}):(\d{2}),(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2}),(\d{3})/); if(!m) continue; const start=toSeconds(m[1],m[2],m[3],m[4]); const end=toSeconds(m[5],m[6],m[7],m[8]); const text=lines.slice(2).join('\n'); entries.push({start,end,text}); }
+          return entries;
+        };
+        const formatSrt = (entries) => {
+          const toSrtTime = (t)=>{ if(t<0) t=0; const h=Math.floor(t/3600), m=Math.floor((t%3600)/60), s=Math.floor(t%60), ms=Math.round((t-Math.floor(t))*1000); const pad=(n,w=2)=>String(n).padStart(w,'0'); return `${pad(h)}:${pad(m)}:${pad(s)},${pad(ms,3)}`; };
+          let i=1, out=''; for(const e of entries){ out += `${i++}\n${toSrtTime(e.start)} --> ${toSrtTime(e.end)}\n${e.text}\n\n`; } return out.trim()+"\n";
+        };
+
+        // Build scene offsets and load full captions
+        const fullSrtPath = path.join(tempDir, 'captions.srt');
+        let fullSrtText = ''; try { fullSrtText = await fs.readFile(fullSrtPath, 'utf8'); } catch {}
+        const fullEntries = parseSrt(fullSrtText);
+        const sceneOffsets = []; { let acc=0; for (const s of (scenes||[])) { sceneOffsets.push(acc); acc += (s?.duration||3); } }
+
+        // Pre-fetch clips and ensure image fallbacks are local
         const outBucket = storage.bucket(outputBucketName);
-        const clipLocalPaths = await Promise.all((scenes || []).map(async (_, i) => {
-            try {
-                const clipFile = outBucket.file(`${projectId}/clips/scene-${i}.mp4`);
-                const [exists] = await clipFile.exists();
-                if (!exists) return null;
-                const local = path.join(tempDir, `clip_${i}.mp4`);
-                await clipFile.download({ destination: local });
-                return local;
-            } catch { return null; }
-        }));
+        const clipLocalPaths = await Promise.all((scenes || []).map(async (_, i) => { try { const clipFile=outBucket.file(`${projectId}/clips/scene-${i}.mp4`); const [ex]=await clipFile.exists(); if(!ex) return null; const local=path.join(tempDir,`clip_${i}.mp4`); await clipFile.download({ destination: local }); return local; } catch { return null; } }));
+        const localFirstImages = await Promise.all((scenes || []).map(async (_, i) => { try { const c=imageFiles.filter(f=>path.basename(f.name).startsWith(`scene-${i}-`)); if(!c.length) return null; const first=c[0]; const local=path.join(tempDir, path.basename(first.name)); try { await fs.stat(local); } catch { await inputBucket.file(first.name).download({ destination: local }); } return local; } catch { return null; } }));
 
-        let inputIndex = 0;
-        (scenes || []).forEach((scene, sceneIndex) => {
-            const duration = scene.duration || 3;
-            const clipPath = clipLocalPaths[sceneIndex];
-            if (clipPath) {
-                // Use motion clip as video input
-                command.input(clipPath).inputOptions([`-t ${duration}`]);
-                const effect = `scale=${targetW}:${targetH}`; // Keep simple for clips
-                complexFilter.push(`[${inputIndex}:v]${effect},format=yuv420p[v${sceneIndex}]`);
-                sceneOutputs.push(`[v${sceneIndex}]`);
-                inputIndex++;
-            } else {
-                // Fallback to first image for the scene
-                const sceneImages = imageFiles.filter(file => path.basename(file.name).startsWith(`scene-${sceneIndex}-`));
-                if (sceneImages.length === 0) {
-                    console.error(`No images found for scene ${sceneIndex}`);
-                    return;
-                }
-                const firstImage = sceneImages[0];
-                const localImagePath = path.join(tempDir, path.basename(firstImage.name));
-                command.input(localImagePath).inputOptions(['-loop 1']).inputOptions([`-t ${duration}`]);
-                let zoomEffect;
-                switch (scene.camera || 'static') {
-                    case 'zoom-in':
-                        zoomEffect = `zoompan=z='min(zoom+0.001,1.3)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH}`;
-                        break;
-                    case 'zoom-out':
-                        zoomEffect = `zoompan=z='if(lte(zoom,1.0),1.3,max(1.001,zoom-0.001))':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH}`;
-                        break;
-                    case 'pan-left':
-                        zoomEffect = `zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)-50*sin(t)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH}`;
-                        break;
-                    case 'pan-right':
-                        zoomEffect = `zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)+50*sin(t)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH}`;
-                        break;
-                    default:
-                        zoomEffect = `scale=${targetW}:${targetH}`;
-                        break;
-                }
-                complexFilter.push(`[${inputIndex}:v]${zoomEffect},format=yuv420p[v${sceneIndex}]`);
-                sceneOutputs.push(`[v${sceneIndex}]`);
-                inputIndex++;
-            }
+        // Create per-scene silent MP4s with burnt-in scene captions
+        const partPaths = [];
+        for (let i=0;i<(scenes||[]).length;i++){
+          const scene=scenes[i]; const duration=Math.max(1,scene?.duration||3); const offset=sceneOffsets[i]||0; const end=offset+duration;
+          const segEntries = fullEntries.filter(e=>e.end>offset && e.start<end).map(e=>({ start: Math.max(0,e.start-offset), end: Math.max(0.01, Math.min(duration, e.end-offset)), text: e.text }));
+          const segSrtPath = path.join(tempDir, `scene_${i}.srt`); try { await fs.writeFile(segSrtPath, formatSrt(segEntries), 'utf8'); } catch {}
+          const inputClip = clipLocalPaths[i]; const inputImage = localFirstImages[i]; const partOut = path.join(tempDir, `part_${i}.mp4`);
+          await new Promise((resolve,reject)=>{
+            const cmd=ffmpeg(); let vf=`format=yuv420p,scale=${targetW}:${targetH}`;
+            if (inputClip) { cmd.input(inputClip).inputOptions([`-t ${duration}`]); }
+            else if (inputImage) {
+              cmd.input(inputImage).inputOptions(['-loop 1', `-t ${duration}`]);
+              switch (scene.camera||'static'){
+                case 'zoom-in': vf=`zoompan=z='min(zoom+0.001,1.3)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH},format=yuv420p`; break;
+                case 'zoom-out': vf=`zoompan=z='if(lte(zoom,1.0),1.3,max(1.001,zoom-0.001))':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH},format=yuv420p`; break;
+                case 'pan-left': vf=`zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)-50*sin(t)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH},format=yuv420p`; break;
+                case 'pan-right': vf=`zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)+50*sin(t)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH},format=yuv420p`; break;
+                default: vf=`scale=${targetW}:${targetH},format=yuv420p`;
+              }
+            } else { cmd.input(`color=black:s=${targetW}x${targetH}:r=30`).inputOptions(['-f lavfi', `-t ${duration}`]); vf='format=yuv420p'; }
+            const style = `force_style='Fontsize=18,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,BorderStyle=3,Outline=1,Shadow=1,MarginV=25'`;
+            let fullVf = `${vf},subtitles='${segSrtPath.replace(/'/g, "'\\''")}:${style}`; if (plan==='free'){ fullVf+=",drawtext=text='ReelBanana':fontcolor=white@0.6:fontsize=24:box=1:boxcolor=black@0.4:boxborderw=5:x=w-tw-10:y=h-th-10"; }
+            cmd.videoFilters(fullVf)
+              .outputOptions(['-an','-c:v libx264','-preset medium','-crf 22','-pix_fmt yuv420p','-movflags +faststart'])
+              .on('end', resolve)
+              .on('error', (err)=>{ console.error(`FFmpeg part ${i} error:`, err.message); reject(new Error('FFMPEG_FAILURE')); })
+              .save(partOut);
+          });
+          partPaths.push(partOut);
+        }
+
+        // Concatenate parts (silent)
+        const listPath = path.join(tempDir, 'concat_list.txt');
+        const listContent = partPaths.map(p=>`file '${p.replace(/'/g, "'\\''")}'`).join('\n');
+        await fs.writeFile(listPath, listContent, 'utf8');
+        const silentConcatPath = path.join(tempDir, 'video_concat.mp4');
+        await new Promise((resolve,reject)=>{
+          ffmpeg().input(listPath).inputOptions(['-f concat','-safe 0'])
+            .outputOptions(['-c:v libx264','-preset slow','-crf 22','-pix_fmt yuv420p','-movflags +faststart'])
+            .on('end', resolve)
+            .on('error',(err)=>{ console.error('FFmpeg concat error:', err.message); reject(new Error('FFMPEG_FAILURE')); })
+            .save(silentConcatPath);
         });
 
-        // Chain all scene clips together with dynamic transitions
-        let currentStream = sceneOutputs[0];
-        let accumulatedDuration = 0;
-        
-        for (let i = 1; i < sceneOutputs.length; i++) {
-            const nextStream = sceneOutputs[i];
-            const transitionOutput = `transition_${i}`;
-            const currentScene = scenes[i - 1];
-            const nextScene = scenes[i];
-            const transition = nextScene.transition || 'fade';
-            const transitionDuration = 0.75;
-            
-            // Calculate offset based on actual scene durations
-            accumulatedDuration += currentScene.duration || 3;
-            const offset = accumulatedDuration - transitionDuration;
-            
-            if (transition === 'none') {
-                // No transition, just concatenate
-                complexFilter.push(`${currentStream}${nextStream}concat=n=2:v=1:a=0[${transitionOutput}]`);
-            } else {
-                // Apply the selected transition
-                complexFilter.push(`${currentStream}${nextStream}xfade=transition=${transition}:duration=${transitionDuration}:offset=${offset}[${transitionOutput}]`);
-            }
-            currentStream = `[${transitionOutput}]`;
-        }
-
-        // Add subtitles and define final output
-        const finalVideoOutput = '[final_video]';
-        let subFilter = `${currentStream}subtitles=${path.join(tempDir, 'captions.srt')}:force_style='Fontsize=18,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,BorderStyle=3,Outline=1,Shadow=1,MarginV=25'`;
-        if (plan === 'free') {
-            subFilter += ",drawtext=text='ReelBanana':fontcolor=white@0.6:fontsize=24:box=1:boxcolor=black@0.4:boxborderw=5:x=w-tw-10:y=h-th-10";
-        }
-        subFilter += finalVideoOutput;
-        complexFilter.push(subFilter);
-        
-        // Add audio mixing with gentle ducking if music is available
-        // Calculate correct audio input indices: images are added first, then audio
-        const videoInputs = sceneOutputs.length; // one per scene
-        const narrationAudioIndex = videoInputs;
-        const musicAudioIndex = videoInputs + 1;
-
-        if (gsMusicPath) {
-            // Sidechain compress music with narration as sidechain, then mix
-            // 1) Duck music when narration is present
-            complexFilter.push(`[${musicAudioIndex}:a][${narrationAudioIndex}:a]sidechaincompress=threshold=0.05:ratio=6:attack=5:release=300[ducked]`);
-            // 2) Mix ducked music with narration
-            complexFilter.push(`[ducked][${narrationAudioIndex}:a]amix=inputs=2:duration=first:dropout_transition=2,volume=1.0[final_audio]`);
-        } else {
-            // Just use narration audio
-            complexFilter.push(`[${narrationAudioIndex}:a]volume=0.9[final_audio]`);
-        }
-        
+        // Mux audio (narration + optional music with ducking)
         const outputVideoPath = path.join(tempDir, 'final_movie.mp4');
-
-        // Retry mechanism: try with subtitles first, then without if that fails
-        let ffmpegSuccess = false;
-        let lastError = null;
-        
-        for (let attempt = 1; attempt <= 2; attempt++) {
-            try {
-                console.log(`FFmpeg attempt ${attempt}: ${attempt === 1 ? 'with subtitles' : 'without subtitles'}`);
-                
-                // Create a fresh command for each attempt
-                const command = ffmpeg();
-                
-                // For second attempt, remove subtitles from the filter
-                let currentComplexFilter = [...complexFilter];
-                if (attempt === 2) {
-                    // Remove the subtitles filter and replace with simple passthrough
-                    currentComplexFilter = currentComplexFilter.map(filter => {
-                        if (filter.includes('subtitles=')) {
-                            // Replace subtitles filter with simple passthrough
-                            return filter.replace(/subtitles=[^:]+:[^[]+/, 'null');
-                        }
-                        return filter;
-                    });
-                    console.log('Retrying without subtitles overlay');
-                }
-                
-                await new Promise((resolve, reject) => {
-                    // Add audio inputs
-                    command.input(narrationLocalPath); // narration audio track
-                    
-                    if (musicLocalPath) {
-                        command.input(musicLocalPath); // music track
-                    }
-                    
-                    command
-                        .complexFilter(currentComplexFilter)
-                        .map(finalVideoOutput) // Map the final video stream
-                        .map('[final_audio]') // Map the mixed audio stream
-                        .outputOptions([
-                            '-c:v libx264',
-                            '-preset slow',
-                            '-crf 22',
-                            '-c:a aac',
-                            '-b:a 192k',
-                            '-pix_fmt yuv420p',
-                            // Move moov atom to the beginning for progressive playback
-                            '-movflags +faststart',
-                            '-shortest' // Finish encoding when the shortest input (audio) ends
-                        ])
-                        .on('end', () => {
-                            console.log(`FFmpeg processing finished on attempt ${attempt}.`);
-                            resolve();
-                        })
-                        .on('error', (err) => {
-                            console.error(`FFmpeg error on attempt ${attempt}:`, err.message);
-                            console.error('FFmpeg stderr:', err.stderr);
-                            reject(new Error(`FFMPEG_FAILURE_ATTEMPT_${attempt}`));
-                        })
-                        .save(outputVideoPath);
-                });
-                
-                ffmpegSuccess = true;
-                break; // Success, exit retry loop
-                
-            } catch (error) {
-                lastError = error;
-                console.error(`FFmpeg attempt ${attempt} failed:`, error.message);
-                if (attempt === 1) {
-                    console.log('Will retry without subtitles...');
-                } else {
-                    console.error('Both FFmpeg attempts failed');
-                }
-            }
-        }
-        
-        if (!ffmpegSuccess) {
-            throw lastError || new Error('FFMPEG_FAILURE_ALL_ATTEMPTS');
-        }
+        await new Promise((resolve,reject)=>{
+          const cmd=ffmpeg(); cmd.input(silentConcatPath); cmd.input(narrationLocalPath); if (musicLocalPath) cmd.input(musicLocalPath);
+          const filterComplex = gsMusicPath
+            ? `[${musicLocalPath ? 2 : 1}:a][1:a]sidechaincompress=threshold=0.05:ratio=6:attack=5:release=300[ducked];[ducked][1:a]amix=inputs=2:duration=first:dropout_transition=2,volume=1.0[final_audio]`
+            : `[1:a]volume=0.9[final_audio]`;
+          cmd.outputOptions(['-map 0:v:0','-map [final_audio]','-filter_complex',filterComplex,'-c:v libx264','-preset slow','-crf 22','-c:a aac','-b:a 192k','-pix_fmt yuv420p','-movflags +faststart','-shortest'])
+            .on('end', resolve)
+            .on('error',(err)=>{ console.error('FFmpeg mux error:', err.message); reject(new Error('FFMPEG_FAILURE')); })
+            .save(outputVideoPath);
+        });
 
         // 4. Upload the final video to the output bucket
         console.log('Uploading final video...');
