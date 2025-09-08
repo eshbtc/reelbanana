@@ -744,12 +744,13 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         const clipLocalPaths = await Promise.all((scenes || []).map(async (_, i) => { try { const clipFile=outBucket.file(`${projectId}/clips/scene-${i}.mp4`); const [ex]=await clipFile.exists(); if(!ex) return null; const local=path.join(tempDir,`clip_${i}.mp4`); await clipFile.download({ destination: local }); return local; } catch { return null; } }));
         const localFirstImages = await Promise.all((scenes || []).map(async (_, i) => { try { const c=imageFiles.filter(f=>path.basename(f.name).startsWith(`scene-${i}-`)); if(!c.length) return null; const first=c[0]; const local=path.join(tempDir, path.basename(first.name)); try { await fs.stat(local); } catch { await inputBucket.file(first.name).download({ destination: local }); } return local; } catch { return null; } }));
 
-        // Create per-scene silent MP4s with burnt-in scene captions
+        // Create per-scene silent MP4s with optional burnt-in scene captions
         const partPaths = [];
+        const wantSubs = !(req.body && req.body.noSubtitles === true);
         for (let i=0;i<(scenes||[]).length;i++){
           const scene=scenes[i]; const duration=Math.max(1,scene?.duration||3); const offset=sceneOffsets[i]||0; const end=offset+duration;
-          const segEntries = fullEntries.filter(e=>e.end>offset && e.start<end).map(e=>({ start: Math.max(0,e.start-offset), end: Math.max(0.01, Math.min(duration, e.end-offset)), text: e.text }));
-          const segSrtPath = path.join(tempDir, `scene_${i}.srt`); try { await fs.writeFile(segSrtPath, formatSrt(segEntries), 'utf8'); } catch {}
+          const segEntries = wantSubs ? fullEntries.filter(e=>e.end>offset && e.start<end).map(e=>({ start: Math.max(0,e.start-offset), end: Math.max(0.01, Math.min(duration, e.end-offset)), text: e.text })) : [];
+          const segSrtPath = path.join(tempDir, `scene_${i}.srt`); if (wantSubs) { try { await fs.writeFile(segSrtPath, formatSrt(segEntries), 'utf8'); } catch {} }
           const inputClip = clipLocalPaths[i]; const inputImage = localFirstImages[i]; const partOut = path.join(tempDir, `part_${i}.mp4`);
           await new Promise((resolve,reject)=>{
             const cmd=ffmpeg(); let vf=`format=yuv420p,scale=${targetW}:${targetH}`;
@@ -764,8 +765,12 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                 default: vf=`scale=${targetW}:${targetH},format=yuv420p`;
               }
             } else { cmd.input(`color=black:s=${targetW}x${targetH}:r=30`).inputOptions(['-f lavfi', `-t ${duration}`]); vf='format=yuv420p'; }
-            const style = `force_style='Fontsize=18,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,BorderStyle=3,Outline=1,Shadow=1,MarginV=25'`;
-            let fullVf = `${vf},subtitles='${segSrtPath.replace(/'/g, "'\\''")}:${style}`; if (plan==='free'){ fullVf+=",drawtext=text='ReelBanana':fontcolor=white@0.6:fontsize=24:box=1:boxcolor=black@0.4:boxborderw=5:x=w-tw-10:y=h-th-10"; }
+            let fullVf = vf;
+            if (wantSubs && segEntries.length > 0) {
+              const style = `force_style='Fontsize=18,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,BorderStyle=3,Outline=1,Shadow=1,MarginV=25'`;
+              fullVf = `${vf},subtitles='${segSrtPath.replace(/'/g, "'\\''")}:${style}`;
+            }
+            if (plan==='free'){ fullVf+=",drawtext=text='ReelBanana':fontcolor=white@0.6:fontsize=24:box=1:boxcolor=black@0.4:boxborderw=5:x=w-tw-10:y=h-th-10"; }
             cmd.videoFilters(fullVf)
               .outputOptions(['-an','-c:v libx264','-preset medium','-crf 22','-pix_fmt yuv420p','-movflags +faststart'])
               .on('end', resolve)
@@ -793,9 +798,9 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         await new Promise((resolve,reject)=>{
           const cmd=ffmpeg(); cmd.input(silentConcatPath); cmd.input(narrationLocalPath); if (musicLocalPath) cmd.input(musicLocalPath);
           const filterComplex = gsMusicPath
-            ? `[${musicLocalPath ? 2 : 1}:a][1:a]sidechaincompress=threshold=0.05:ratio=6:attack=5:release=300[ducked];[ducked][1:a]amix=inputs=2:duration=first:dropout_transition=2,volume=1.0[final_audio]`
-            : `[1:a]volume=0.9[final_audio]`;
-          cmd.outputOptions(['-map 0:v:0','-map [final_audio]','-filter_complex',filterComplex,'-c:v libx264','-preset slow','-crf 22','-c:a aac','-b:a 192k','-pix_fmt yuv420p','-movflags +faststart','-shortest'])
+            ? `[${musicLocalPath ? 2 : 1}:a][1:a]sidechaincompress=threshold=0.05:ratio=6:attack=5:release=300[ducked];[ducked][1:a]amix=inputs=2:duration=longest:dropout_transition=2,volume=1.0[final_audio]`
+            : `[1:a]volume=0.9,apad[final_audio]`;
+          cmd.outputOptions(['-map 0:v:0','-map [final_audio]','-filter_complex',filterComplex,'-c:v libx264','-preset slow','-crf 22','-c:a aac','-b:a 192k','-pix_fmt yuv420p','-movflags +faststart'])
             .on('end', resolve)
             .on('error',(err)=>{ console.error('FFmpeg mux error:', err.message); reject(new Error('FFMPEG_FAILURE')); })
             .save(outputVideoPath);
