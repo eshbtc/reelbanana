@@ -190,8 +190,12 @@ app.post('/store-api-key', appCheckVerification, verifyToken, async (req, res) =
       if (!apiKey.includes(':') || apiKey.length < 20) {
         return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Invalid FAL API key format');
       }
+    } else if (keyType === 'elevenlabs') {
+      if (!apiKey.startsWith('sk_') || apiKey.length < 20) {
+        return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Invalid ElevenLabs API key format');
+      }
     } else {
-      return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Invalid key type. Must be "google" or "fal"');
+      return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Invalid key type. Must be "google", "fal", or "elevenlabs"');
     }
 
     // Encrypt the API key
@@ -222,8 +226,8 @@ app.post('/get-api-key', appCheckVerification, verifyToken, async (req, res) => 
     const { keyType = 'fal' } = req.body || {};
     const userId = req.user.uid;
 
-    if (!['fal', 'google'].includes(keyType)) {
-      return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Invalid key type. Must be "fal" or "google"');
+    if (!['fal', 'google', 'elevenlabs'].includes(keyType)) {
+      return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Invalid key type. Must be "fal", "google", or "elevenlabs"');
     }
 
     const db = admin.firestore();

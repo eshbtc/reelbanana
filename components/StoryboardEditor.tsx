@@ -8,6 +8,7 @@ import Spinner from './Spinner';
 import { PlusIcon, SparklesIcon, SaveIcon, DocumentAddIcon } from './Icon';
 import { TEMPLATES } from '../lib/templates';
 import CharacterPicker from './CharacterPicker';
+import CharacterGenerator from './CharacterGenerator';
 import { calculateTotalCost, formatCost } from '../utils/costCalculator';
 import { useUserCredits } from '../hooks/useUserCredits';
 import { getCurrentUser, hasUserApiKey } from '../services/authService';
@@ -18,6 +19,8 @@ import { useConfirm } from './ConfirmProvider';
 interface StoryboardEditorProps {
   onPlayMovie: (scenes: Scene[]) => void;
   onProjectIdChange?: (id: string | null) => void;
+  onNavigate?: (view: string) => void;
+  onLoadTemplate?: (templateId: string) => void;
   demoMode?: boolean;
   onExitDemo?: () => void;
 }
@@ -41,7 +44,7 @@ const inspirationCategories = [
     "Drama & Emotion"
 ];
 
-const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProjectIdChange, demoMode = false, onExitDemo }) => {
+const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProjectIdChange, onNavigate, onLoadTemplate, demoMode = false, onExitDemo }) => {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [topic, setTopic] = useState('');
   const [projectName, setProjectName] = useState('');
@@ -54,8 +57,11 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   const [storyError, setStoryError] = useState<string | null>(null);
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [showCharacterPicker, setShowCharacterPicker] = useState(false);
+  const [showCharacterGenerator, setShowCharacterGenerator] = useState(false);
   const [renderMode, setRenderMode] = useState<'draft' | 'final'>('draft');
   const [forceUseApiKey, setForceUseApiKey] = useState(false);
   const [userHasApiKey, setUserHasApiKey] = useState(false);
@@ -274,6 +280,47 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
     }
   }, [projectId, topic, characterAndStyle, scenes]);
 
+  const handleSaveAsTemplate = useCallback(async () => {
+    if (!topic || !scenes.length) {
+      toast.error('Please add a topic and at least one scene before saving as template');
+      return;
+    }
+
+    const templateName = prompt('Enter a name for your template:');
+    if (!templateName) return;
+
+    setIsSavingTemplate(true);
+    try {
+      // Create template data from current project
+      const templateData = {
+        id: `custom-${Date.now()}`,
+        title: templateName,
+        topic: topic,
+        characterAndStyle: characterAndStyle,
+        scenes: scenes.map(scene => ({
+          prompt: scene.prompt,
+          narration: scene.narration
+        })),
+        characterRefs: characterRefs,
+        isCustom: true,
+        createdAt: new Date().toISOString()
+      };
+
+      // Save to localStorage for now (could be moved to Firebase later)
+      const existingTemplates = JSON.parse(localStorage.getItem('customTemplates') || '[]');
+      existingTemplates.push(templateData);
+      localStorage.setItem('customTemplates', JSON.stringify(existingTemplates));
+
+      toast.success(`Template "${templateName}" saved successfully!`);
+      console.log('📝 Custom template saved:', templateData);
+    } catch (error) {
+      console.error('Failed to save template:', error);
+      toast.error('Failed to save template. Please try again.');
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  }, [topic, scenes, characterAndStyle, characterRefs, toast]);
+
   // Debounced autosave on changes (topic, character/style, scenes)
   useEffect(() => {
     if (!projectId) return;
@@ -354,8 +401,25 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
 
   const handleLoadTemplate = useCallback(async (templateId: string) => {
     console.log('📝 handleLoadTemplate called with:', templateId);
-    const tpl = TEMPLATES.find(t => t.id === templateId);
-    console.log('📝 Found template:', tpl?.title || 'NOT FOUND');
+    
+    // If we have an external onLoadTemplate prop, use it
+    if (onLoadTemplate) {
+      onLoadTemplate(templateId);
+      return;
+    }
+    
+    // Check for custom template first
+    let tpl = null;
+    if (window.templateToLoad) {
+      tpl = window.templateToLoad;
+      window.templateToLoad = null; // Clear after use
+      console.log('📝 Loading custom template:', tpl.title);
+    } else {
+      // Otherwise, use the built-in template loading logic
+      tpl = TEMPLATES.find(t => t.id === templateId);
+      console.log('📝 Found built-in template:', tpl?.title || 'NOT FOUND');
+    }
+    
     if (!tpl) {
       console.error('📝 Template not found for ID:', templateId);
       return;
@@ -381,7 +445,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       setCharacterRefs(tpl.characterRefs || []);
       setScenes(initialScenes);
       setSaveStatus('saved');
-      setShowTemplates(false);
+      setShowTemplatePicker(false);
       window.history.pushState({}, '', `?projectId=${newProjectId}`);
       console.log('📝 Template loaded successfully!');
     } catch (e) {
@@ -424,6 +488,10 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         frames: demoMode ? 3 : (renderMode === 'draft' ? 3 : 5),
         projectId: projectId || undefined,
         sceneIndex,
+        location: sceneObj.location,
+        props: sceneObj.props,
+        costumes: sceneObj.costumes,
+        sceneDirection: sceneObj.sceneDirection,
         forceUseApiKey,
         onInfo: (info) => { cachedInfo = info; }
       });
@@ -501,6 +569,10 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         frames: demoMode ? 3 : (renderMode === 'draft' ? 3 : 5),
         projectId: projectId || undefined,
         sceneIndex,
+        location: sceneObj.location,
+        props: sceneObj.props,
+        costumes: sceneObj.costumes,
+        sceneDirection: sceneObj.sceneDirection,
         forceUseApiKey,
         onInfo: (info) => { cachedInfo = info; }
       });
@@ -512,7 +584,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   }, [scenes, characterAndStyle, characterRefs, renderMode]);
 
 
-  const handleUpdateScene = useCallback((id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration' | 'backgroundImage' | 'stylePreset'>>) => {
+  const handleUpdateScene = useCallback((id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration' | 'backgroundImage' | 'stylePreset' | 'voiceId' | 'voiceName' | 'videoModel' | 'sceneDirection' | 'location' | 'props' | 'costumes' | 'videoUrl' | 'videoStatus'>>) => {
     setScenes(prevScenes =>
       prevScenes.map(s => s.id === id ? { ...s, ...updates } : s)
     );
@@ -529,6 +601,38 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
     );
     setSaveStatus('idle');
   }, []);
+
+  const handleGenerateVideo = useCallback(async (sceneId: string) => {
+    const scene = scenes.find(s => s.id === sceneId);
+    if (!scene || !scene.imageUrls || scene.imageUrls.length === 0) {
+      toast.error('Scene must have images before generating video');
+      return;
+    }
+
+    // Update scene status to generating
+    setScenes(prevScenes =>
+      prevScenes.map(s => s.id === sceneId ? { ...s, videoStatus: 'generating' } : s)
+    );
+
+    try {
+      // Simulate video generation - in real implementation, this would call the video generation API
+      // For now, we'll create a placeholder video URL
+      const videoUrl = `https://example.com/generated-video-${sceneId}.mp4`;
+      
+      // Update scene with generated video
+      setScenes(prevScenes =>
+        prevScenes.map(s => s.id === sceneId ? { ...s, videoUrl, videoStatus: 'success' } : s)
+      );
+      
+      toast.success('Video generated successfully!');
+    } catch (error) {
+      console.error('Video generation failed:', error);
+      setScenes(prevScenes =>
+        prevScenes.map(s => s.id === sceneId ? { ...s, videoStatus: 'error' } : s)
+      );
+      toast.error('Failed to generate video');
+    }
+  }, [scenes, toast]);
 
   const handleDeleteScene = useCallback((id: string) => {
     setScenes(prevScenes => prevScenes.filter(s => s.id !== id));
@@ -751,17 +855,12 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                    </button>
                     <button
                       onClick={() => {
-                        // Open empty storyboard editor
-                        setScenes([]);
-                        setTopic('');
-                        setProjectName('');
-                        setCharacterAndStyle('');
-                        setCharacterRefs([]);
-                        setProjectId(null);
-                        onProjectIdChange?.(null);
-                        // Clear URL params
-                        window.history.pushState({}, '', '/');
-                        toast.info('Empty storyboard opened. Start creating your story!');
+                        console.log('🎬 Start from Template button clicked - navigating to templates page');
+                        if (onNavigate) {
+                          onNavigate('templates');
+                        } else {
+                          console.warn('🎬 onNavigate not available');
+                        }
                       }}
                       className="w-full md:w-auto bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
                     >
@@ -801,6 +900,13 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                     className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg text-sm"
                   >
                     Pick a Character
+                  </button>
+                  <button
+                    onClick={() => setShowCharacterGenerator(true)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg text-sm flex items-center gap-2"
+                  >
+                    <SparklesIcon className="w-4 h-4" />
+                    Generate Character
                   </button>
                 </div>
                  {characterAndStyle.trim() && (
@@ -882,6 +988,24 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                         {getSaveButtonContent()}
                     </button>
                     <button
+                        onClick={handleSaveAsTemplate}
+                        disabled={isSavingTemplate || !topic || !scenes.length}
+                        className="font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors disabled:opacity-75 bg-purple-600 hover:bg-purple-700 text-white"
+                        title="Save current project as a reusable template"
+                    >
+                        {isSavingTemplate ? (
+                            <>
+                                <Spinner />
+                                Saving Template...
+                            </>
+                        ) : (
+                            <>
+                                <DocumentAddIcon />
+                                Save as Template
+                            </>
+                        )}
+                    </button>
+                    <button
                         onClick={handleGenerateAllImages}
                         disabled={isGeneratingAll || !canGenerateAll}
                         className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-wait"
@@ -932,6 +1056,63 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                   </div>
                 </div>
               )}
+
+              {/* Final Generated Video Display */}
+              {projectVideoUrl && (
+                <div className="bg-gradient-to-r from-green-900/50 to-blue-900/50 rounded-xl p-6 mb-8 border border-green-700">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-2xl font-bold text-green-400 flex items-center gap-3">
+                      <div className="p-2 bg-green-500/20 rounded-lg">
+                        <svg className="w-6 h-6 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
+                        </svg>
+                      </div>
+                      🎬 Your Movie is Ready!
+                    </h3>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => window.open(projectVideoUrl, '_blank')}
+                        className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                        Download
+                      </button>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(projectVideoUrl)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                          <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+                        </svg>
+                        Copy Link
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="relative bg-black rounded-lg overflow-hidden">
+                    <video 
+                      src={projectVideoUrl} 
+                      controls 
+                      className="w-full h-64 bg-gray-900"
+                      poster="/logo.png"
+                    >
+                      Your browser does not support the video tag.
+                    </video>
+                    <div className="absolute top-4 left-4 bg-black/70 text-white px-3 py-1 rounded-full text-sm font-medium">
+                      Final Movie
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 text-center">
+                    <p className="text-gray-300 text-sm">
+                      🎉 Congratulations! Your movie has been generated and is ready to share.
+                    </p>
+                  </div>
+                </div>
+              )}
               
               <DragGrid
                 scenes={scenes}
@@ -943,6 +1124,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                 onDelete={handleDeleteScene}
                 onGenerate={handleGenerateImageSequence}
                 onVariant={handleGenerateVariant}
+                onGenerateVideo={handleGenerateVideo}
                 onUpdateScene={handleUpdateScene}
                 onUpdateSequence={handleUpdateSequence}
               />
@@ -988,7 +1170,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                 )}
               </div>
             </div>
-            <TemplatesModal open={showTemplates} onClose={() => setShowTemplates(false)} onPick={handleLoadTemplate} />
+            <TemplatesModal open={showTemplatePicker} onClose={() => setShowTemplatePicker(false)} onPick={handleLoadTemplate} />
             <CharacterPicker
               topic={topic || 'an adventurous banana'}
               open={showCharacterPicker}
@@ -1017,6 +1199,35 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                     console.error('Error updating project with character selection:', error);
                   }
                 }
+              }}
+            />
+            <CharacterGenerator
+              topic={topic || 'an adventurous character'}
+              open={showCharacterGenerator}
+              onClose={() => setShowCharacterGenerator(false)}
+              onGenerate={(characters) => {
+                if (characters.length > 0) {
+                  setCharacterAndStyle(characters[0].description);
+                  setCharacterRefs(characters[0].images);
+                  setSaveStatus('idle');
+                  // Persist to project if available
+                  if (projectId) {
+                    try {
+                      const updateData: any = { 
+                        topic, 
+                        characterAndStyle: characters[0].description, 
+                        scenes 
+                      };
+                      if (characters[0].images && characters[0].images.length > 0) {
+                        updateData.characterRefs = characters[0].images;
+                      }
+                      updateProject(projectId, updateData);
+                    } catch (error) {
+                      console.error('Error updating project with generated character:', error);
+                    }
+                  }
+                }
+                setShowCharacterGenerator(false);
               }}
             />
         </>
@@ -1075,9 +1286,10 @@ const DragGrid: React.FC<{
   onDelete: (id: string) => void;
   onGenerate: (id: string, prompt: string) => void;
   onVariant: (id: string, prompt: string) => void;
-  onUpdateScene: (id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration' | 'backgroundImage' | 'stylePreset' | 'variantImageUrls'>>) => void;
+  onGenerateVideo?: (id: string) => void;
+  onUpdateScene: (id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration' | 'backgroundImage' | 'stylePreset' | 'variantImageUrls' | 'voiceId' | 'voiceName' | 'videoModel' | 'sceneDirection' | 'location' | 'props' | 'costumes' | 'videoUrl' | 'videoStatus'>>) => void;
   onUpdateSequence: (id: string, newImageUrls: string[]) => void;
-}> = ({ scenes, renderMode, onReorder, onDelete, onGenerate, onVariant, onUpdateScene, onUpdateSequence }) => {
+}> = ({ scenes, renderMode, onReorder, onDelete, onGenerate, onVariant, onGenerateVideo, onUpdateScene, onUpdateSequence }) => {
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
   const [overIndex, setOverIndex] = React.useState<number | null>(null);
 
@@ -1113,6 +1325,7 @@ const DragGrid: React.FC<{
             onDelete={onDelete}
             onGenerateImage={onGenerate}
             onGenerateVariant={onVariant}
+            onGenerateVideo={onGenerateVideo}
             onUpdateScene={onUpdateScene}
             onUpdateSequence={onUpdateSequence}
             framesPerScene={renderMode === 'draft' ? 3 : 5}

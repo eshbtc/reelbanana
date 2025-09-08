@@ -571,7 +571,7 @@ const sequentialPromptsSchema = {
 export const generateImageSequence = async (
     mainPrompt: string,
     characterAndStyle: string,
-    opts?: { characterRefs?: string[]; backgroundImage?: string; frames?: number; projectId?: string; forceUseApiKey?: boolean; sceneIndex?: number; onInfo?: (info: { cached?: boolean }) => void }
+    opts?: { characterRefs?: string[]; backgroundImage?: string; frames?: number; projectId?: string; forceUseApiKey?: boolean; sceneIndex?: number; onInfo?: (info: { cached?: boolean }) => void; location?: string; props?: string[]; costumes?: string[]; sceneDirection?: string }
 ): Promise<string[]> => {
     try {
         const currentUser = getCurrentUser();
@@ -683,7 +683,7 @@ Return ONLY a JSON object with this exact format:
                 const response = await authFetch(API_ENDPOINTS.apiKey.use, {
                     method: 'POST',
                     body: {
-                        prompt: `${directorSystemInstruction}\n\nScene Description: "${characterAndStyle}. ${mainPrompt}"`,
+                        prompt: `${directorSystemInstruction}\n\nScene Description: "${characterAndStyle}. ${mainPrompt}"${opts?.location ? `\nLocation: ${opts.location}` : ''}${opts?.props?.length ? `\nProps: ${opts.props.join(', ')}` : ''}${opts?.costumes?.length ? `\nCostumes: ${opts.costumes.join(', ')}` : ''}${opts?.sceneDirection ? `\nDirection Style: ${opts.sceneDirection}` : ''}`,
                         model: 'gemini-2.5-flash'
                     }
                 });
@@ -715,7 +715,7 @@ Return ONLY a JSON object with this exact format:
             });
             
             shotDirectorResult = await shotDirectorModel.generateContent(
-                `Scene Description: "${characterAndStyle}. ${mainPrompt}"`
+                `Scene Description: "${characterAndStyle}. ${mainPrompt}"${opts?.location ? `\nLocation: ${opts.location}` : ''}${opts?.props?.length ? `\nProps: ${opts.props.join(', ')}` : ''}${opts?.costumes?.length ? `\nCostumes: ${opts.costumes.join(', ')}` : ''}${opts?.sceneDirection ? `\nDirection Style: ${opts.sceneDirection}` : ''}`
             );
         }
 

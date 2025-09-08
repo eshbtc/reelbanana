@@ -13,13 +13,14 @@ import AdBlockerWarning from './components/AdBlockerWarning';
 import AdminDashboard from './components/AdminDashboard';
 import TechWriteup from './components/TechWriteup';
 import UserDashboard from './components/UserDashboard';
+import TemplatesPage from './components/TemplatesPage';
 import { Scene } from './types';
 import { getCurrentUser } from './services/authService';
 import { API_ENDPOINTS } from './config/apiConfig';
 import { authFetch } from './lib/authFetch';
 // Removed auto-publish; handled in MoviePlayer for one-click publish UX
 
-type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'projects' | 'admin' | 'writeup' | 'settings';
+type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'projects' | 'admin' | 'writeup' | 'settings' | 'templates';
 
 const App: React.FC = () => {
   // Defensive context usage to prevent null context errors
@@ -40,6 +41,7 @@ const App: React.FC = () => {
     if (path === '/admin') return 'admin';
     if (path === '/writeup') return 'writeup';
     if (path === '/settings') return 'settings';
+    if (path === '/templates') return 'templates';
     return 'editor';
   };
 
@@ -172,7 +174,29 @@ const App: React.FC = () => {
     setVideoUrl(null);
   }, []);
 
-  const handleNavigate = useCallback((newView: 'editor' | 'gallery' | 'projects' | 'settings') => {
+  const handleLoadTemplate = useCallback(async (templateId: string) => {
+    console.log('🎬 Loading template:', templateId);
+    
+    // Import TEMPLATES to get the template data
+    const { TEMPLATES } = await import('./lib/templates');
+    const template = TEMPLATES.find(t => t.id === templateId);
+    
+    if (!template) {
+      console.error('🎬 Template not found:', templateId);
+      return;
+    }
+    
+    console.log('🎬 Found template:', template.title);
+    
+    // Navigate to editor first
+    setView('editor');
+    
+    // Store template data to be loaded by StoryboardEditor
+    // We'll pass this through a ref or state that StoryboardEditor can access
+    window.templateToLoad = template;
+  }, []);
+
+  const handleNavigate = useCallback((newView: 'editor' | 'gallery' | 'projects' | 'settings' | 'templates') => {
     setView(newView);
     
     // Update URL
@@ -193,6 +217,7 @@ const App: React.FC = () => {
       if (path === '/projects') setView('projects');
       else if (path === '/gallery') setView('gallery');
       else if (path === '/settings') setView('settings');
+      else if (path === '/templates') setView('templates');
       else setView('editor');
   };
     window.addEventListener('popstate', onPopState);
@@ -236,6 +261,8 @@ const App: React.FC = () => {
         return <TechWriteup />;
       case 'settings':
         return <UserDashboard onClose={() => setView('editor')} />;
+      case 'templates':
+        return <TemplatesPage onNavigate={handleNavigate} onLoadTemplate={handleLoadTemplate} />;
       case 'editor':
       default:
         return (
@@ -289,7 +316,8 @@ const App: React.FC = () => {
               onProjectIdChange={(id) => {
                 console.log('🎬 App: onProjectIdChange called with:', id);
                 setProjectId(id || null);
-              }} 
+              }}
+              onNavigate={handleNavigate} 
               demoMode={false}
               onExitDemo={() => {}}
             />

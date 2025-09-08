@@ -24,6 +24,18 @@ export interface Scene {
   backgroundImage?: string;
   // Optional style preset for visual morphing
   stylePreset?: StylePreset;
+  // Voice and model settings
+  voiceId?: string; // ElevenLabs voice ID
+  voiceName?: string; // Display name for voice
+  videoModel?: string; // Video generation model (e.g., 'fal-ai/veo3-fast', 'fal-ai/veo3')
+  sceneDirection?: string; // AI scene direction for continuity (e.g., 'cinematic', 'documentary')
+  // Scene details for enhanced video generation
+  location?: string; // Scene location/setting (e.g., 'forest', 'office', 'beach')
+  props?: string[]; // Props and objects in the scene (e.g., ['sword', 'magic book', 'crystal'])
+  costumes?: string[]; // Character costumes/clothing (e.g., ['medieval armor', 'business suit', 'casual wear'])
+  // Video generation results
+  videoUrl?: string; // Generated video URL for this scene
+  videoStatus?: 'idle' | 'generating' | 'success' | 'error'; // Video generation status
 }
 
 export interface CharacterOption {

@@ -56,7 +56,7 @@ exports.shareHandler = onRequest(async (req, res) => {
     // Try fetching public movie metadata by ID for dynamic OG tags
     let title = 'Amazing Movie Created with ReelBanana';
     let description = 'Check out this incredible AI-generated movie! Created with ReelBanana - the future of storytelling.';
-    let imageUrl = 'https://reel-banana-35a54.web.app/logo.png';
+    let imageUrl = 'https://reel-banana-35a54.web.app/logo-enlarged.png';
     let videoUrl = undefined;
     if (shareId) {
       try {

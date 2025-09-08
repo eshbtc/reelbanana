@@ -4,9 +4,10 @@ interface LogoProps {
   className?: string;
   width?: number;
   height?: number;
+  onClick?: () => void;
 }
 
-const Logo: React.FC<LogoProps> = ({ className = '', width = 64, height = 64 }) => {
+const Logo: React.FC<LogoProps> = ({ className = '', width = 64, height = 64, onClick }) => {
   const [imageError, setImageError] = useState(false);
 
   // Fallback SVG logo if PNG fails to load
@@ -30,13 +31,9 @@ const Logo: React.FC<LogoProps> = ({ className = '', width = 64, height = 64 }) 
     </svg>
   );
 
-  if (imageError) {
-    return <SvgLogo />;
-  }
-
-  return (
+  const logoContent = imageError ? <SvgLogo /> : (
     <img
-      src="/logo.png"
+      src="/logo-enlarged.png"
       alt="Reel Banana Logo"
       width={width}
       height={height}
@@ -44,6 +41,20 @@ const Logo: React.FC<LogoProps> = ({ className = '', width = 64, height = 64 }) 
       onError={() => setImageError(true)}
     />
   );
+
+  if (onClick) {
+    return (
+      <button
+        onClick={onClick}
+        className="hover:opacity-80 transition-opacity cursor-pointer"
+        title="Go to Home"
+      >
+        {logoContent}
+      </button>
+    );
+  }
+
+  return logoContent;
 };
 
 export default Logo;

@@ -291,87 +291,91 @@ const MyProjectsPage: React.FC = () => {
         {/* Main Content - Only show when user is authenticated */}
         {!authLoading && user && (
           <>
-            {/* Controls */}
-        <div className="flex flex-col gap-4 mb-6">
-          {/* Top row: Search and main actions */}
-          <div className="flex items-center gap-4">
-            <input
-              type="text"
-              placeholder="Search by title..."
-              value={filterText}
-              onChange={(e) => handleFilter(e.target.value)}
-              className="flex-1 bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:ring-amber-500 focus:border-amber-500"
-            />
-            <button onClick={load} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">
-              Refresh
-            </button>
-          </div>
-          
-          {/* Bottom row: View mode and sorting */}
-          <div className="flex items-center gap-4">
-            {/* View Mode Toggle */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-400">View:</span>
-              <div className="flex bg-gray-800 rounded">
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={`px-3 py-1 text-sm rounded-l transition-colors ${
-                    viewMode === 'grid' 
-                      ? 'bg-amber-600 text-white' 
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  Grid
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`px-3 py-1 text-sm rounded-r transition-colors ${
-                    viewMode === 'list' 
-                      ? 'bg-amber-600 text-white' 
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  List
-                </button>
+            {/* Top Controls - 2 Row Layout */}
+            <div className="bg-gray-800 rounded-lg p-4 mb-6">
+              {/* Row 1: Search and View Mode */}
+              <div className="flex items-center gap-4 mb-4">
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    placeholder="Search by title..."
+                    value={filterText}
+                    onChange={(e) => handleFilter(e.target.value)}
+                    className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:ring-amber-500 focus:border-amber-500"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-400">View:</span>
+                  <div className="flex bg-gray-900 rounded">
+                    <button
+                      onClick={() => setViewMode('grid')}
+                      className={`px-3 py-1 text-sm rounded-l transition-colors ${
+                        viewMode === 'grid' 
+                          ? 'bg-amber-600 text-white' 
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      Grid
+                    </button>
+                    <button
+                      onClick={() => setViewMode('list')}
+                      className={`px-3 py-1 text-sm rounded-r transition-colors ${
+                        viewMode === 'list' 
+                          ? 'bg-amber-600 text-white' 
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      List
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Sort Options and Actions */}
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-400">Sort by:</span>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as 'updatedAt' | 'createdAt' | 'topic')}
+                      className="bg-gray-900 border border-gray-600 rounded px-2 py-1 text-sm text-white focus:ring-amber-500 focus:border-amber-500"
+                    >
+                      <option value="updatedAt">Last Modified</option>
+                      <option value="createdAt">Created Date</option>
+                      <option value="topic">Title</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                    className="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm"
+                    title={`Sort ${sortOrder === 'asc' ? 'Descending' : 'Ascending'}`}
+                  >
+                    {sortOrder === 'asc' ? '↑' : '↓'}
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button onClick={load} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">
+                    Refresh
+                  </button>
+                  
+                  {filtered.length > 0 && (
+                    <>
+                      <button onClick={toggleSelectAll} className="px-3 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded text-sm">
+                        {selectedIds.size === filtered.length ? 'Clear All' : 'Select All'}
+                      </button>
+                      <button disabled={selectedIds.size === 0} onClick={bulkDuplicate} className="px-3 py-2 bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white rounded text-sm">
+                        Duplicate Selected
+                      </button>
+                      <button disabled={selectedIds.size === 0} onClick={bulkDelete} className="px-3 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white rounded text-sm">
+                        Delete Selected
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-
-            {/* Sort Options */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-400">Sort by:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'updatedAt' | 'createdAt' | 'topic')}
-                className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm text-white focus:ring-amber-500 focus:border-amber-500"
-              >
-                <option value="updatedAt">Last Modified</option>
-                <option value="createdAt">Created Date</option>
-                <option value="topic">Title</option>
-              </select>
-              <button
-                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm"
-                title={`Sort ${sortOrder === 'asc' ? 'Descending' : 'Ascending'}`}
-              >
-                {sortOrder === 'asc' ? '↑' : '↓'}
-              </button>
-            </div>
-          </div>
-
-          {filtered.length > 0 && (
-            <>
-              <button onClick={toggleSelectAll} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">
-                {selectedIds.size === filtered.length ? 'Clear All' : 'Select All'}
-              </button>
-              <button disabled={selectedIds.size === 0} onClick={bulkDuplicate} className="px-3 py-2 bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white rounded text-sm">
-                Duplicate Selected
-              </button>
-              <button disabled={selectedIds.size === 0} onClick={bulkDelete} className="px-3 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white rounded text-sm">
-                Delete Selected
-              </button>
-            </>
-          )}
-        </div>
 
         {/* Projects Grid */}
         {loading ? (

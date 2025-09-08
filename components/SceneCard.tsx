@@ -7,6 +7,8 @@ import EditSequenceModal from './EditSequenceModal';
 import CompareModal from './CompareModal';
 import { calculateSceneCost, formatCost, getCostTier } from '../utils/costCalculator';
 import { getImageCreditPriceUSD, formatUSD } from '../utils/pricing';
+import { getVoiceOptions, getVideoModelOptions, getDefaultVoice, getDefaultVideoModel, SCENE_DIRECTION_OPTIONS, getDefaultSceneDirection } from '../lib/voiceAndModelOptions';
+import { LOCATION_OPTIONS, PROP_OPTIONS, COSTUME_OPTIONS, getLocationById, getPropById, getCostumeById } from '../lib/sceneDetailsOptions';
 
 interface SceneCardProps {
   scene: Scene;
@@ -14,7 +16,8 @@ interface SceneCardProps {
   onDelete: (id: string) => void;
   onGenerateImage: (id: string, prompt: string) => void;
   onGenerateVariant: (id: string, prompt: string) => void;
-  onUpdateScene: (id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration' | 'backgroundImage' | 'stylePreset' | 'variantImageUrls'>>) => void;
+  onGenerateVideo?: (id: string) => void;
+  onUpdateScene: (id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration' | 'backgroundImage' | 'stylePreset' | 'variantImageUrls' | 'voiceId' | 'voiceName' | 'videoModel' | 'sceneDirection' | 'location' | 'props' | 'costumes' | 'videoUrl' | 'videoStatus'>>) => void;
   onUpdateSequence: (id: string, newImageUrls: string[]) => void;
   framesPerScene?: number;
 }
@@ -26,6 +29,21 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isCompareOpen, setIsCompareOpen] = useState(false);
+  
+  // Voice and model selection
+  const [selectedVoice, setSelectedVoice] = useState(scene.voiceId || '21m00Tcm4TlvDq8ikWAM');
+  const [selectedVideoModel, setSelectedVideoModel] = useState(scene.videoModel || 'fal-ai/veo3-fast/image-to-video');
+  const [selectedSceneDirection, setSelectedSceneDirection] = useState(scene.sceneDirection || 'cinematic');
+  
+  // Options state
+  const [voiceOptions, setVoiceOptions] = useState<any[]>([]);
+  const [modelOptions, setModelOptions] = useState<any[]>([]);
+  const [isLoadingOptions, setIsLoadingOptions] = useState(true);
+  
+  // Scene details state
+  const [selectedLocation, setSelectedLocation] = useState(scene.location || '');
+  const [selectedProps, setSelectedProps] = useState<string[]>(scene.props || []);
+  const [selectedCostumes, setSelectedCostumes] = useState<string[]>(scene.costumes || []);
 
   // Calculate scene cost
   const frames = scene.imageUrls?.length || framesPerScene;
@@ -43,6 +61,26 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
     }
   }, [scene.status, scene.imageUrls]);
 
+  // Load voice and model options
+  useEffect(() => {
+    const loadOptions = async () => {
+      try {
+        setIsLoadingOptions(true);
+        const [voices, models] = await Promise.all([
+          getVoiceOptions(),
+          getVideoModelOptions()
+        ]);
+        setVoiceOptions(voices);
+        setModelOptions(models);
+      } catch (error) {
+        console.error('Failed to load options:', error);
+      } finally {
+        setIsLoadingOptions(false);
+      }
+    };
+    loadOptions();
+  }, []);
+
   const handleSave = () => {
     onUpdateScene(scene.id, { prompt: editedPrompt, narration: editedNarration });
     setIsEditing(false);
@@ -52,6 +90,46 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
     setEditedPrompt(scene.prompt);
     setEditedNarration(scene.narration);
     setIsEditing(false);
+  };
+
+  const handleVoiceChange = (voiceId: string) => {
+    setSelectedVoice(voiceId);
+    const voice = voiceOptions.find(v => v.id === voiceId);
+    onUpdateScene(scene.id, { 
+      voiceId: voiceId, 
+      voiceName: voice?.name || 'Unknown Voice' 
+    });
+  };
+
+  const handleVideoModelChange = (modelId: string) => {
+    setSelectedVideoModel(modelId);
+    onUpdateScene(scene.id, { videoModel: modelId });
+  };
+
+  const handleSceneDirectionChange = (directionId: string) => {
+    setSelectedSceneDirection(directionId);
+    onUpdateScene(scene.id, { sceneDirection: directionId });
+  };
+
+  const handleLocationChange = (locationId: string) => {
+    setSelectedLocation(locationId);
+    onUpdateScene(scene.id, { location: locationId });
+  };
+
+  const handlePropToggle = (propId: string) => {
+    const newProps = selectedProps.includes(propId)
+      ? selectedProps.filter(id => id !== propId)
+      : [...selectedProps, propId];
+    setSelectedProps(newProps);
+    onUpdateScene(scene.id, { props: newProps });
+  };
+
+  const handleCostumeToggle = (costumeId: string) => {
+    const newCostumes = selectedCostumes.includes(costumeId)
+      ? selectedCostumes.filter(id => id !== costumeId)
+      : [...selectedCostumes, costumeId];
+    setSelectedCostumes(newCostumes);
+    onUpdateScene(scene.id, { costumes: newCostumes });
   };
 
   const handleEditComplete = (newImageUrls: string[]) => {
@@ -117,6 +195,14 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
                 className="mt-2 bg-gray-700 hover:bg-gray-600 text-white font-bold py-1 px-3 rounded-md text-xs"
               >
                 Compare
+              </button>
+            )}
+            {scene.status === 'success' && scene.imageUrls && scene.imageUrls.length > 0 && !scene.videoUrl && (
+              <button
+                onClick={() => onGenerateVideo?.(scene.id)}
+                className="mt-2 bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 rounded-md text-xs flex items-center gap-1"
+              >
+                🎥 Generate Video
               </button>
             )}
           </div>
@@ -198,6 +284,33 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
               </div>
             )}
 
+          {/* Video Generation Section */}
+          {scene.videoUrl && (
+            <div className="mt-4 p-3 bg-blue-900/30 rounded-lg border border-blue-700">
+              <h4 className="text-xs font-bold text-blue-400 mb-3 flex items-center gap-2">
+                🎥 Generated Video
+              </h4>
+              <div className="relative">
+                <video 
+                  src={scene.videoUrl} 
+                  controls 
+                  className="w-full h-32 bg-gray-900 rounded border border-gray-600"
+                  preload="metadata"
+                >
+                  Your browser does not support the video tag.
+                </video>
+                {scene.videoStatus === 'generating' && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded">
+                    <div className="text-center">
+                      <Spinner />
+                      <p className="text-xs text-white mt-2">Generating Video...</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Director Controls */}
           {scene.status === 'success' && (
             <div className="mt-4 p-3 bg-gray-900/50 rounded-lg border border-gray-600">
@@ -261,6 +374,147 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
                   onChange={(e) => onUpdateScene(scene.id, { duration: parseFloat(e.target.value) })}
                   className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-amber-500 focus:border-amber-500"
                 />
+              </div>
+
+              {/* Voice, Model & Direction Selection */}
+              <div className="mt-4 pt-3 border-t border-gray-700">
+                <h5 className="text-xs font-bold text-purple-400 mb-3 flex items-center gap-2">
+                  🎤 Voice, Model & Direction Settings
+                </h5>
+                
+                {isLoadingOptions ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Spinner />
+                    <span className="ml-2 text-xs text-gray-400">Loading options...</span>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-400 block mb-1">Voice</label>
+                      <select
+                        value={selectedVoice}
+                        onChange={(e) => handleVoiceChange(e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-purple-500 focus:border-purple-500"
+                      >
+                        {voiceOptions.map((voice) => (
+                          <option key={voice.id} value={voice.id}>
+                            {voice.name} - {voice.description}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="text-xs font-semibold text-gray-400 block mb-1">Video Model</label>
+                      <select
+                        value={selectedVideoModel}
+                        onChange={(e) => handleVideoModelChange(e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-purple-500 focus:border-purple-500"
+                      >
+                        {modelOptions.map((model) => (
+                          <option key={model.id} value={model.id}>
+                            {model.name} - {model.description} ({model.cost} cost)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-gray-400 block mb-1">Scene Direction</label>
+                      <select
+                        value={selectedSceneDirection}
+                        onChange={(e) => handleSceneDirectionChange(e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-purple-500 focus:border-purple-500"
+                      >
+                        {SCENE_DIRECTION_OPTIONS.map((direction) => (
+                          <option key={direction.id} value={direction.id}>
+                            {direction.name} - {direction.description}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Scene Details */}
+              <div className="mt-4 pt-3 border-t border-gray-700">
+                <h5 className="text-xs font-bold text-blue-400 mb-3 flex items-center gap-2">
+                  🎬 Scene Details
+                </h5>
+                
+                <div className="space-y-4">
+                  {/* Location */}
+                  <div>
+                    <label className="text-xs font-semibold text-gray-400 block mb-1">Location</label>
+                    <select
+                      value={selectedLocation}
+                      onChange={(e) => handleLocationChange(e.target.value)}
+                      className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Select a location...</option>
+                      {LOCATION_OPTIONS.map((location) => (
+                        <option key={location.id} value={location.id}>
+                          {location.name} - {location.description}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Props */}
+                  <div>
+                    <label className="text-xs font-semibold text-gray-400 block mb-2">Props & Objects</label>
+                    <div className="max-h-32 overflow-y-auto bg-gray-800 rounded border border-gray-600 p-2">
+                      <div className="grid grid-cols-2 gap-1">
+                        {PROP_OPTIONS.map((prop) => (
+                          <label key={prop.id} className="flex items-center text-xs text-gray-300 cursor-pointer hover:text-white">
+                            <input
+                              type="checkbox"
+                              checked={selectedProps.includes(prop.id)}
+                              onChange={() => handlePropToggle(prop.id)}
+                              className="mr-2 text-blue-500"
+                            />
+                            <span className="truncate" title={prop.description}>
+                              {prop.name}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    {selectedProps.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs text-gray-400">Selected: {selectedProps.map(id => getPropById(id)?.name).join(', ')}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Costumes */}
+                  <div>
+                    <label className="text-xs font-semibold text-gray-400 block mb-2">Costumes & Clothing</label>
+                    <div className="max-h-32 overflow-y-auto bg-gray-800 rounded border border-gray-600 p-2">
+                      <div className="grid grid-cols-2 gap-1">
+                        {COSTUME_OPTIONS.map((costume) => (
+                          <label key={costume.id} className="flex items-center text-xs text-gray-300 cursor-pointer hover:text-white">
+                            <input
+                              type="checkbox"
+                              checked={selectedCostumes.includes(costume.id)}
+                              onChange={() => handleCostumeToggle(costume.id)}
+                              className="mr-2 text-blue-500"
+                            />
+                            <span className="truncate" title={costume.description}>
+                              {costume.name}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    {selectedCostumes.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs text-gray-400">Selected: {selectedCostumes.map(id => getCostumeById(id)?.name).join(', ')}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Reality Blend: Optional background photo */}

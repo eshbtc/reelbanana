@@ -31,10 +31,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
   });
   const [customApiKey, setCustomApiKey] = useState('');
   const [falApiKey, setFalApiKey] = useState('');
+  const [elevenLabsApiKey, setElevenLabsApiKey] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [showFalApiKey, setShowFalApiKey] = useState(false);
+  const [showElevenLabsApiKey, setShowElevenLabsApiKey] = useState(false);
   const [hasFalApiKey, setHasFalApiKey] = useState(false);
+  const [hasElevenLabsApiKey, setHasElevenLabsApiKey] = useState(false);
+  const [useMyApiKeys, setUseMyApiKeys] = useState(false);
   const { isAdmin } = useUserCredits();
   
   // Use the real-time credits hook
@@ -88,6 +92,19 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
         console.error('Error checking FAL API key:', error);
         setHasFalApiKey(false);
       }
+
+      // Check if user has ElevenLabs API key
+      try {
+        const elevenLabsKeyResponse = await authFetch(`${API_ENDPOINTS.apiKey.check}?keyType=elevenlabs`);
+        const elevenLabsKeyData = await elevenLabsKeyResponse.json();
+        setHasElevenLabsApiKey(elevenLabsKeyData.hasApiKey || false);
+      } catch (error) {
+        console.error('Error checking ElevenLabs API key:', error);
+        setHasElevenLabsApiKey(false);
+      }
+
+      // Check if user has any API keys (for "Use My API Keys" checkbox)
+      setUseMyApiKeys(profile.hasCustomApiKey || false);
     } catch (error) {
       console.error('Error loading user data:', error);
     }
@@ -207,6 +224,73 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
     } catch (error) {
       console.error('Error clearing FAL API key:', error);
       toast.error('Failed to clear FAL API key. Please try again.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleStoreElevenLabsApiKey = async () => {
+    if (!elevenLabsApiKey.trim()) {
+      toast.error('Please enter your ElevenLabs API key');
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      const response = await authFetch(API_ENDPOINTS.apiKey.store, {
+        method: 'POST',
+        body: {
+          apiKey: elevenLabsApiKey.trim(),
+          keyType: 'elevenlabs'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to store ElevenLabs API key');
+      }
+
+      setElevenLabsApiKey('');
+      setHasElevenLabsApiKey(true);
+      toast.success('ElevenLabs API key stored securely! Voice generation will use it.');
+    } catch (error) {
+      console.error('Error storing ElevenLabs API key:', error);
+      toast.error('Failed to store ElevenLabs API key. Please check the format and try again.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleClearElevenLabsApiKey = async () => {
+    const currentUser = getCurrentUser();
+    if (!currentUser) return;
+
+    const ok = await confirm({
+      title: 'Clear ElevenLabs API Key?',
+      message: 'Are you sure you want to clear your ElevenLabs API key? This action cannot be undone.',
+      confirmText: 'Clear ElevenLabs Key',
+      cancelText: 'Cancel'
+    });
+    if (!ok) return;
+
+    setIsUpdating(true);
+    try {
+      const response = await authFetch(API_ENDPOINTS.apiKey.remove, {
+        method: 'DELETE',
+        body: { keyType: 'elevenlabs' }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to clear ElevenLabs API key');
+      }
+
+      setElevenLabsApiKey('');
+      setHasElevenLabsApiKey(false);
+      toast.success('ElevenLabs API key securely cleared!');
+    } catch (error) {
+      console.error('Error clearing ElevenLabs API key:', error);
+      toast.error('Failed to clear ElevenLabs API key. Please try again.');
     } finally {
       setIsUpdating(false);
     }
@@ -526,6 +610,109 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
           </div>
         </div>
 
+        {/* ElevenLabs API Key Management Section */}
+        <div className="mb-8">
+          <h3 className="text-xl font-semibold text-white mb-6 flex items-center gap-3">
+            <div className="p-2 bg-purple-500/20 rounded-lg">
+              <svg className="w-6 h-6 text-purple-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM15.657 6.343a1 1 0 011.414 0A9.972 9.972 0 0119 12a9.972 9.972 0 01-1.929 5.657 1 1 0 11-1.414-1.414A7.971 7.971 0 0017 12a7.971 7.971 0 00-1.343-4.243 1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </div>
+            ElevenLabs API Key Management
+          </h3>
+          <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700">
+            <p className="text-gray-300 mb-4">
+              Add your own ElevenLabs API key to use custom voices and unlimited voice generation with your own credits. 
+              Your API key is encrypted and stored securely. This allows unlimited voice generation with your own ElevenLabs resources.
+            </p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  ElevenLabs API Key
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type={showElevenLabsApiKey ? 'text' : 'password'}
+                    value={elevenLabsApiKey}
+                    onChange={(e) => setElevenLabsApiKey(e.target.value)}
+                    placeholder="Enter your ElevenLabs API key (will be encrypted)..."
+                    className="flex-1 bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white focus:ring-purple-500 focus:border-purple-500"
+                  />
+                  <button
+                    onClick={() => setShowElevenLabsApiKey(!showElevenLabsApiKey)}
+                    className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+                  >
+                    {showElevenLabsApiKey ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Format: Your ElevenLabs API key (e.g., sk_1234567890abcdef...)
+                </p>
+              </div>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={handleStoreElevenLabsApiKey}
+                  disabled={isUpdating || !elevenLabsApiKey.trim()}
+                  className="bg-purple-500 hover:bg-purple-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-colors"
+                >
+                  {isUpdating ? 'Encrypting...' : 'Store ElevenLabs Key Securely'}
+                </button>
+                
+                {hasElevenLabsApiKey && (
+                  <button
+                    onClick={handleClearElevenLabsApiKey}
+                    disabled={isUpdating}
+                    className="bg-red-500 hover:bg-red-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-colors"
+                  >
+                    Clear ElevenLabs Key
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Use My API Keys Checkbox */}
+        <div className="mb-8">
+          <h3 className="text-xl font-semibold text-white mb-6 flex items-center gap-3">
+            <div className="p-2 bg-green-500/20 rounded-lg">
+              <svg className="w-6 h-6 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+            </div>
+            API Key Usage Preference
+          </h3>
+          <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700">
+            <div className="flex items-start gap-4">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="useMyApiKeys"
+                  checked={useMyApiKeys}
+                  onChange={(e) => setUseMyApiKeys(e.target.checked)}
+                  className="w-5 h-5 text-green-600 bg-gray-800 border-gray-600 rounded focus:ring-green-500 focus:ring-2"
+                />
+              </div>
+              <div className="flex-1">
+                <label htmlFor="useMyApiKeys" className="text-white font-medium cursor-pointer">
+                  Use My API Keys When Available
+                </label>
+                <p className="text-gray-400 text-sm mt-1">
+                  When enabled, ReelBanana will prioritize using your stored API keys (Gemini, FAL, ElevenLabs) 
+                  over the default service keys. This gives you full control over your API usage and costs.
+                </p>
+                <div className="mt-3 text-sm text-gray-500">
+                  <p>✅ Gemini API Key: {userProfile?.hasCustomApiKey ? 'Available' : 'Not set'}</p>
+                  <p>✅ FAL API Key: {hasFalApiKey ? 'Available' : 'Not set'}</p>
+                  <p>✅ ElevenLabs API Key: {hasElevenLabsApiKey ? 'Available' : 'Not set'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Free Credits Info */}
         <div className="mb-6">
           <h3 className="text-xl font-semibold text-white mb-6 flex items-center gap-3">
@@ -546,7 +733,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
               <div className="flex-1">
                 <p className="text-cyan-300 text-lg mb-3">
                   <strong>Free Credits:</strong> {isAdmin ? (
-                    <span className="text-yellow-400 font-bold">👑 ADMIN - Unlimited Credits</span>
+                    <span className="text-yellow-400 font-bold">ADMIN - Unlimited Credits</span>
                   ) : (
                     <>You have {freeCredits} free API calls remaining. 
                     Each movie creation uses approximately 3-5 credits (story + images + music + rendering).</>
