@@ -319,8 +319,8 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                 return sendError(req, res, 500, 'FAL_CLIP_FAILURE', 'No clips were generated');
             }
             
-            // Step 2: Compose final video using FAL's FFmpeg compose API
-            console.log(`Composing final video from ${clipUrls.length} clips...`);
+            // Step 2: Compose final video using FAL workflow
+            console.log(`Composing final video from ${clipUrls.length} clips using FAL workflow...`);
             
             // Get signed URLs for audio and captions
             const parseGs = (gs) => {
@@ -344,44 +344,59 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
             const srtUrl = srtObj ? await signReadUrl(srtObj) : null;
             const musicUrl = musicObj ? await signReadUrl(musicObj) : null;
             
-            // Prepare compose input
-            const composeInput = {
-                tracks: [
-                    // Video tracks (clips)
-                    ...clipUrls.map((url, index) => ({
-                        type: 'video',
-                        url: url,
-                        start: index * 8, // Each clip is 8 seconds
-                        duration: 8
-                    })),
-                    // Audio track (narration)
-                    ...(audioUrl ? [{
-                        type: 'audio',
-                        url: audioUrl,
-                        start: 0
-                    }] : []),
-                    // Music track (if available)
-                    ...(musicUrl ? [{
-                        type: 'audio',
-                        url: musicUrl,
-                        start: 0,
-                        volume: 0.3 // Lower volume for background music
-                    }] : [])
-                ],
-                output: {
-                    format: 'mp4',
-                    resolution: { width: 854, height: 480 } // Default resolution
+            // Create FAL workflow for video composition
+            const workflow = {
+                "input": {
+                    "id": "input",
+                    "type": "input",
+                    "depends": [],
+                    "input": {
+                        "video_urls": [],
+                        "audio_url": "",
+                        "music_url": ""
+                    }
+                },
+                "compose": {
+                    "id": "compose",
+                    "type": "run",
+                    "depends": ["input"],
+                    "app": "fal-ai/ffmpeg-api/compose",
+                    "input": {
+                        "inputs": "$input.video_urls",
+                        "audio": "$input.audio_url",
+                        "music": "$input.music_url",
+                        "output_format": "mp4"
+                    }
+                },
+                "output": {
+                    "id": "output",
+                    "type": "display",
+                    "depends": ["compose"],
+                    "input": {
+                        "video": "$compose.video"
+                    },
+                    "fields": {
+                        "video": "$compose.video"
+                    }
                 }
             };
             
             try {
-                const composeResult = await fal.subscribe('fal-ai/ffmpeg-api/compose', { 
-                    input: composeInput, 
-                    logs: false 
+                const stream = await fal.stream('workflows/execute', {
+                    input: {
+                        input: {
+                            video_urls: clipUrls,
+                            audio_url: audioUrl || '',
+                            music_url: musicUrl || ''
+                        },
+                        workflow: workflow
+                    }
                 });
-                const finalVideoUrl = pickUrl(composeResult?.data);
+                
+                const result = await stream.done();
+                const finalVideoUrl = pickUrl(result?.data);
                 if (!finalVideoUrl) {
-                    throw new Error('FAL compose did not return a video URL');
+                    throw new Error('FAL workflow did not return a video URL');
                 }
                 
                 // Download and save to GCS
@@ -420,8 +435,8 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                 return res.status(200).json({ videoUrl, engine: 'fal-per-scene', skipPolish: true });
                 
             } catch (e) {
-                console.error('FAL compose error:', e?.message || e);
-                return sendError(req, res, 500, 'FAL_COMPOSE_FAILURE', 'FAL compose failed', e?.message || String(e));
+                console.error('FAL workflow error:', e?.message || e);
+                return sendError(req, res, 500, 'FAL_WORKFLOW_FAILURE', 'FAL workflow failed', e?.message || String(e));
             }
         }
         // Early path: if a final video already exists, allow "publish-only" requests
