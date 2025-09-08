@@ -77,7 +77,11 @@ jobs:
         fi
         
         # Convert space-separated string to JSON array
-        SERVICES_JSON=$(echo "$CHANGED_SERVICES" | tr ' ' '\n' | jq -R . | jq -s .)
+        if [ -z "$CHANGED_SERVICES" ]; then
+          SERVICES_JSON="[]"
+        else
+          SERVICES_JSON=$(echo "$CHANGED_SERVICES" | tr ' ' '\n' | jq -R . | jq -s .)
+        fi
         echo "services=$SERVICES_JSON" >> $GITHUB_OUTPUT
         echo "Services to deploy: $CHANGED_SERVICES"
 
@@ -85,7 +89,7 @@ jobs:
     name: Test Services
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: needs.detect-changes.outputs.services != ''
+    if: needs.detect-changes.outputs.services != '[]'
     strategy:
       matrix:
         service: ${{ fromJson(needs.detect-changes.outputs.services) }}
@@ -124,7 +128,7 @@ jobs:
     name: Deploy Services
     runs-on: ubuntu-latest
     needs: [detect-changes, test-services]
-    if: needs.detect-changes.outputs.services != ''
+    if: needs.detect-changes.outputs.services != '[]'
     strategy:
       matrix:
         service: ${{ fromJson(needs.detect-changes.outputs.services) }}
@@ -376,7 +380,7 @@ jobs:
     name: Update API Configuration
     runs-on: ubuntu-latest
     needs: [detect-changes, deploy-services]
-    if: always() && needs.detect-changes.outputs.services != ''
+    if: always() && needs.detect-changes.outputs.services != '[]'
     
     steps:
     - name: Checkout code
@@ -451,19 +455,19 @@ jobs:
     
     steps:
     - name: Notify No Changes
-      if: needs.detect-changes.outputs.services == ''
+      if: needs.detect-changes.outputs.services == '[]'
       run: |
         echo "⏭️  No backend service changes detected"
         echo "Skipping deployment - no services need to be updated."
         
     - name: Notify Success
-      if: needs.detect-changes.outputs.services != '' && needs.deploy-services.result == 'success'
+      if: needs.detect-changes.outputs.services != '[]' && needs.deploy-services.result == 'success'
       run: |
         echo "🎉 All services deployed successfully!"
         echo "Check the deployment summary for service URLs."
         
     - name: Notify Failure
-      if: needs.detect-changes.outputs.services != '' && needs.deploy-services.result == 'failure'
+      if: needs.detect-changes.outputs.services != '[]' && needs.deploy-services.result == 'failure'
       run: |
         echo "❌ Some services failed to deploy!"
         echo "Check the logs for details."
