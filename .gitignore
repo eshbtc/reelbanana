@@ -68,3 +68,51 @@ $RECYCLE.BIN/
 *.bak
 *.backup
 *~
+
+# Test files and artifacts
+*.mp4
+*.mp3
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+test_*.mp4
+test_*.mp3
+e2e_*.mp4
+*_final_video.mp4
+*_hackathon_video.mp4
+test_captions.srt
+meta-demo-debug.png
+
+# Test reports and coverage
+playwright-report/
+test-results/
+coverage/
+*.lcov
+
+# Internal documentation (keep README.md and TROUBLESHOOTING.md)
+AGENTS.md
+CLAUDE.md
+DEMO_*.md
+GEMINI.md
+REMEDIATION_PLAN.md
+HACKATHON_README.md
+SUBMISSION_README.md
+
+# Large media files
+*.gif
+*.png
+*.jpg
+*.jpeg
+*.svg
+!public/*.png
+!public/*.gif
+!public/*.jpg
+!public/*.jpeg
+!public/*.svg
+!dist/*.png
+!dist/*.gif
+!dist/*.jpg
+!dist/*.jpeg
+!dist/*.svg
