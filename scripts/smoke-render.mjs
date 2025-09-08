@@ -125,7 +125,9 @@ async function post(url, body, tokens) {
 (async () => {
   const N = parseInt(process.env.SCENES || '3', 10);
   const SECS = parseInt(process.env.SECONDS || '8', 10);
-  const projectId = process.env.PROJECT_ID || `smoke_${Date.now()}`;
+  const timestamp = Date.now();
+  const randomSuffix = Math.random().toString(36).substring(2, 8);
+  const projectId = process.env.PROJECT_ID || `smoke_${timestamp}_${randomSuffix}`;
   console.log(`Project: ${projectId} (${N} scenes x ${SECS}s)`);
 
   const tokens = await getAppCheckAndIdToken(process.env.APPCHECK_DEBUG_SECRET);
@@ -141,9 +143,16 @@ async function post(url, body, tokens) {
     console.log(`Uploaded scene ${i}:`, r?.publicUrl || r?.url || r);
   }
 
-  // 2) Narrate a short script (N sentences)
-  const parts = Array.from({ length: N }, (_, i) => `This is scene number ${i + 1}.`).join(' ');
-  const narr = await post(`${BASE_URLS.narrate}/narrate`, { projectId, narrationScript: parts, emotion: 'neutral' }, tokens);
+  // 2) Narrate a short script (N sentences) - use unique prompts to avoid cache
+  const uniquePrompts = [
+    `Welcome to the future of AI video creation. Scene ${timestamp} shows cutting-edge technology.`,
+    `Revolutionary algorithms transform static images into dynamic stories. This is innovation in action.`,
+    `Experience the power of machine learning as it brings your vision to life. Watch the magic unfold.`,
+    `From concept to creation in seconds. This is the new era of content generation.`,
+    `Breaking barriers with artificial intelligence. Every frame tells a story.`
+  ];
+  const parts = Array.from({ length: N }, (_, i) => uniquePrompts[i % uniquePrompts.length]).join(' ');
+  const narr = await post(`${BASE_URLS.narrate}/narrate`, { projectId, narrationScript: parts, emotion: 'professional' }, tokens);
   console.log('Narrate:', narr);
 
   // 3) Align captions to narration
@@ -154,9 +163,21 @@ async function post(url, body, tokens) {
   const PRECLIP = /^(1|true|yes)$/i.test(String(process.env.PRECLIP || '0'));
   if (PRECLIP) {
     console.log('Pre-generating clips via /generate-clip...');
+    const clipPrompts = [
+      'Professional tech demo with smooth camera movement and modern UI',
+      'Dynamic product showcase with elegant lighting and clean design',
+      'Innovative software interface with subtle animations and sleek aesthetics',
+      'Cutting-edge technology presentation with futuristic visual effects',
+      'Professional demo with polished transitions and user experience'
+    ];
     for (let i = 0; i < N; i++) {
       try {
-        const body = { projectId, sceneIndex: i, videoSeconds: SECS };
+        const body = { 
+          projectId, 
+          sceneIndex: i, 
+          videoSeconds: SECS,
+          veoPrompt: clipPrompts[i % clipPrompts.length] + ` (unique ${timestamp})`
+        };
         const res = await post(`${BASE_URLS.render}/generate-clip`, body, tokens);
         console.log(`Clip ${i}:`, res?.clipPath || res);
       } catch (e) {
@@ -166,7 +187,20 @@ async function post(url, body, tokens) {
   }
 
   // 4) Render with force to bypass any stale outputs
-  const scenes = Array.from({ length: N }, (_, i) => ({ id: String(i), duration: SECS, camera: 'static', transition: 'none' }));
+  const scenePrompts = [
+    'Cinematic tech demo with smooth camera movement and modern UI elements',
+    'Dynamic product showcase with professional lighting and clean aesthetics', 
+    'Innovative software interface with subtle animations and sleek design',
+    'Cutting-edge technology presentation with futuristic visual effects',
+    'Professional demo with elegant transitions and polished user experience'
+  ];
+  const scenes = Array.from({ length: N }, (_, i) => ({ 
+    id: String(i), 
+    duration: SECS, 
+    camera: 'static', 
+    transition: 'none',
+    prompt: scenePrompts[i % scenePrompts.length] + ` (test ${timestamp})`
+  }));
   const AUTO_CLIPS = /^(1|true|yes)$/i.test(String(process.env.AUTO_CLIPS || '0'));
   const FORCE_CLIPS = /^(1|true|yes)$/i.test(String(process.env.FORCE_CLIPS || '1'));
   const CLIP_MODEL = process.env.CLIP_MODEL || null;
