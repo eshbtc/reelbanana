@@ -650,6 +650,60 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         await Promise.all(downloadPromises);
         console.log('Asset download complete.');
 
+        // Optionally auto-generate per-scene motion clips with FAL if missing
+        try {
+          const wantAutoClips = (req.body && (req.body.autoGenerateClips === true)) || (renderEngineEnv === 'fal');
+          const modelForClips = (req.body && (req.body.clipModel || req.body.clipModelOverride)) || falRenderModel || '';
+          if (wantAutoClips && falApiKey && modelForClips.includes('image-to-video')) {
+            console.log(`Auto-generating missing motion clips via FAL (${modelForClips})...`);
+            const outBucket = storage.bucket(outputBucketName);
+            for (let i = 0; i < (scenes || []).length; i++) {
+              const clipFile = outBucket.file(`${projectId}/clips/scene-${i}.mp4`);
+              const [exists] = await clipFile.exists();
+              const forceClips = !!(req.body && req.body.forceClips);
+              if (exists && !forceClips) continue;
+
+              const sceneImage = imageFiles.find(f => path.basename(f.name).startsWith(`scene-${i}-`));
+              if (!sceneImage) { console.warn(`auto-clips: no image for scene ${i}`); continue; }
+              const [signedUrl] = await inputBucket.file(sceneImage.name).getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 60*60*1000 });
+              const secs = Math.max(2, parseInt(String((scenes[i]?.duration) || req.body?.clipSeconds || process.env.FAL_IMAGE_TO_VIDEO_SECONDS || '8'), 10));
+              try {
+                const { fal } = await import('@fal-ai/client');
+                fal.config({ credentials: falApiKey });
+                const falInput = { prompt: req.body?.veoPrompt || `Cinematic short motion for scene ${i+1}.`, image_url: signedUrl, duration: secs, seconds: secs, video_length: secs };
+                const mdl = modelForClips;
+                const submit = await fal.queue.submit(mdl, { input: falInput, logs: false });
+                const { requestId } = submit || {};
+                if (!requestId) throw new Error('Missing FAL request id');
+                const timeoutMs = parseInt(process.env.FAL_RENDER_TIMEOUT_MS || '600000', 10);
+                const pollMs = parseInt(process.env.FAL_RENDER_POLL_MS || '3000', 10);
+                const start = Date.now();
+                while (Date.now() - start < timeoutMs) {
+                  const st = await fal.queue.status(mdl, { requestId, logs: false });
+                  const s = (st && st.status) || 'UNKNOWN';
+                  if (s === 'COMPLETED' || s === 'COMPLETED_WITH_WARNINGS') break;
+                  if (s === 'FAILED' || s === 'ERROR') throw new Error(`FAL status ${s}`);
+                  await new Promise(r => setTimeout(r, pollMs));
+                }
+                const res = await fal.queue.result(mdl, { requestId });
+                const resultUrl = (res && res.data && (res.data.video?.url || res.data.output?.[0]?.url || res.data.output?.video?.url)) || null;
+                if (!resultUrl) throw new Error('No clip URL');
+                const localClip = path.join(tempDir, `gen_clip_${i}.mp4`);
+                const fetchRes = await fetch(resultUrl);
+                if (!fetchRes.ok) throw new Error(`download ${fetchRes.status}`);
+                const buff = Buffer.from(await fetchRes.arrayBuffer());
+                await fs.writeFile(localClip, buff);
+                await outBucket.upload(localClip, { destination: `${projectId}/clips/scene-${i}.mp4`, metadata: { contentType: 'video/mp4' } });
+                console.log(`Saved clip for scene ${i} (${secs}s)`);
+              } catch (e) {
+                console.warn(`auto-clips: failed for scene ${i}:`, e?.message || e);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('auto-clips block failed:', e?.message || e);
+        }
+
         // 3. Per-scene processing (generate a video per scene with captions), then concatenate and add audio
         console.log('Starting per-scene FFmpeg processing...');
 
