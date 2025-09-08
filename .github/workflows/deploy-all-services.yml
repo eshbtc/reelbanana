@@ -171,6 +171,10 @@ jobs:
         
         # Set service-specific configurations and environment variables
         case "${{ matrix.service }}" in
+          "")
+            echo "No service specified, skipping deployment"
+            exit 0
+            ;;
           "upload-assets")
             PORT=8083
             MEMORY="1Gi"
@@ -251,7 +255,18 @@ jobs:
             ENV_FLAGS+=" --set-secrets=STRIPE_PUBLISHABLE_KEY=$STRIPE_PUBLISHABLE_NAME:latest"
             ENV_FLAGS+=" --set-env-vars=STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}"
             ;;
+          *)
+            echo "Unknown service: ${{ matrix.service }}"
+            echo "Available services: upload-assets, narrate, align-captions, render, compose-music, api-key-service, polish, stripe-service"
+            exit 1
+            ;;
         esac
+        
+        # Verify PORT is set
+        if [ -z "$PORT" ]; then
+          echo "ERROR: PORT is not set for service ${{ matrix.service }}"
+          exit 1
+        fi
         
         # Deploy the service with all environment variables
         gcloud run deploy reel-banana-${{ matrix.service }} \
