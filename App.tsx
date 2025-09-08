@@ -56,9 +56,6 @@ const App: React.FC = () => {
     try { return localStorage.getItem('rb_useWizardMode') === 'false' ? false : true; } catch { return true; }
   });
   const [showHelp, setShowHelp] = useState<boolean>(false);
-  const [demoMode, setDemoMode] = useState<boolean>(() => {
-    try { return localStorage.getItem('rb_demoMode') === 'true'; } catch { return false; }
-  });
   
   // Show Polish toggle if VITE_SHOW_POLISH is true OR user has FAL API key
   const showPolish = (import.meta as any)?.env?.VITE_SHOW_POLISH === 'true' || hasFalApiKey;
@@ -164,7 +161,6 @@ const App: React.FC = () => {
 
   // Persist preferences
   useEffect(() => { try { localStorage.setItem('rb_useWizardMode', String(useWizardMode)); } catch {} }, [useWizardMode]);
-  useEffect(() => { try { localStorage.setItem('rb_demoMode', String(demoMode)); } catch {} }, [demoMode]);
 
   const handleRenderFail = useCallback((errorMessage: string) => {
     toast.error(`Movie creation failed: ${errorMessage}`);
@@ -212,7 +208,7 @@ const App: React.FC = () => {
             emotion={narrationEmotion} 
             proPolish={proPolish} 
             projectId={projectId || 'default-project'}
-            demoMode={demoMode}
+            demoMode={false}
             onComplete={handleRenderComplete} 
             onFail={handleRenderFail}
             onBack={handleBackToEditor}
@@ -223,7 +219,7 @@ const App: React.FC = () => {
             emotion={narrationEmotion} 
             proPolish={proPolish} 
             projectId={projectId || undefined} 
-            demoMode={demoMode}
+            demoMode={false}
             onRenderComplete={handleRenderComplete} 
             onRenderFail={handleRenderFail} 
           />;
@@ -246,30 +242,6 @@ const App: React.FC = () => {
           <>
             <div className="bg-gray-800 p-4 rounded-lg border border-gray-700 mb-4">
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <input 
-                      id="demoMode" 
-                      type="checkbox" 
-                      checked={demoMode} 
-                      onChange={(e) => setDemoMode(e.target.checked)} 
-                      className="rounded"
-                    />
-                    <label htmlFor="demoMode" className="text-sm text-gray-300 font-medium">
-                      Demo Mode
-                    </label>
-                  </div>
-                  {demoMode && (
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs bg-blue-600 text-white px-2 py-1 rounded">6-sec video</span>
-                      <span className="text-xs bg-green-600 text-white px-2 py-1 rounded">Ultra fast</span>
-                      <span className="text-xs bg-purple-600 text-white px-2 py-1 rounded">Simple scenes</span>
-                    </div>
-                  )}
-                  {!demoMode && (
-                    <span className="text-gray-400 text-sm">Pro Mode: Full customization & quality</span>
-                  )}
-                </div>
               </div>
               <div className="flex items-center gap-3">
                 <label className="text-sm text-gray-300">Narration Emotion</label>
@@ -318,8 +290,8 @@ const App: React.FC = () => {
                 console.log('🎬 App: onProjectIdChange called with:', id);
                 setProjectId(id || null);
               }} 
-              demoMode={demoMode}
-              onExitDemo={() => setDemoMode(false)}
+              demoMode={false}
+              onExitDemo={() => {}}
             />
             <DemoWizardHelpModal open={showHelp} onClose={() => setShowHelp(false)} />
           </>

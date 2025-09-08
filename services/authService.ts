@@ -138,7 +138,7 @@ const createOrUpdateUserProfile = async (user: User): Promise<UserProfile> => {
       email: user.email || '',
       displayName: user.displayName || 'Anonymous User',
       photoURL: user.photoURL || undefined,
-      freeCredits: 100, // Start with 100 free API calls
+      freeCredits: 50, // Start with 50 free API calls
       totalUsage: 0,
       createdAt: now,
       lastLoginAt: now,
@@ -364,23 +364,3 @@ export const getUserUsageStats = async (userId: string): Promise<{
   }
 };
 
-/**
- * Reset user credits for testing purposes (development only)
- */
-export const resetCreditsForTesting = async (userId: string): Promise<void> => {
-  try {
-    const db = getFirestore();
-    const userRef = doc(db, 'users', userId);
-    
-    await updateDoc(userRef, {
-      freeCredits: 100, // Reset to default
-      totalUsage: 0,   // Reset usage counter
-      lastResetAt: new Date().toISOString()
-    });
-    
-    console.log('Credits reset for testing');
-  } catch (error) {
-    console.error('Error resetting credits:', error);
-    throw error;
-  }
-};
