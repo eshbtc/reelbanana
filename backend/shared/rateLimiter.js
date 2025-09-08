@@ -158,6 +158,24 @@ function createOperationRateLimiter(operation, options = {}) {
         userId = req.user.uid;
       }
       
+      // Check if user is admin (bypass all rate limits)
+      if (userId) {
+        try {
+          const admin = require('firebase-admin');
+          const db = admin.firestore();
+          const userDoc = await db.collection('users').doc(userId).get();
+          if (userDoc.exists) {
+            const userData = userDoc.data();
+            if (userData.isAdmin === true) {
+              console.log(`Admin user ${userId} bypassing rate limits for ${operation}`);
+              return next(); // Skip rate limiting for admins
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to check admin status, proceeding with rate limiting:', error.message);
+        }
+      }
+      
       // Check user quota
       const quotaCheck = await checkUserQuota(userId, operation);
       
@@ -213,6 +231,26 @@ function createIPRateLimiter(options = {}) {
     },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: async (req) => {
+      // Skip rate limiting for admin users
+      if (req.user && req.user.uid) {
+        try {
+          const admin = require('firebase-admin');
+          const db = admin.firestore();
+          const userDoc = await db.collection('users').doc(req.user.uid).get();
+          if (userDoc.exists) {
+            const userData = userDoc.data();
+            if (userData.isAdmin === true) {
+              console.log(`Admin user ${req.user.uid} bypassing IP rate limits`);
+              return true; // Skip rate limiting
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to check admin status for IP rate limiter:', error.message);
+        }
+      }
+      return false; // Apply rate limiting
+    },
     handler: (req, res) => {
       const payload = {
         code: 'RATE_LIMIT_EXCEEDED',

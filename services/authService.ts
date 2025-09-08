@@ -42,6 +42,7 @@ export interface UserProfile {
   encryptedApiKey?: string; // Encrypted user's custom Gemini API key for unlimited usage
   freeCredits: number; // Free API calls remaining
   totalUsage: number; // Total API calls made
+  isAdmin?: boolean; // Admin role - bypasses rate limits and credit limits
   createdAt: string;
   lastLoginAt: string;
 }

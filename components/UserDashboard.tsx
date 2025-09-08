@@ -35,7 +35,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [showFalApiKey, setShowFalApiKey] = useState(false);
   const [hasFalApiKey, setHasFalApiKey] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const { isAdmin } = useUserCredits();
   
   // Use the real-time credits hook
   const { freeCredits, totalUsage, refreshCredits, isLoading: creditsLoading } = useUserCredits();
@@ -74,13 +74,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
 
       setUserProfile(profile);
       setUsageStats(stats);
-      // Admin gating via env allowlist
-      try {
-        const allow = (import.meta as any)?.env?.VITE_ADMIN_EMAILS || '';
-        const allowed = allow.split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean);
-        const email = (profile?.email || '').toLowerCase();
-        setIsAdmin(allowed.includes(email));
-      } catch (_) { setIsAdmin(false); }
+      // Admin status is now handled by the useUserCredits hook
       // Don't load API keys for security - user must re-enter them
       setCustomApiKey('');
       setFalApiKey('');
@@ -548,8 +542,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
               </div>
               <div className="flex-1">
                 <p className="text-cyan-300 text-lg mb-3">
-                  <strong>Free Credits:</strong> You have {freeCredits} free API calls remaining. 
-                  Each movie creation uses approximately 3-5 credits (story + images + music + rendering).
+                  <strong>Free Credits:</strong> {isAdmin ? (
+                    <span className="text-yellow-400 font-bold">👑 ADMIN - Unlimited Credits</span>
+                  ) : (
+                    <>You have {freeCredits} free API calls remaining. 
+                    Each movie creation uses approximately 3-5 credits (story + images + music + rendering).</>
+                  )}
                 </p>
                 <p className="text-cyan-300">
                   <strong>💡 Tip:</strong> Add your own Gemini API key above to use unlimited credits with your own quota!

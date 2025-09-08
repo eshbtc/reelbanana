@@ -5,6 +5,44 @@ if (!admin.apps.length) {
 }
 
 /**
+ * Cloud Function to set admin status for a user
+ * Usage: Call with { email: 'user@example.com', isAdmin: true }
+ */
+exports.setAdminStatus = onCall(async (request) => {
+  const { email, isAdmin } = request.data;
+  
+  if (!email || typeof isAdmin !== 'boolean') {
+    throw new Error('Invalid parameters: email and isAdmin required');
+  }
+  
+  try {
+    // Find user by email
+    const usersRef = admin.firestore().collection('users');
+    const querySnapshot = await usersRef.where('email', '==', email).get();
+    
+    if (querySnapshot.empty) {
+      throw new Error(`User with email ${email} not found`);
+    }
+    
+    // Update admin status
+    const userDoc = querySnapshot.docs[0];
+    await userDoc.ref.update({
+      isAdmin: isAdmin,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    return {
+      success: true,
+      message: `Admin status updated for ${email}: ${isAdmin}`,
+      userId: userDoc.id
+    };
+  } catch (error) {
+    console.error('Error setting admin status:', error);
+    throw new Error(`Failed to set admin status: ${error.message}`);
+  }
+});
+
+/**
  * Cloud Function to handle share links
  * Generates HTML with proper meta tags for social media sharing
  * Note: This is a public endpoint, so we don't enforce App Check

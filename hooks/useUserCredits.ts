@@ -4,6 +4,7 @@ import { getCurrentUser, getUserProfile, onAuthStateChange } from '../services/a
 interface UserCredits {
   freeCredits: number;
   totalUsage: number;
+  isAdmin: boolean;
   isLoading: boolean;
   error: string | null;
 }
@@ -15,6 +16,7 @@ export const useUserCredits = () => {
   const [credits, setCredits] = useState<UserCredits>({
     freeCredits: 0,
     totalUsage: 0,
+    isAdmin: false,
     isLoading: true,
     error: null,
   });
@@ -31,6 +33,7 @@ export const useUserCredits = () => {
         setCredits({
           freeCredits: userProfile.freeCredits,
           totalUsage: userProfile.totalUsage,
+          isAdmin: userProfile.isAdmin || false,
           isLoading: false,
           error: null,
         });
@@ -38,6 +41,7 @@ export const useUserCredits = () => {
         setCredits({
           freeCredits: 0,
           totalUsage: 0,
+          isAdmin: false,
           isLoading: false,
           error: 'User profile not found',
         });
@@ -70,6 +74,7 @@ export const useUserCredits = () => {
         setCredits({
           freeCredits: 0,
           totalUsage: 0,
+          isAdmin: false,
           isLoading: false,
           error: null,
         });
@@ -90,9 +95,16 @@ export const useUserCredits = () => {
     return () => clearInterval(interval);
   }, [user, refreshCredits]);
 
+  // Helper function to check if user has enough credits (admins bypass)
+  const hasEnoughCredits = useCallback((requiredCredits: number = 1): boolean => {
+    if (credits.isAdmin) return true; // Admins bypass credit limits
+    return credits.freeCredits >= requiredCredits;
+  }, [credits.freeCredits, credits.isAdmin]);
+
   return {
     ...credits,
     refreshCredits,
+    hasEnoughCredits,
     user,
   };
 };
