@@ -8,7 +8,6 @@ import MovieWizard from './components/MovieWizard';
 import MoviePlayer from './components/MoviePlayer';
 import PublicGallery from './components/PublicGallery';
 import DemoWizardHelpModal from './components/DemoWizardHelpModal';
-import UserDashboard from './components/UserDashboard';
 import MyProjectsPage from './components/MyProjectsPage';
 import AdBlockerWarning from './components/AdBlockerWarning';
 import AdminDashboard from './components/AdminDashboard';
@@ -19,7 +18,7 @@ import { API_ENDPOINTS } from './config/apiConfig';
 import { authFetch } from './lib/authFetch';
 // Removed auto-publish; handled in MoviePlayer for one-click publish UX
 
-type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects' | 'admin' | 'writeup';
+type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'projects' | 'admin' | 'writeup';
 
 const App: React.FC = () => {
   // Defensive context usage to prevent null context errors
@@ -37,7 +36,6 @@ const App: React.FC = () => {
     const path = window.location.pathname;
     if (path === '/projects') return 'projects';
     if (path === '/gallery') return 'gallery';
-    if (path === '/dashboard') return 'dashboard';
     if (path === '/admin') return 'admin';
     if (path === '/writeup') return 'writeup';
     return 'editor';
@@ -172,7 +170,7 @@ const App: React.FC = () => {
     setVideoUrl(null);
   }, []);
 
-  const handleNavigate = useCallback((newView: 'editor' | 'gallery' | 'dashboard' | 'projects') => {
+  const handleNavigate = useCallback((newView: 'editor' | 'gallery' | 'projects') => {
     setView(newView);
     
     // Update URL
@@ -192,7 +190,6 @@ const App: React.FC = () => {
       const path = window.location.pathname;
       if (path === '/projects') setView('projects');
       else if (path === '/gallery') setView('gallery');
-      else if (path === '/dashboard') setView('dashboard');
       else setView('editor');
   };
     window.addEventListener('popstate', onPopState);
@@ -228,8 +225,6 @@ const App: React.FC = () => {
         return <MoviePlayer scenes={scenes} videoUrl={videoUrl} originalUrl={videoUrlOriginal || undefined} polishedUrl={videoUrlPolished || undefined} emotion={narrationEmotion} onBack={handleBackToEditor} projectId={projectId || undefined} />;
       case 'gallery':
         return <PublicGallery />;
-      case 'dashboard':
-        return <UserDashboard onClose={() => setView('editor')} />;
       case 'projects':
         return <MyProjectsPage />;
       case 'admin':

@@ -748,7 +748,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                      />
                      <label htmlFor="forceUseApiKey" className={`text-sm ${userHasApiKey ? 'text-gray-300' : 'text-gray-500'}`}>
                        🔑 Use My API Key (Skip free credits)
-                       {!userHasApiKey && <span className="text-xs block text-gray-600">→ Add an API key in Dashboard to enable</span>}
+                       {!userHasApiKey && <span className="text-xs block text-gray-600">→ Add an API key in Settings to enable</span>}
                      </label>
                    </div>
                    
@@ -875,7 +875,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                   />
                   <label htmlFor="forceUseApiKeyImagesGenerate" className={`text-sm ${userHasApiKey ? 'text-gray-300' : 'text-gray-500'}`}>
                     🔑 Use My API Key for image generation (Skip free credits)
-                    {!userHasApiKey && <span className="text-xs block text-gray-600">→ Add an API key in Dashboard to enable</span>}
+                    {!userHasApiKey && <span className="text-xs block text-gray-600">→ Add an API key in Settings to enable</span>}
                   </label>
                 </div>
                 
