@@ -109,6 +109,8 @@ docs/HYPE_MODE_HANDOFF.md
 scripts/
 demo-config.json
 youtube_description.txt
+restore-dockerfiles.sh
+backup-dockerfiles.sh
 
 # Large media files
 *.gif
