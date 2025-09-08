@@ -1,5 +1,5 @@
 
-// Render service with Veo3 Fast model support - Updated for proper audio sync
+// Render service with Veo3 Fast model support - Updated for proper audio sync v2
 const express = require('express');
 const cors = require('cors');
 const { Storage } = require('@google-cloud/storage');
