@@ -3,8 +3,8 @@ import { useConfirm } from './ConfirmProvider';
 import { getFirestore, collection, addDoc, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { firebaseApp } from '../lib/firebase';
 import { getCurrentUser as getUser } from '../services/authService';
-import { Check, Play, Loader2, AlertCircle, SkipForward } from 'lucide-react';
-import { API_ENDPOINTS, apiCall } from '../config/apiConfig';
+import { Check, Play, Loader2, AlertCircle, SkipForward, PlayCircle, Settings, Sparkles, Image as ImageIcon } from 'lucide-react';
+import { API_ENDPOINTS, apiCall, apiConfig } from '../config/apiConfig';
 import { getCurrentUser } from '../services/authService';
 
 interface WizardStep {
@@ -78,6 +78,20 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
   );
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [showDetails, setShowDetails] = useState(false);
+  const [autoMode, setAutoMode] = useState(true);
+  const [clipStatus, setClipStatus] = useState<Array<{ exists: boolean; url?: string }>>([]);
+  // Motion clip generation controls (default ON, backend stitches)
+  const [autoGenerateClips, setAutoGenerateClips] = useState<boolean>(true);
+  const [forceClips, setForceClips] = useState<boolean>(false);
+  const [clipSeconds, setClipSeconds] = useState<number | ''>('');
+  const [clipConcurrency, setClipConcurrency] = useState<number>(2);
+  const [clipModel, setClipModel] = useState<string>('fal-ai/veo3/fast/image-to-video');
+  // Motion clip generation controls (default ON, backend stitches)
+  const [autoGenerateClips, setAutoGenerateClips] = useState<boolean>(true);
+  const [forceClips, setForceClips] = useState<boolean>(false);
+  const [clipSeconds, setClipSeconds] = useState<number | ''>('');
+  const [clipConcurrency, setClipConcurrency] = useState<number>(2);
+  const [clipModel, setClipModel] = useState<string>('fal-ai/veo3/fast/image-to-video');
 
   // Defensive context usage to prevent null context errors
   let confirm: any = null;
@@ -133,6 +147,32 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
   }, [db, etas]);
 
   useEffect(() => { loadMetrics(); }, [loadMetrics]);
+
+  // Per-scene clip detection (best-effort), polls until clips appear
+  useEffect(() => {
+    let timer: any;
+    const bucketCandidates = [
+      'reel-banana-videos-public',
+      apiConfig.firebase.storageBucket,
+    ].filter(Boolean);
+    const checkClips = async () => {
+      if (!projectId || !Array.isArray(scenes) || scenes.length === 0) return;
+      const updates: Array<{ exists: boolean; url?: string }>> = [] as any;
+      for (let i = 0; i < scenes.length; i++) {
+        let found = false; let url: string | undefined;
+        for (const bucket of bucketCandidates) {
+          const test = `https://storage.googleapis.com/${bucket}/${projectId}/clips/scene-${i}.mp4`;
+          try { const res = await fetch(test, { method: 'HEAD' }); if (res.ok) { found = true; url = test; break; } } catch {}
+        }
+        updates[i] = { exists: found, url } as any;
+      }
+      setClipStatus(updates);
+      const allDone = updates.every(x => x?.exists);
+      if (!allDone) timer = setTimeout(checkClips, 3000);
+    };
+    checkClips();
+    return () => { if (timer) clearTimeout(timer); };
+  }, [projectId, scenes]);
 
   const remainingEta = useMemo(() => {
     let totalMin = 0; let totalMax = 0;
@@ -371,18 +411,22 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
     const narrationScript = scenes.map((s: any) => s.narration).join(' ');
     const totalSecs = Math.max(8, Math.round(scenes.reduce((s, sc) => s + (sc.duration || 3), 0)));
     try {
-      return await apiCall(
-        API_ENDPOINTS.render,
-        { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: true, veoPrompt: `Video depicting: ${narrationScript}`, falVideoSeconds: totalSecs },
-        'Failed to render video'
-      );
+      const body: any = { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: false, force: true };
+      if (autoGenerateClips !== undefined) body.autoGenerateClips = !!autoGenerateClips;
+      if (forceClips) body.forceClips = true;
+      if (clipSeconds && typeof clipSeconds === 'number') body.clipSeconds = clipSeconds;
+      if (clipConcurrency) body.clipConcurrency = clipConcurrency;
+      if (clipModel) body.clipModel = clipModel;
+      return await apiCall(API_ENDPOINTS.render, body, 'Failed to render video');
     } catch (e) {
-      // Fallback to FFmpeg path
-      return await apiCall(
-        API_ENDPOINTS.render,
-        { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: false },
-        'Failed to render video (fallback)'
-      );
+      // Retry without force if needed
+      const bodyRetry: any = { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: false };
+      if (autoGenerateClips !== undefined) bodyRetry.autoGenerateClips = !!autoGenerateClips;
+      if (forceClips) bodyRetry.forceClips = true;
+      if (clipSeconds && typeof clipSeconds === 'number') bodyRetry.clipSeconds = clipSeconds;
+      if (clipConcurrency) bodyRetry.clipConcurrency = clipConcurrency;
+      if (clipModel) bodyRetry.clipModel = clipModel;
+      return await apiCall(API_ENDPOINTS.render, bodyRetry, 'Failed to render video (retry)');
     }
   };
 
@@ -482,34 +526,81 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
   }, [steps, currentStepIndex, runAll]);
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-white">Movie Production Wizard</h1>
-        {onBack && (
-          <button 
-            onClick={onBack}
-            className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Back to Project
+    <div className="max-w-6xl mx-auto p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded bg-amber-500 text-black flex items-center justify-center"><Sparkles className="w-5 h-5" /></div>
+          <div>
+            <h1 className="text-2xl font-bold text-white">Movie Builder</h1>
+            <p className="text-gray-400 text-sm">Per‑scene motion + captions + audio</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={runAll} className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-black font-semibold px-4 py-2 rounded">
+            <PlayCircle className="w-4 h-4" /> One‑Click Build
           </button>
-        )}
+          <button onClick={() => setAutoMode(v => !v)} className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded">
+            <Settings className="w-4 h-4" /> {autoMode ? 'Manual Mode' : 'Auto Mode'}
+          </button>
+          {onBack && (
+            <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded">Back</button>
+          )}
+        </div>
+      </div>
+
+      {/* Scene gallery */}
+      <div className="mb-6">
+        <h2 className="text-white font-semibold mb-3">Scenes</h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {scenes.map((scene, i) => {
+            const thumb = (scene.imageUrls && scene.imageUrls[0]) || null;
+            const clip = clipStatus[i];
+            return (
+              <div key={i} className="bg-gray-800 rounded-lg overflow-hidden border border-gray-700">
+                <div className="aspect-video relative bg-black">
+                  {clip?.exists && clip.url ? (
+                    <video src={clip.url} muted autoPlay loop playsInline className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-500">
+                      {thumb ? (
+                        <img src={thumb} alt={`Scene ${i+1}`} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="flex flex-col items-center gap-2">
+                          <ImageIcon className="w-6 h-6" />
+                          <span className="text-xs">No image</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="absolute top-2 left-2 text-xs bg-black/60 text-white px-2 py-0.5 rounded">Scene {i+1}</div>
+                  <div className="absolute bottom-2 left-2 text-xs px-2 py-0.5 rounded bg-amber-500 text-black">
+                    {clip?.exists ? 'Motion: ready' : 'Motion: pending'}
+                  </div>
+                </div>
+                <div className="p-2 text-xs text-gray-300 flex items-center justify-between">
+                  <span>Duration: {scene.duration || 3}s</span>
+                  <span className="text-gray-400">{(scene.camera || 'static')}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
       
-      {/* Progress Steps */}
-      <div className="mb-8">
+      {/* Progress */}
+      <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <div className="text-xs text-gray-400">ETA: ~{remainingEta}</div>
           <div className="flex gap-2">
             <button onClick={() => setShowDetails(v => !v)} className="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded">
               {showDetails ? 'Hide Details' : 'Show Details'}
             </button>
-            <button onClick={runAll} className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded">Run All</button>
+            {!autoMode && (
+              <button onClick={runAll} className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded">Run All</button>
+            )}
           </div>
         </div>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           {steps.map((step, index) => (
             <React.Fragment key={step.id}>
               <div className="flex flex-col items-center">
@@ -536,15 +627,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
               <h2 className="text-xl font-semibold text-white">{getCurrentStep().title}</h2>
               <p className="text-gray-400">{getCurrentStep().description}</p>
             </div>
-            <div className="flex items-center gap-3">
-              <a
-                href={logsLinkFor(serviceNameFor(getCurrentStep().id))}
-                target="_blank"
-                rel="noreferrer"
-                className="text-emerald-400 hover:text-emerald-300 text-xs"
-              >Logs ↗</a>
-              {getStepIcon(getCurrentStep())}
-            </div>
+            <div className="flex items-center gap-3">{getStepIcon(getCurrentStep())}</div>
           </div>
 
           {/* Step Status */}
@@ -565,27 +648,85 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
           )}
 
           {/* Step Actions */}
-          <div className="flex gap-3">
-            {canExecute(getCurrentStep()) && (
-              <button
-                onClick={() => executeStep(getCurrentStep().id)}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-              >
-                <Play className="w-4 h-4" />
-                {getCurrentStep().status === 'failed' ? 'Retry' : 'Execute'}
-              </button>
-            )}
-            
-            {getCurrentStep().status === 'pending' && getCurrentStep().id !== 'upload' && getCurrentStep().id !== 'narrate' && (
-              <button
-                onClick={() => skipStep(getCurrentStep().id)}
-                className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
-              >
-                <SkipForward className="w-4 h-4" />
-                Skip
-              </button>
-            )}
-          </div>
+          {autoMode ? (
+            <div className="text-gray-400 text-sm">Automatic mode is enabled. Click “One‑Click Build” to run all steps.</div>
+          ) : (
+            <div className="flex gap-3">
+              {canExecute(getCurrentStep()) && (
+                <button
+                  onClick={() => executeStep(getCurrentStep().id)}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  <Play className="w-4 h-4" />
+                  {getCurrentStep().status === 'failed' ? 'Retry' : 'Execute'}
+                </button>
+              )}
+              {getCurrentStep().status === 'pending' && getCurrentStep().id !== 'upload' && getCurrentStep().id !== 'narrate' && (
+                <button
+                  onClick={() => skipStep(getCurrentStep().id)}
+                  className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  <SkipForward className="w-4 h-4" />
+                  Skip
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Render configuration: per-scene motion clips */}
+          {getCurrentStep().id === 'render' && (
+            <div className="mt-6 space-y-3 text-sm">
+              <div className="text-gray-300 font-medium">Motion Clips (Veo 3 i2v)</div>
+              <div className="flex flex-wrap items-center gap-4">
+                <label className="flex items-center gap-2 text-gray-300">
+                  <input type="checkbox" checked={autoGenerateClips} onChange={(e)=>setAutoGenerateClips(e.target.checked)} />
+                  Auto-generate clips per scene (default)
+                </label>
+                <label className="flex items-center gap-2 text-gray-300">
+                  <input type="checkbox" checked={forceClips} onChange={(e)=>setForceClips(e.target.checked)} />
+                  Force regenerate
+                </label>
+                <div className="flex items-center gap-2 text-gray-300">
+                  <span>Seconds/clip</span>
+                  <input
+                    type="number"
+                    min={2}
+                    max={20}
+                    value={clipSeconds === '' ? '' : clipSeconds}
+                    placeholder="(scene duration)"
+                    onChange={(e)=>{
+                      const v = e.target.value;
+                      setClipSeconds(v === '' ? '' : Math.max(2, Math.min(20, parseInt(v||'0',10)||0)));
+                    }}
+                    className="w-28 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white"
+                  />
+                </div>
+                <div className="flex items-center gap-2 text-gray-300">
+                  <span>Concurrency</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={4}
+                    value={clipConcurrency}
+                    onChange={(e)=>setClipConcurrency(Math.max(1, Math.min(4, parseInt(e.target.value||'2',10)||2)))}
+                    className="w-20 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white"
+                  />
+                </div>
+                <div className="flex items-center gap-2 text-gray-300">
+                  <span>Model</span>
+                  <select
+                    value={clipModel}
+                    onChange={(e)=>setClipModel(e.target.value)}
+                    className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white"
+                  >
+                    <option value="fal-ai/veo3/fast/image-to-video">Veo 3 Fast (i2v)</option>
+                    <option value="fal-ai/ltxv-13b-098-distilled/image-to-video">LTXV 13B (i2v)</option>
+                  </select>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500">Clips are generated per scene, then stitched with captions and narration. Leave Seconds/clip empty to use each scene's duration.</p>
+            </div>
+          )}
 
           {/* Step Result */}
           {showDetails && getCurrentStep().result && (
@@ -596,22 +737,15 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
         </div>
       )}
 
-      {/* All Steps Overview */}
-      <div className="bg-gray-800 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">All Steps</h3>
-        <div className="space-y-3">
-          {steps.map((step, index) => (
-            <div key={step.id} className={`flex items-center justify-between p-3 rounded ${index === currentStepIndex ? 'bg-gray-700' : 'bg-gray-750'}`}>
-              <div className="flex items-center gap-3">
-                {getStepIcon(step)}
-                <div>
-                  <div className="text-white font-medium">{step.title}</div>
-                  <div className="text-gray-400 text-sm">{step.description}</div>
-                </div>
-              </div>
-              <div className="text-sm text-gray-400 capitalize">{step.status}</div>
-            </div>
-          ))}
+      {/* Render Settings */}
+      <div className="bg-gray-800 rounded-lg p-6 mt-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Render Settings</h3>
+        <div className="flex flex-wrap items-center gap-4 text-sm text-gray-300">
+          <label className="flex items-center gap-2"><input type="checkbox" checked={autoGenerateClips} onChange={(e)=>setAutoGenerateClips(e.target.checked)} /> Auto-generate motion clips</label>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={forceClips} onChange={(e)=>setForceClips(e.target.checked)} /> Force regenerate clips</label>
+          <div className="flex items-center gap-2"><span>Seconds/clip</span><input type="number" min={2} max={20} value={clipSeconds === '' ? '' : clipSeconds} placeholder="(scene duration)" onChange={(e)=>{ const v=e.target.value; setClipSeconds(v===''?'':Math.max(2,Math.min(20,parseInt(v||'0',10)||0))); }} className="w-28 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white" /></div>
+          <div className="flex items-center gap-2"><span>Concurrency</span><input type="number" min={1} max={4} value={clipConcurrency} onChange={(e)=>setClipConcurrency(Math.max(1,Math.min(4,parseInt(e.target.value||'2',10)||2)))} className="w-20 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white" /></div>
+          <div className="flex items-center gap-2"><span>Model</span><select value={clipModel} onChange={(e)=>setClipModel(e.target.value)} className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white"><option value="fal-ai/veo3/fast/image-to-video">Veo 3 Fast (i2v)</option><option value="fal-ai/ltxv-13b-098-distilled/image-to-video">LTXV 13B (i2v)</option></select></div>
         </div>
       </div>
     </div>

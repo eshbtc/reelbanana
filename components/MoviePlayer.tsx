@@ -20,6 +20,7 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
   const [showShareModal, setShowShareModal] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [clipsDetected, setClipsDetected] = useState<number>(0);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [published, setPublished] = useState(false);
@@ -93,6 +94,32 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
     const s = (scenes || []).find(sc => Array.isArray(sc.imageUrls) && sc.imageUrls.length > 0);
     return s?.imageUrls?.[0] || undefined;
   }, [scenes]);
+
+  // Detect motion clips presence (best-effort, public GCS)
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!projectId) return;
+        // Try to infer bucket + prefix from the normalized video URL when possible
+        const m = srcUrl && srcUrl.match(/^https?:\/\/storage\.googleapis\.com\/([^/]+)\/([^?#]+)/i);
+        if (!m) return;
+        const bucket = m[1];
+        const parts = m[2].split('/');
+        const prefix = parts[0]; // expected projectId
+        if (!prefix) return;
+        const maxCheck = Math.min((scenes || []).length || 0, 8);
+        let found = 0;
+        await Promise.all(Array.from({ length: maxCheck }, async (_, i) => {
+          const url = `https://storage.googleapis.com/${bucket}/${prefix}/clips/scene-${i}.mp4`;
+          try {
+            const res = await fetch(url, { method: 'HEAD' });
+            if (res.ok) found++;
+          } catch {}
+        }));
+        setClipsDetected(found);
+      } catch {}
+    })();
+  }, [projectId, srcUrl, scenes?.length]);
   
   // Defensive context usage to prevent null context errors
   let toast: any = null;
@@ -263,6 +290,11 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
     <div className="flex flex-col items-center">
       <div className="w-full max-w-4xl">
         <div className="relative mb-6" style={{ paddingBottom: '56.25%' /* 16:9 aspect ratio */ }}>
+          {clipsDetected > 0 && (
+            <div className="absolute top-2 left-2 z-10 text-xs bg-amber-500 text-black px-2 py-1 rounded shadow">
+              Motion Clips: {clipsDetected} scene{clipsDetected === 1 ? '' : 's'}
+            </div>
+          )}
           {(videoUrl || originalUrl || polishedUrl) ? (
             <>
             <video
