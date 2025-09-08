@@ -91,6 +91,10 @@ test-results/
 coverage/
 *.lcov
 
+# Firebase local files
+.firebase/
+.firebaserc
+
 # Internal documentation (keep README.md and TROUBLESHOOTING.md)
 AGENTS.md
 CLAUDE.md
