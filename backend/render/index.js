@@ -1,3 +1,4 @@
+// Force deployment for demo sync
 
 // Render service with Veo3 Fast model support - Updated for proper audio sync v2
 const express = require('express');

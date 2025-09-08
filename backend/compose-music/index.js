@@ -1,3 +1,4 @@
+// Force deployment for demo sync
 const express = require('express');
 const cors = require('cors');
 const { Storage } = require('@google-cloud/storage');
