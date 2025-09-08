@@ -76,7 +76,9 @@ jobs:
           fi
         fi
         
-        echo "services=$CHANGED_SERVICES" >> $GITHUB_OUTPUT
+        # Convert space-separated string to JSON array
+        SERVICES_JSON=$(echo "$CHANGED_SERVICES" | tr ' ' '\n' | jq -R . | jq -s .)
+        echo "services=$SERVICES_JSON" >> $GITHUB_OUTPUT
         echo "Services to deploy: $CHANGED_SERVICES"
 
   test-services:
@@ -86,7 +88,7 @@ jobs:
     if: needs.detect-changes.outputs.services != ''
     strategy:
       matrix:
-        service: ${{ fromJson(format('["{0}"]', needs.detect-changes.outputs.services)) }}
+        service: ${{ fromJson(needs.detect-changes.outputs.services) }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -96,7 +98,7 @@ jobs:
       with:
         node-version: '18'
         cache: 'npm'
-        cache-dependency-path: backend/${{ matrix.service }}/package-lock.json
+        cache-dependency-path: 'backend/${{ matrix.service }}/package-lock.json'
         
     - name: Install dependencies
       run: |
@@ -125,7 +127,7 @@ jobs:
     if: needs.detect-changes.outputs.services != ''
     strategy:
       matrix:
-        service: ${{ fromJson(format('["{0}"]', needs.detect-changes.outputs.services)) }}
+        service: ${{ fromJson(needs.detect-changes.outputs.services) }}
     continue-on-error: true
     
     permissions:
