@@ -19,7 +19,6 @@ interface WizardStep {
 interface MovieWizardProps {
   scenes: any[];
   emotion?: string;
-  proPolish?: boolean;
   projectId: string;
   demoMode?: boolean;
   onComplete: (result: { videoUrl: string; projectId: string }) => void;
@@ -53,17 +52,11 @@ const WIZARD_STEPS: Omit<WizardStep, 'status' | 'result' | 'error'>[] = [
     title: 'Generate & Compose',
     description: 'Create AI scene clips and compose final video'
   },
-  {
-    id: 'polish',
-    title: 'Pro Polish',
-    description: 'Upscale and add motion interpolation'
-  }
 ];
 
 const MovieWizard: React.FC<MovieWizardProps> = ({ 
   scenes, 
   emotion = 'neutral', 
-  proPolish = false, 
   projectId, 
   demoMode = false,
   onComplete, 
@@ -104,7 +97,6 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
     align: [10, 25],
     compose: [2, 5],
     render: [20, 45],
-    polish: [15, 60],
   });
 
   const db = getFirestore(firebaseApp);
@@ -249,9 +241,6 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
         case 'render':
           result = await executeRender();
           break;
-        case 'polish':
-          result = await executePolish();
-          break;
         default:
           throw new Error(`Unknown step: ${stepId}`);
       }
@@ -271,8 +260,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       } else {
         // Wizard complete
         const renderStep = steps.find(s => s.id === 'render');
-        const polishStep = steps.find(s => s.id === 'polish');
-        const finalUrl = polishStep?.result?.polishedUrl || renderStep?.result?.videoUrl;
+        const finalUrl = renderStep?.result?.videoUrl;
         
         if (finalUrl) {
           onComplete({ videoUrl: finalUrl, projectId });
@@ -426,27 +414,6 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
     }
   };
 
-  const executePolish = async () => {
-    if (demoMode) return { message: 'Polish skipped in demo mode', cached: true };
-    const polishEnabled = (import.meta as any)?.env?.VITE_ENABLE_POLISH === 'true';
-    
-    if (!proPolish || !polishEnabled) {
-      return { message: 'Polish skipped (not enabled)', cached: true };
-    }
-
-    const renderStep = steps.find(s => s.id === 'render');
-    const videoUrl = renderStep?.result?.videoUrl;
-    
-    if (!videoUrl) {
-      throw new Error('No video URL from render step');
-    }
-
-    const currentUser = getCurrentUser();
-    return await apiCall(API_ENDPOINTS.polish,
-      { projectId, videoUrl, userId: currentUser?.uid },
-      'Failed to polish video'
-    );
-  };
 
   // Skip step
   const skipStep = (stepId: string) => {
@@ -498,7 +465,6 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       case 'align': return 'align-captions';
       case 'compose': return 'compose-music';
       case 'render': return 'render';
-      case 'polish': return 'polish';
       default: return '';
     }
   };

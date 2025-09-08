@@ -17,7 +17,7 @@ const defaultNarration = (
   'Type an idea, and watch it become a storyboard of scenes. ' +
   'Stunning visuals? Generated. Voiceover? Pro‑grade narration, with captions synced to every word. ' +
   'Music? A custom score that fits your story. ' +
-  'Then we assemble everything — clean camera motion, smooth transitions, polish, and playback that just works. ' +
+      'Then we assemble everything — clean camera motion, smooth transitions, and playback that just works. ' +
   'Your project is ready to publish and share. ' +
   'Create product demos, explainers, or your next launch trailer in minutes — not days. ' +
   'ReelBanana. Turn ideas into movies.'
@@ -57,7 +57,7 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
       'Captions synced perfectly to every word.',
       'A custom score that matches your story’s energy.',
       'We assemble your movie with smooth camera motion.',
-      'Polish adds sharpness and fluid motion.',
+      'Final assembly with smooth transitions.',
       'Built on Google Cloud Run and Firebase.',
       'ElevenLabs powers narration and music.',
       'FAL Veo 3 Fast creates hero motion clips.',
@@ -386,13 +386,9 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
         );
       }
 
-      setStatus('Polishing…');
+      setStatus('Finalizing…');
       setProgress(92);
-      let finalUrl = render.videoUrl;
-      try {
-        const polish = await apiCall(API_ENDPOINTS.polish, { projectId: pid, videoUrl: render.videoUrl }, 'Polish failed');
-        finalUrl = polish.polishedUrl || render.videoUrl;
-      } catch (_) {}
+      const finalUrl = render.videoUrl;
 
       setStatus('Done');
       setProgress(100);

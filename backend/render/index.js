@@ -137,11 +137,11 @@ app.post('/generate-clip', appCheckVerification, async (req, res) => {
     if (!modelId) return sendError(req, res, 500, 'CONFIG', 'FAL_RENDER_MODEL is not configured');
 
     // Find scene image in input bucket
-    const inputBucket = storage.bucket(inputBucketName);
-    const [files] = await inputBucket.getFiles({ prefix: `${projectId}/scene-${sceneIndex}-` });
+    const sceneInputBucket = storage.bucket(inputBucketName);
+    const [files] = await sceneInputBucket.getFiles({ prefix: `${projectId}/scene-${sceneIndex}-` });
     const first = files && files[0];
     if (!first) return sendError(req, res, 404, 'NOT_FOUND', `No image found for scene ${sceneIndex}`);
-    const [signedUrl] = await inputBucket.file(first.name).getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 60*60*1000 });
+    const [signedUrl] = await sceneInputBucket.file(first.name).getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 60*60*1000 });
 
     // Build FAL input
     let input = { prompt: veoPrompt || 'Cinematic parallax over UI; subtle camera motion; modern tech vibe.', image_url: signedUrl };
@@ -190,9 +190,9 @@ app.post('/generate-clip', appCheckVerification, async (req, res) => {
     if (!outUrl) return sendError(req, res, 500, 'FAL_RENDER_FAILURE', 'FAL did not return a video URL');
 
     // Download and persist to clips folder in main bucket (private)
-    const inputBucket = storage.bucket(inputBucketName);
+    const clipInputBucket = storage.bucket(inputBucketName);
     const clipPath = `${projectId}/clips/scene-${sceneIndex}.mp4`;
-    const file = inputBucket.file(clipPath);
+    const file = clipInputBucket.file(clipPath);
     const remote = await fetch(outUrl);
     if (!remote.ok) return sendError(req, res, 500, 'FAL_DOWNLOAD_FAILED', `HTTP ${remote.status}`);
     const buf = Buffer.from(await remote.arrayBuffer());
@@ -563,8 +563,8 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         const { w: targetW, h: targetH } = PLAN_RES[plan] || PLAN_RES.free;
 
         // Compute global render cache key (manifest)
-        const inputBucket = storage.bucket(inputBucketName);
-        const listImages = (await inputBucket.getFiles({ prefix: `${projectId}/scene-` }))[0];
+        const cacheInputBucket = storage.bucket(inputBucketName);
+        const listImages = (await cacheInputBucket.getFiles({ prefix: `${projectId}/scene-` }))[0];
         const pickFirstForIndex = (idx) => listImages.find(f => path.basename(f.name).startsWith(`scene-${idx}-`));
         const usedImages = scenes.map((_, i) => pickFirstForIndex(i)).filter(Boolean);
         const getMd5 = async (file) => { try { const [m] = await file.getMetadata(); return m.md5Hash || ''; } catch { return ''; } };
@@ -577,8 +577,8 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
             const rel = gsAudioPath.substring(prefixAudio.length);
             if (rel && rel.includes(projectId + '/')) remoteAudio = rel;
         }
-        const audioMd5 = await getMd5(inputBucket.file(remoteAudio));
-        const captionsMd5 = await getMd5(inputBucket.file(`${projectId}/captions.srt`));
+        const audioMd5 = await getMd5(cacheInputBucket.file(remoteAudio));
+        const captionsMd5 = await getMd5(cacheInputBucket.file(`${projectId}/captions.srt`));
         let musicRel = null, musicMd5 = '';
         if (gsMusicPath) {
             const prefixMusic = `gs://${inputBucketName}/`;
@@ -588,7 +588,7 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
             } else {
                 musicRel = `${projectId}/music.wav`;
             }
-            musicMd5 = await getMd5(inputBucket.file(musicRel));
+            musicMd5 = await getMd5(cacheInputBucket.file(musicRel));
         }
 
         const planRes = { free: { w: 854, h: 480 }, plus: { w: 1280, h: 720 }, pro: { w: 1920, h: 1080 }, studio: { w: 3840, h: 2160 } };
@@ -637,12 +637,12 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
 
         // 2. Download all necessary assets from GCS
         console.log('Downloading assets...');
-        const imageFiles = (await inputBucket.getFiles({ prefix: `${projectId}/scene-` }))[0];
+        const imageFiles = (await ffmpegInputBucket.getFiles({ prefix: `${projectId}/scene-` }))[0];
         
         console.log(`Found ${imageFiles.length} image files:`, imageFiles.map(f => f.name));
         
         // Debug: Also check for any files in the project directory
-        const allProjectFiles = (await inputBucket.getFiles({ prefix: `${projectId}/` }))[0];
+        const allProjectFiles = (await ffmpegInputBucket.getFiles({ prefix: `${projectId}/` }))[0];
         console.log(`All project files (${allProjectFiles.length}):`, allProjectFiles.map(f => f.name));
         
         // Resolve the correct remote audio and music filenames
@@ -653,8 +653,8 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         
         const downloadPromises = [
             ...imageFiles.map(file => file.download({ destination: path.join(tempDir, path.basename(file.name)) })),
-            inputBucket.file(remoteAudio).download({ destination: narrationLocalPath }),
-            inputBucket.file(`${projectId}/captions.srt`).download({ destination: path.join(tempDir, 'captions.srt') }),
+            ffmpegInputBucket.file(remoteAudio).download({ destination: narrationLocalPath }),
+            ffmpegInputBucket.file(`${projectId}/captions.srt`).download({ destination: path.join(tempDir, 'captions.srt') }),
         ];
         
         if (gsMusicPath) {
@@ -670,15 +670,15 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                 const ext = path.extname(remoteMusic) || '.wav';
                 const localName = `music${ext}`;
                 musicLocalPath = path.join(tempDir, localName);
-                downloadPromises.push(inputBucket.file(remoteMusic).download({ destination: musicLocalPath }));
+                downloadPromises.push(ffmpegInputBucket.file(remoteMusic).download({ destination: musicLocalPath }));
             } catch (_) {
                 // Fallback: try both WAV and MP3
                 try {
                     musicLocalPath = path.join(tempDir, 'music.wav');
-                    downloadPromises.push(inputBucket.file(`${projectId}/music.wav`).download({ destination: musicLocalPath }));
+                    downloadPromises.push(ffmpegInputBucket.file(`${projectId}/music.wav`).download({ destination: musicLocalPath }));
                 } catch (__) {
                 musicLocalPath = path.join(tempDir, 'music.mp3');
-                downloadPromises.push(inputBucket.file(`${projectId}/music.mp3`).download({ destination: musicLocalPath }));
+                downloadPromises.push(ffmpegInputBucket.file(`${projectId}/music.mp3`).download({ destination: musicLocalPath }));
                 }
             }
         }
@@ -694,7 +694,7 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
           const modelForClips = (req.body && (req.body.clipModel || req.body.clipModelOverride)) || falRenderModel || 'fal-ai/veo3/fast/image-to-video';
           if (wantAutoClips && falApiKey && modelForClips.includes('image-to-video')) {
             console.log(`Auto-generating missing motion clips via FAL (${modelForClips})...`);
-            const inputBucket = storage.bucket(inputBucketName);
+            const autoInputBucket = storage.bucket(inputBucketName);
             const forceClips = !!(req.body && req.body.forceClips);
             const maxConcurrency = Math.max(1, parseInt(String(req.body?.clipConcurrency || process.env.FAL_CLIP_CONCURRENCY || '2'), 10));
 
@@ -705,7 +705,7 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                 if (exists && !forceClips) return;
                 const sceneImage = imageFiles.find(f => path.basename(f.name).startsWith(`scene-${i}-`));
                 if (!sceneImage) { console.warn(`auto-clips: no image for scene ${i}`); return; }
-                const [signedUrl] = await inputBucket.file(sceneImage.name).getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 60*60*1000 });
+                const [signedUrl] = await autoInputBucket.file(sceneImage.name).getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 60*60*1000 });
                 const secs = Math.max(2, parseInt(String((scenes[i]?.duration) || req.body?.clipSeconds || process.env.FAL_IMAGE_TO_VIDEO_SECONDS || '8'), 10));
 
                 const { fal } = await import('@fal-ai/client');
@@ -776,9 +776,9 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         const sceneOffsets = []; { let acc=0; for (const s of (scenes||[])) { sceneOffsets.push(acc); acc += (s?.duration||3); } }
 
         // Pre-fetch clips and ensure image fallbacks are local
-        const inputBucket = storage.bucket(inputBucketName);
-        const clipLocalPaths = await Promise.all((scenes || []).map(async (_, i) => { try { const clipFile=inputBucket.file(`${projectId}/clips/scene-${i}.mp4`); const [ex]=await clipFile.exists(); if(!ex) return null; const local=path.join(tempDir,`clip_${i}.mp4`); await clipFile.download({ destination: local }); return local; } catch { return null; } }));
-        const localFirstImages = await Promise.all((scenes || []).map(async (_, i) => { try { const c=imageFiles.filter(f=>path.basename(f.name).startsWith(`scene-${i}-`)); if(!c.length) return null; const first=c[0]; const local=path.join(tempDir, path.basename(first.name)); try { await fs.stat(local); } catch { await inputBucket.file(first.name).download({ destination: local }); } return local; } catch { return null; } }));
+        const ffmpegInputBucket = storage.bucket(inputBucketName);
+        const clipLocalPaths = await Promise.all((scenes || []).map(async (_, i) => { try { const clipFile=ffmpegInputBucket.file(`${projectId}/clips/scene-${i}.mp4`); const [ex]=await clipFile.exists(); if(!ex) return null; const local=path.join(tempDir,`clip_${i}.mp4`); await clipFile.download({ destination: local }); return local; } catch { return null; } }));
+        const localFirstImages = await Promise.all((scenes || []).map(async (_, i) => { try { const c=imageFiles.filter(f=>path.basename(f.name).startsWith(`scene-${i}-`)); if(!c.length) return null; const first=c[0]; const local=path.join(tempDir, path.basename(first.name)); try { await fs.stat(local); } catch { await ffmpegInputBucket.file(first.name).download({ destination: local }); } return local; } catch { return null; } }));
 
         // Create per-scene silent MP4s with optional burnt-in scene captions
         const partPaths = [];
@@ -986,7 +986,6 @@ app.post('/cache-clear', appCheckVerification, async (req, res) => {
     const safeDelete = async (file) => { try { const [ex] = await file.exists(); if (ex) { await file.delete(); result.deleted.push(file.name); } } catch {} };
     if (projectId) {
       await safeDelete(outBucket.file(`${projectId}/movie.mp4`));
-      await safeDelete(outBucket.file(`${projectId}/movie_polished.mp4`));
     }
     if (cacheId) {
       await safeDelete(outBucket.file(`cache/render/${cacheId}.mp4`));
@@ -1042,8 +1041,8 @@ app.get('/cache-status/:projectId', appCheckVerification, async (req, res) => {
     const { projectId } = req.params;
     
     try {
-        const inputBucket = storage.bucket(inputBucketName);
-        const [files] = await inputBucket.getFiles({ prefix: `${projectId}/clips/` });
+        const statusInputBucket = storage.bucket(inputBucketName);
+        const [files] = await statusInputBucket.getFiles({ prefix: `${projectId}/clips/` });
         
         const clips = files.map(file => ({
             name: file.name,
@@ -1138,7 +1137,7 @@ app.get('/cache-status', appCheckVerification, async (req, res) => {
 app.get('/admin/stats', appCheckVerification, async (req, res) => {
     try {
         const outputBucket = storage.bucket(outputBucketName);
-        const inputBucket = storage.bucket(inputBucketName);
+        const adminInputBucket = storage.bucket(inputBucketName);
         
         // Get video files
         const [videoFiles] = await outputBucket.getFiles({ prefix: '' });
@@ -1154,7 +1153,7 @@ app.get('/admin/stats', appCheckVerification, async (req, res) => {
         });
         
         // Get input files
-        const [inputFiles] = await inputBucket.getFiles({ prefix: '' });
+        const [inputFiles] = await adminInputBucket.getFiles({ prefix: '' });
         
         // Calculate storage usage
         let totalVideoSize = 0;

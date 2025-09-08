@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "demo": "node scripts/demo-test.js",
     "smoke:health": "bash scripts/smoke-health.sh",
+    "smoke:render": "node scripts/smoke-render.mjs",
+    "smoke:render:clips": "AUTO_CLIPS=1 node scripts/smoke-render.mjs",
     "e2e": "node scripts/e2e-pipeline.mjs",
     "publish:e2e": "node scripts/publish-only.mjs",
     "test:e2e": "playwright test",

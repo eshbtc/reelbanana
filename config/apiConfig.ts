@@ -10,7 +10,6 @@ export interface ApiConfig {
     align: string;
     render: string;
     compose: string;
-    polish: string;
     apiKey: string;
   };
   firebase: {
@@ -31,7 +30,6 @@ const PRODUCTION_CONFIG: ApiConfig = {
     align: 'https://reel-banana-align-captions-nyckt4dazq-uc.a.run.app',
     render: 'https://reel-banana-render-nyckt4dazq-uc.a.run.app',
     compose: 'https://reel-banana-compose-music-nyckt4dazq-uc.a.run.app',
-    polish: 'https://reel-banana-polish-nyckt4dazq-uc.a.run.app',
     apiKey: 'https://reel-banana-api-key-service-nyckt4dazq-uc.a.run.app',
   },
   firebase: {
@@ -52,7 +50,6 @@ const DEVELOPMENT_CONFIG: ApiConfig = {
     align: 'http://localhost:8081',
     render: 'http://localhost:8082',
     compose: 'http://localhost:8084',
-    polish: 'http://localhost:8086',
     apiKey: 'http://localhost:8085',
   },
   firebase: {
@@ -73,7 +70,6 @@ const AI_STUDIO_CONFIG: ApiConfig = {
     align: 'https://reel-banana-align-captions-nyckt4dazq-uc.a.run.app',
     render: 'https://reel-banana-render-nyckt4dazq-uc.a.run.app',
     compose: 'https://reel-banana-compose-music-nyckt4dazq-uc.a.run.app',
-    polish: 'https://reel-banana-polish-nyckt4dazq-uc.a.run.app',
     apiKey: 'https://reel-banana-api-key-service-nyckt4dazq-uc.a.run.app',
   },
   firebase: {
@@ -184,7 +180,6 @@ export const API_ENDPOINTS = {
   render: `${apiConfig.baseUrls.render}/render`,
   generateClip: `${apiConfig.baseUrls.render}/generate-clip`,
   compose: `${apiConfig.baseUrls.compose}/compose-music`,
-  polish: `${apiConfig.baseUrls.polish}/polish`,
   playbackTracking: `${apiConfig.baseUrls.render}/playback-tracking`,
   sliDashboard: `${apiConfig.baseUrls.render}/sli-dashboard`,
   apiKey: {

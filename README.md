@@ -12,6 +12,8 @@
   [![Postman](https://img.shields.io/badge/Postman%20Collection-Test%20APIs-orange?style=for-the-badge&logo=postman)](./docs/api/postman/)
 </div>
 
+> New: Hype Mode quickstart and ops details → see `docs/HYPE_MODE_HANDOFF.md`.
+
 ## 🎬 **What is ReelBanana?**
 
 ReelBanana is a revolutionary AI-powered storytelling platform that transforms your ideas into professional movies in minutes. Using cutting-edge AI technology, it generates stunning visuals, compelling narration, and custom musical scores to create cinematic experiences that rival professional productions.
