@@ -1,4 +1,5 @@
 
+// Render service with Veo3 Fast model support
 const express = require('express');
 const cors = require('cors');
 const { Storage } = require('@google-cloud/storage');
