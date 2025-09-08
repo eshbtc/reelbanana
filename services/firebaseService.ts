@@ -56,12 +56,15 @@ export const createProject = async (data: ProjectData): Promise<string> => {
             throw new Error("User must be authenticated to create projects");
         }
 
-        const docRef = await addDoc(collection(db, PROJECTS_COLLECTION), {
+        // Clean the data to remove undefined values
+        const cleanData = removeUndefinedValues({
             ...data,
             userId: currentUser.uid, // Add userId for security rules
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
         });
+
+        const docRef = await addDoc(collection(db, PROJECTS_COLLECTION), cleanData);
         return docRef.id;
     } catch (error) {
         console.error("Error creating project in Firestore:", error);

@@ -1,6 +1,60 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { getStripeConfig, createSubscription, initializeStripePayment, confirmSubscriptionPayment, getSubscriptionStatus } from '../services/stripeService';
+import { SubscriptionPlan } from '../services/stripeService';
 
 const PricingPage: React.FC = () => {
+  const [stripeConfig, setStripeConfig] = useState<any>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [config, status] = await Promise.all([
+          getStripeConfig(),
+          getSubscriptionStatus()
+        ]);
+        setStripeConfig(config);
+        setSubscriptionStatus(status);
+      } catch (error) {
+        console.error('Failed to load pricing data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  const handleUpgrade = async (planId: string) => {
+    if (planId === 'free') {
+      window.location.href = '/';
+      return;
+    }
+
+    if (planId === 'studio') {
+      window.open('mailto:sales@reelbanana.ai?subject=Studio Plan Inquiry', '_blank');
+      return;
+    }
+
+    setSelectedPlan(planId);
+    setIsProcessing(true);
+
+    try {
+      // This would integrate with Stripe Elements for payment
+      // For now, we'll show a placeholder
+      alert(`Upgrade to ${planId} plan - Stripe integration coming soon!`);
+    } catch (error) {
+      console.error('Failed to process upgrade:', error);
+      alert('Failed to process upgrade. Please try again.');
+    } finally {
+      setIsProcessing(false);
+      setSelectedPlan(null);
+    }
+  };
+
   const plans = [
     { 
       name: 'Free', 
@@ -181,20 +235,22 @@ const PricingPage: React.FC = () => {
                     : plan.name === 'Free'
                     ? 'bg-gray-700 hover:bg-gray-600 text-white'
                     : 'bg-gray-700 hover:bg-gray-600 text-white'
-                }`}
-                onClick={() => {
-                  if (plan.name === 'Studio') {
-                    // Contact sales
-                    window.open('mailto:sales@reelbanana.ai?subject=Studio Plan Inquiry', '_blank');
-                  } else {
-                    // Handle upgrade
-                    console.log(`Upgrade to ${plan.name}`);
-                  }
-                }}
+                } ${isProcessing && selectedPlan === plan.name.toLowerCase() ? 'opacity-50 cursor-not-allowed' : ''}`}
+                onClick={() => handleUpgrade(plan.name.toLowerCase())}
+                disabled={isProcessing && selectedPlan === plan.name.toLowerCase()}
               >
-                {plan.name === 'Free' ? 'Get Started' : 
-                 plan.name === 'Studio' ? 'Contact Sales' : 
-                 'Upgrade Now'}
+                {isProcessing && selectedPlan === plan.name.toLowerCase() ? (
+                  <span className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Processing...
+                  </span>
+                ) : (
+                  <>
+                    {plan.name === 'Free' ? 'Get Started' : 
+                     plan.name === 'Studio' ? 'Contact Sales' : 
+                     'Upgrade Now'}
+                  </>
+                )}
               </button>
             </div>
           ))}

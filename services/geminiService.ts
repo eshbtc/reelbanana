@@ -210,14 +210,23 @@ export const generateCharacterAndStyle = async (topic: string, forceUseApiKey?: 
                 
                 console.log('Generating character and style with Firebase AI Logic...');
                 result = await model.generateContent(
-                    `Create a character and visual style description for a kid-friendly story about "${topic}". 
-                    Include:
-                    - Main character description (appearance, personality)
-                    - Visual style (art style, color palette, mood)
-                    - Keep it concise (2-3 sentences)
-                    - Make it suitable for children
+                    `Create a character and visual style description for a creative short film about "${topic}". 
+                    Be creative and diverse! Consider:
+                    - Different character types (humans, animals, objects, fantasy creatures, etc.)
+                    - Various visual styles (realistic, stylized, noir, colorful, minimalist, documentary, etc.)
+                    - Different moods and atmospheres (dramatic, comedic, mysterious, romantic, etc.)
+                    - Various settings and time periods
                     
-                    Example format: "A cute banana character with a tiny red cape, adventurous and curious, in a vibrant watercolor style with warm colors and soft edges."`
+                    Include:
+                    - Main character description (appearance, personality, age if human)
+                    - Visual style (art style, color palette, mood, lighting)
+                    - Keep it concise (2-3 sentences)
+                    - Make it engaging and appropriate for the story tone
+                    
+                    Examples:
+                    - "A young photographer in their 20s with a vintage camera, curious and artistic, in realistic urban photography style with natural lighting and documentary feel."
+                    - "A delivery driver in their 30s, determined and observant, in noir thriller style with dramatic shadows and urban night setting."
+                    - "A scientist in their 40s with a futuristic device, brilliant but reckless, in sci-fi style with blue lighting and technological atmosphere."`
                 );
             } catch (firebaseError: any) {
                 console.log('❌ Firebase AI Logic failed:', firebaseError.message);
@@ -244,14 +253,23 @@ export const generateCharacterAndStyle = async (topic: string, forceUseApiKey?: 
             const response = await authFetch(API_ENDPOINTS.apiKey.use, {
                 method: 'POST',
                 body: {
-                    prompt: `Create a character and visual style description for a kid-friendly story about "${topic}". 
-                    Include:
-                    - Main character description (appearance, personality)
-                    - Visual style (art style, color palette, mood)
-                    - Keep it concise (2-3 sentences)
-                    - Make it suitable for children
+                    prompt: `Create a character and visual style description for a creative short film about "${topic}". 
+                    Be creative and diverse! Consider:
+                    - Different character types (humans, animals, objects, fantasy creatures, etc.)
+                    - Various visual styles (realistic, stylized, noir, colorful, minimalist, documentary, etc.)
+                    - Different moods and atmospheres (dramatic, comedic, mysterious, romantic, etc.)
+                    - Various settings and time periods
                     
-                    Example format: "A cute banana character with a tiny red cape, adventurous and curious, in a vibrant watercolor style with warm colors and soft edges."`,
+                    Include:
+                    - Main character description (appearance, personality, age if human)
+                    - Visual style (art style, color palette, mood, lighting)
+                    - Keep it concise (2-3 sentences)
+                    - Make it engaging and appropriate for the story tone
+                    
+                    Examples:
+                    - "A young photographer in their 20s with a vintage camera, curious and artistic, in realistic urban photography style with natural lighting and documentary feel."
+                    - "A delivery driver in their 30s, determined and observant, in noir thriller style with dramatic shadows and urban night setting."
+                    - "A scientist in their 40s with a futuristic device, brilliant but reckless, in sci-fi style with blue lighting and technological atmosphere."`,
                     model: 'gemini-2.5-flash'
                 }
             });
@@ -361,10 +379,23 @@ export const generateStory = async (topic: string, forceUseApiKey?: boolean): Pr
                 console.log('Generating content with Firebase AI Logic...');
                 result = await model.generateContent(
                     `Return ONLY JSON. Format: {"scenes":[{"prompt":"...","narration":"..."}]}.
-                     Create 4-8 scenes for a short, kid-friendly storyboard about "${topic}".
+                     Create 4-8 scenes for a creative short film about "${topic}".
+                     
+                     IMPORTANT: Be creative and diverse! Consider these varied approaches:
+                     - Real-world scenarios (documentary, drama, comedy, thriller, romance)
+                     - Different character types (humans, animals, objects, fantasy creatures)
+                     - Various settings (urban, rural, historical, futuristic, fantasy, space)
+                     - Different visual styles (realistic, stylized, noir, colorful, minimalist)
+                     - Various themes (adventure, mystery, friendship, discovery, transformation)
+                     
                      Each scene must include:
-                     - prompt: a detailed, visually rich description for image generation
-                     - narration: 1-2 sentences to be spoken.
+                     - prompt: a detailed, visually rich description for image generation (can be realistic or stylized)
+                     - narration: 1-2 sentences to be spoken (engaging and appropriate for the story tone)
+                     
+                     Make each story unique and different from typical "cute character" stories. 
+                     Think outside the box - could be a documentary about the topic, a thriller, a romance, 
+                     a historical drama, a sci-fi adventure, or any other creative interpretation.
+                     
                      Do not include any markdown or extra commentary. Only valid JSON.`
                 );
             } catch (firebaseError: any) {
@@ -393,10 +424,23 @@ export const generateStory = async (topic: string, forceUseApiKey?: boolean): Pr
                 method: 'POST',
                 body: {
                     prompt: `Return ONLY JSON. Format: {"scenes":[{"prompt":"...","narration":"..."}]}.
-                             Create 4-8 scenes for a short, kid-friendly storyboard about "${topic}".
+                             Create 4-8 scenes for a creative short film about "${topic}".
+                             
+                             IMPORTANT: Be creative and diverse! Consider these varied approaches:
+                             - Real-world scenarios (documentary, drama, comedy, thriller, romance)
+                             - Different character types (humans, animals, objects, fantasy creatures)
+                             - Various settings (urban, rural, historical, futuristic, fantasy, space)
+                             - Different visual styles (realistic, stylized, noir, colorful, minimalist)
+                             - Various themes (adventure, mystery, friendship, discovery, transformation)
+                             
                              Each scene must include:
-                             - prompt: a detailed, visually rich description for image generation
-                             - narration: 1-2 sentences to be spoken.
+                             - prompt: a detailed, visually rich description for image generation (can be realistic or stylized)
+                             - narration: 1-2 sentences to be spoken (engaging and appropriate for the story tone)
+                             
+                             Make each story unique and different from typical "cute character" stories. 
+                             Think outside the box - could be a documentary about the topic, a thriller, a romance, 
+                             a historical drama, a sci-fi adventure, or any other creative interpretation.
+                             
                              Do not include any markdown or extra commentary. Only valid JSON.`,
                     model: 'gemini-2.5-flash'
                 }

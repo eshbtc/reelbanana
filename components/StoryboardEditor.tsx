@@ -1,7 +1,7 @@
 // Fix: Implement the StoryboardEditor component. This file was previously invalid.
 import React, { useState, useCallback, useEffect } from 'react';
 import { Scene, StylePreset } from '../types';
-import { generateStory, generateCharacterAndStyle, generateImageSequence } from '../services/geminiService';
+import { generateStory, generateCharacterAndStyle, generateImageSequence } from '../services/trackedGeminiService';
 import { createProject, getProject, updateProject } from '../services/firebaseService';
 import SceneCard from './SceneCard';
 import Spinner from './Spinner';
@@ -11,6 +11,9 @@ import CharacterPicker from './CharacterPicker';
 import CharacterGenerator from './CharacterGenerator';
 import { calculateTotalCost, formatCost } from '../utils/costCalculator';
 import { useUserCredits } from '../hooks/useUserCredits';
+import { CostEstimator } from './CostEstimator';
+import { OperationCostDisplay } from './OperationCostDisplay';
+import { CreditPurchaseModal } from './CreditPurchaseModal';
 import { getCurrentUser, hasUserApiKey } from '../services/authService';
 import { useToast } from './ToastProvider';
 import ReactDOM from 'react-dom';
@@ -44,6 +47,105 @@ const inspirationCategories = [
     "Drama & Emotion"
 ];
 
+// Templates Modal (inline for simplicity)
+const TemplatesModal: React.FC<{ open: boolean; onClose: () => void; onPick: (id: string) => void }> = ({ open, onClose, onPick }) => {
+  console.log('📝 TemplatesModal render: open =', open);
+  console.log('📝 TemplatesModal TEMPLATES available:', TEMPLATES?.length || 0);
+  if (!open) {
+    console.log('📝 TemplatesModal not rendering - open is false');
+    return null;
+  }
+  console.log('📝 TemplatesModal rendering modal UI');
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[9999]">
+      <div className="bg-gray-900 border border-gray-700 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-4 border-b border-gray-800">
+          <h3 className="text-white font-bold text-lg">Start from Template</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
+          {TEMPLATES.map(t => (
+            <button 
+              key={t.id} 
+              onClick={() => {
+                console.log('📝 Template clicked:', t.id, t.title);
+                onPick(t.id);
+              }} 
+              className="bg-gray-800 hover:bg-gray-700 text-left p-4 rounded-lg border border-gray-700 transition-colors"
+            >
+              <div className="text-white font-semibold mb-1">{t.title}</div>
+              <div className="text-xs text-gray-400 line-clamp-3">{t.topic}</div>
+            </button>
+          ))}
+        </div>
+        <div className="p-4 border-t border-gray-800 text-xs text-gray-400">
+          Tip: After loading a template, add 1–3 Character Passport images to keep your hero consistent.
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Lightweight drag-and-drop grid without extra deps
+const DragGrid: React.FC<{
+  scenes: Scene[];
+  renderMode: 'draft' | 'final';
+  onReorder: (newOrder: Scene[]) => void;
+  onDelete: (id: string) => void;
+  onGenerate: (id: string, prompt: string) => void;
+  onVariant: (id: string, prompt: string) => void;
+  onGenerateVideo?: (id: string) => void;
+  onUpdateScene: (id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration' | 'backgroundImage' | 'stylePreset' | 'variantImageUrls' | 'voiceId' | 'voiceName' | 'videoModel' | 'sceneDirection' | 'location' | 'props' | 'costumes' | 'videoUrl' | 'videoStatus'>>) => void;
+  onUpdateSequence: (id: string, newImageUrls: string[]) => void;
+}> = ({ scenes, renderMode, onReorder, onDelete, onGenerate, onVariant, onGenerateVideo, onUpdateScene, onUpdateSequence }) => {
+  const [dragIndex, setDragIndex] = React.useState<number | null>(null);
+  const [overIndex, setOverIndex] = React.useState<number | null>(null);
+
+  const handleDragStart = (index: number) => setDragIndex(index);
+  const handleDragOver = (index: number, e: React.DragEvent) => {
+    e.preventDefault();
+    setOverIndex(index);
+  };
+  const handleDragLeave = () => setOverIndex(null);
+  const handleDrop = (targetIndex: number) => {
+    if (dragIndex === null || dragIndex === targetIndex) return;
+    const newOrder = [...scenes];
+    const [draggedItem] = newOrder.splice(dragIndex, 1);
+    newOrder.splice(targetIndex, 0, draggedItem);
+    onReorder(newOrder);
+    setDragIndex(null);
+    setOverIndex(null);
+  };
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {scenes.map((scene, index) => (
+        <div
+          key={scene.id}
+          draggable
+          onDragStart={() => handleDragStart(index)}
+          onDragOver={(e) => handleDragOver(index, e)}
+          onDragLeave={handleDragLeave}
+          onDrop={() => handleDrop(index)}
+          className={overIndex === index ? 'ring-2 ring-amber-500 rounded-md' : ''}
+        >
+          <SceneCard
+            scene={scene}
+            index={index}
+            onDelete={onDelete}
+            onGenerateImage={onGenerate}
+            onGenerateVariant={onVariant}
+            onGenerateVideo={onGenerateVideo}
+            onUpdateScene={onUpdateScene}
+            onUpdateSequence={onUpdateSequence}
+            framesPerScene={renderMode === 'draft' ? 3 : 5}
+          />
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProjectIdChange, onNavigate, onLoadTemplate, demoMode = false, onExitDemo }) => {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [topic, setTopic] = useState('');
@@ -70,6 +172,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   const [projectVideoUrl, setProjectVideoUrl] = useState<string | null>(null);
   const [productDemoMode, setProductDemoMode] = useState(false);
   const [productImages, setProductImages] = useState<string[]>([]);
+  const [showCreditPurchase, setShowCreditPurchase] = useState(false);
   
   // Defensive context usage to prevent null context errors
   let toast: any = null;
@@ -197,6 +300,17 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       toast.info('Enter or pick a topic to start your story.');
       return;
     }
+
+    // Check credits before proceeding
+    const { freeCredits, isAdmin } = useUserCredits();
+    const requiredCredits = 2; // 2 credits for story generation
+    
+    if (!isAdmin && freeCredits < requiredCredits) {
+      toast?.error(`Insufficient credits. Need ${requiredCredits} credits for story generation.`);
+      setShowCreditPurchase(true);
+      return;
+    }
+
     setIsLoadingStory(true);
     setStoryError(null);
     setScenes([]);
@@ -234,7 +348,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         prompt: s.prompt,
         narration: s.narration,
         status: productDemoMode && productImages[index] ? 'success' : 'idle', // Pre-populate with product images
-        imageUrls: productDemoMode && productImages[index] ? [productImages[index]] : undefined,
+        imageUrls: productDemoMode && productImages[index] ? [productImages[index]] : [],
       }));
 
       // Create a new project in Firestore
@@ -463,6 +577,17 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         toast.info('Please describe your character and style before generating images.');
         return;
     }
+
+    // Check credits before proceeding
+    const { freeCredits, isAdmin } = useUserCredits();
+    const imageCount = renderMode === 'draft' ? 3 : 5;
+    const requiredCredits = 3 * imageCount; // 3 credits per image
+    
+    if (!isAdmin && freeCredits < requiredCredits) {
+      toast?.error(`Insufficient credits. Need ${requiredCredits} credits for ${imageCount} images.`);
+      setShowCreditPurchase(true);
+      return;
+    }
     setScenes(prevScenes =>
       prevScenes.map(s => s.id === id ? { ...s, status: 'generating', error: undefined } : s)
     );
@@ -609,6 +734,16 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       return;
     }
 
+    // Check credits before proceeding
+    const { freeCredits, isAdmin } = useUserCredits();
+    const requiredCredits = 5; // 5 credits for video rendering
+    
+    if (!isAdmin && freeCredits < requiredCredits) {
+      toast?.error(`Insufficient credits. Need ${requiredCredits} credits for video generation.`);
+      setShowCreditPurchase(true);
+      return;
+    }
+
     // Update scene status to generating
     setScenes(prevScenes =>
       prevScenes.map(s => s.id === sceneId ? { ...s, videoStatus: 'generating' } : s)
@@ -673,7 +808,8 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   const canGenerateAll = scenes.some(s => s.status === 'idle' || s.status === 'error');
 
   return (
-    <div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="container mx-auto px-4 py-6">
         {demoMode && (
           <div className="mb-4 p-3 bg-amber-900/50 border border-amber-600 rounded">
             <div className="flex items-center justify-between">
@@ -781,24 +917,24 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         
         {/* Step 1 & 2: Project Creation */}
         {!projectId && (
-             <div className="bg-gray-800 p-6 rounded-lg shadow-xl border border-gray-700 mb-8">
-                <h2 className="text-2xl font-bold mb-6 text-amber-400">Create Your Story</h2>
+             <div className="bg-gray-800 p-4 md:p-6 rounded-lg shadow-xl border border-gray-700 mb-6 md:mb-8">
+                <h2 className="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-amber-400">Create Your Story</h2>
                 
-                <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-gray-300 mb-3">Quick Start Ideas</h3>
+                <div className="mb-4 md:mb-6">
+                    <h3 className="text-base md:text-lg font-semibold text-gray-300 mb-3">Quick Start Ideas</h3>
                     <div className="flex flex-wrap gap-2 mb-3">
                         {quickStartIdeas.map(idea => (
-                            <button key={idea} onClick={() => handleInspirationClick(idea)} disabled={isLoadingStory} className="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-wait">
+                            <button key={idea} onClick={() => handleInspirationClick(idea)} disabled={isLoadingStory} className="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-3 md:px-4 rounded-lg transition-colors text-xs md:text-sm disabled:opacity-50 disabled:cursor-wait">
                                 {idea}
                             </button>
                         ))}
                     </div>
                     
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                         <button 
                             onClick={handleGenerateInspiration} 
                             disabled={isGeneratingInspiration || isLoadingStory}
-                            className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-wait flex items-center gap-2"
+                            className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-3 md:px-4 rounded-lg transition-colors text-xs md:text-sm disabled:opacity-50 disabled:cursor-wait flex items-center gap-2"
                         >
                             {isGeneratingInspiration ? (
                                 <>
@@ -813,46 +949,53 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                             )}
                         </button>
                         {generatedInspiration && (
-                            <div className="text-sm text-gray-400">
+                            <div className="text-xs md:text-sm text-gray-400">
                                 Generated: <span className="text-amber-400 font-medium">{generatedInspiration}</span>
                             </div>
                         )}
                     </div>
                 </div>
                 
-                <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-gray-300 mb-3">Your Story Idea</h3>
+                <div className="mb-4 md:mb-6">
+                    <h3 className="text-base md:text-lg font-semibold text-gray-300 mb-3">Your Story Idea</h3>
                     <input
                         type="text"
                         value={topic}
                         onChange={(e) => setTopic(e.target.value)}
                         placeholder="Write your story idea, e.g., A banana who wants to be a superhero"
-                        className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition"
+                        className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition text-sm md:text-base"
                         disabled={isLoadingStory}
                     />
                 </div>
                 
-                <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-gray-300 mb-3">Project Name</h3>
+                <div className="mb-4 md:mb-6">
+                    <h3 className="text-base md:text-lg font-semibold text-gray-300 mb-3">Project Name</h3>
                     <input
                         type="text"
                         value={projectName}
                         onChange={(e) => setProjectName(e.target.value)}
                         placeholder="Optional - will use story topic if empty"
-                        className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition"
+                        className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition text-sm md:text-base"
                         disabled={isLoadingStory}
                     />
                 </div>
                    
                    <div className="flex flex-col md:flex-row gap-4">
-                   <button
-                       onClick={() => handleGenerateStory(topic)}
-                       disabled={isLoadingStory}
-                       className="w-full md:w-auto bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 px-6 rounded-lg transition-all flex items-center justify-center gap-2 disabled:bg-gray-600 disabled:cursor-not-allowed"
-                   >
-                       {isLoadingStory ? <Spinner /> : <SparklesIcon />}
-                       {isLoadingStory ? 'Generating...' : 'Generate Story'}
-                   </button>
+                   <div className="w-full md:w-auto">
+                     <OperationCostDisplay
+                       operation="storyGeneration"
+                       onInsufficientCredits={() => setShowCreditPurchase(true)}
+                       className="mb-2"
+                     />
+                     <button
+                         onClick={() => handleGenerateStory(topic)}
+                         disabled={isLoadingStory}
+                         className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 px-6 rounded-lg transition-all flex items-center justify-center gap-2 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                     >
+                         {isLoadingStory ? <Spinner /> : <SparklesIcon />}
+                         {isLoadingStory ? 'Generating...' : 'Generate Story'}
+                     </button>
+                   </div>
                     <button
                       onClick={() => {
                         console.log('🎬 Start from Template button clicked - navigating to templates page');
@@ -870,6 +1013,13 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                    </div>
                 {storyError && <p className="text-red-400 mt-3">{storyError}</p>}
             </div>
+        )}
+
+        {/* Cost Estimation */}
+        {scenes.length > 0 && (
+          <div className="mb-6">
+            <CostEstimator scenes={scenes} showPerScene={scenes.length > 1} />
+          </div>
         )}
       
       {/* Main Editor for existing projects */}
@@ -1005,14 +1155,22 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                             </>
                         )}
                     </button>
-                    <button
-                        onClick={handleGenerateAllImages}
-                        disabled={isGeneratingAll || !canGenerateAll}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-wait"
-                    >
-                        {isGeneratingAll ? <Spinner /> : <SparklesIcon />}
-                        {isGeneratingAll ? 'Generating...' : 'Generate All'}
-                    </button>
+                    <div className="flex flex-col gap-2">
+                        <OperationCostDisplay
+                            operation="imageGeneration"
+                            params={{ imageCount: scenes.filter(s => s.status === 'idle' || s.status === 'error').length * (renderMode === 'draft' ? 3 : 5) }}
+                            onInsufficientCredits={() => setShowCreditPurchase(true)}
+                            className="mb-2"
+                        />
+                        <button
+                            onClick={handleGenerateAllImages}
+                            disabled={isGeneratingAll || !canGenerateAll}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-wait"
+                        >
+                            {isGeneratingAll ? <Spinner /> : <SparklesIcon />}
+                            {isGeneratingAll ? 'Generating...' : 'Generate All'}
+                        </button>
+                    </div>
                     <button 
                       onClick={handleAddScene}
                       className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
@@ -1133,7 +1291,13 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                  <h2 className="text-2xl font-bold text-amber-400 mb-4">Create Your Movie</h2>
                  <p className="text-gray-400 mb-6 max-w-2xl mx-auto">Once you have generated images for your scenes, you can assemble them into a short movie. The backend will narrate, add captions, and render your video.</p>
                 
-                <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                <div className="flex flex-col gap-4 justify-center items-center">
+                  <OperationCostDisplay
+                    operation="videoRendering"
+                    params={{ sceneCount: scenes.length }}
+                    onInsufficientCredits={() => setShowCreditPurchase(true)}
+                    className="mb-2"
+                  />
                   <button
                     onClick={() => onPlayMovie(scenes)}
                     disabled={demoMode ? !hasAnyImages : !hasGeneratedImages}
@@ -1141,6 +1305,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                   >
                     Play My Movie!
                   </button>
+                </div>
                   
                   {projectVideoUrl && (
                     <button
@@ -1232,106 +1397,19 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
             />
         </>
       )}
-    </div>
-  );
-};
 
-// Templates Modal (inline for simplicity)
-const TemplatesModal: React.FC<{ open: boolean; onClose: () => void; onPick: (id: string) => void }> = ({ open, onClose, onPick }) => {
-  console.log('📝 TemplatesModal render: open =', open);
-  console.log('📝 TemplatesModal TEMPLATES available:', TEMPLATES?.length || 0);
-  if (!open) {
-    console.log('📝 TemplatesModal not rendering - open is false');
-    return null;
-  }
-  console.log('📝 TemplatesModal rendering modal UI');
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[9999]">
-      <div className="bg-gray-900 border border-gray-700 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 border-b border-gray-800">
-          <h3 className="text-white font-bold text-lg">Start from Template</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
-          {TEMPLATES.map(t => (
-            <button 
-              key={t.id} 
-              onClick={() => {
-                console.log('📝 Template clicked:', t.id, t.title);
-                onPick(t.id);
-              }} 
-              className="bg-gray-800 hover:bg-gray-700 text-left p-4 rounded-lg border border-gray-700 transition-colors"
-            >
-              <div className="text-white font-semibold mb-1">{t.title}</div>
-              <div className="text-xs text-gray-400 line-clamp-3">{t.topic}</div>
-            </button>
-          ))}
-        </div>
-        <div className="p-4 border-t border-gray-800 text-xs text-gray-400">
-          Tip: After loading a template, add 1–3 Character Passport images to keep your hero consistent.
-        </div>
+      {/* Credit Purchase Modal */}
+      <CreditPurchaseModal
+        isOpen={showCreditPurchase}
+        onClose={() => setShowCreditPurchase(false)}
+        onSuccess={() => {
+          // Refresh credits after successful purchase
+          window.location.reload(); // Simple refresh for now
+        }}
+      />
       </div>
     </div>
   );
 };
 
-
 export default StoryboardEditor;
-
-// Lightweight drag-and-drop grid without extra deps
-const DragGrid: React.FC<{
-  scenes: Scene[];
-  renderMode: 'draft' | 'final';
-  onReorder: (newOrder: Scene[]) => void;
-  onDelete: (id: string) => void;
-  onGenerate: (id: string, prompt: string) => void;
-  onVariant: (id: string, prompt: string) => void;
-  onGenerateVideo?: (id: string) => void;
-  onUpdateScene: (id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration' | 'backgroundImage' | 'stylePreset' | 'variantImageUrls' | 'voiceId' | 'voiceName' | 'videoModel' | 'sceneDirection' | 'location' | 'props' | 'costumes' | 'videoUrl' | 'videoStatus'>>) => void;
-  onUpdateSequence: (id: string, newImageUrls: string[]) => void;
-}> = ({ scenes, renderMode, onReorder, onDelete, onGenerate, onVariant, onGenerateVideo, onUpdateScene, onUpdateSequence }) => {
-  const [dragIndex, setDragIndex] = React.useState<number | null>(null);
-  const [overIndex, setOverIndex] = React.useState<number | null>(null);
-
-  const handleDragStart = (index: number) => setDragIndex(index);
-  const handleDragOver = (index: number, e: React.DragEvent) => {
-    e.preventDefault();
-    if (overIndex !== index) setOverIndex(index);
-  };
-  const handleDrop = (index: number) => {
-    if (dragIndex === null || dragIndex === index) { setDragIndex(null); setOverIndex(null); return; }
-    const next = scenes.slice();
-    const [moved] = next.splice(dragIndex, 1);
-    next.splice(index, 0, moved);
-    onReorder(next);
-    setDragIndex(null);
-    setOverIndex(null);
-  };
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-      {scenes.map((scene, index) => (
-        <div
-          key={scene.id}
-          draggable
-          onDragStart={() => handleDragStart(index)}
-          onDragOver={(e) => handleDragOver(index, e)}
-          onDrop={() => handleDrop(index)}
-          className={overIndex === index ? 'ring-2 ring-amber-500 rounded-md' : ''}
-        >
-          <SceneCard
-            scene={scene}
-            index={index}
-            onDelete={onDelete}
-            onGenerateImage={onGenerate}
-            onGenerateVariant={onVariant}
-            onGenerateVideo={onGenerateVideo}
-            onUpdateScene={onUpdateScene}
-            onUpdateSequence={onUpdateSequence}
-            framesPerScene={renderMode === 'draft' ? 3 : 5}
-          />
-        </div>
-      ))}
-    </div>
-  );
-};

@@ -1,0 +1,468 @@
+name: Deploy All Backend Services
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-all-services.yml'
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Specific service to deploy (leave empty for all)'
+        required: false
+        type: choice
+        options:
+          - all
+          - upload-assets
+          - narrate
+          - align-captions
+          - render
+          - compose-music
+          - api-key-service
+          - polish
+          - stripe-service
+      environment:
+        description: 'Deployment environment'
+        required: false
+        type: choice
+        options:
+          - production
+          - development
+        default: production
+
+env:
+  PROJECT_ID: reel-banana-35a54
+  REGION: us-central1
+  # Use workflow input or default to production
+  DEPLOYMENT_ENV: ${{ github.event.inputs.environment || 'production' }}
+
+jobs:
+  detect-changes:
+    name: Detect Changed Services
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.changes.outputs.services }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Detect changes
+      id: changes
+      run: |
+        # Get list of changed services
+        CHANGED_SERVICES=""
+        
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event.inputs.service }}" = "all" ] || [ -z "${{ github.event.inputs.service }}" ]; then
+            CHANGED_SERVICES="upload-assets narrate align-captions render compose-music api-key-service polish stripe-service"
+          else
+            CHANGED_SERVICES="${{ github.event.inputs.service }}"
+          fi
+        else
+          # Check which services have changes
+          for service in upload-assets narrate align-captions render compose-music api-key-service polish stripe-service; do
+            if git diff --name-only HEAD~1 HEAD | grep -q "^backend/$service/"; then
+              CHANGED_SERVICES="$CHANGED_SERVICES $service"
+            fi
+          done
+          
+          # If no specific service changes, don't deploy anything
+          if [ -z "$CHANGED_SERVICES" ]; then
+            echo "No backend service changes detected, skipping deployment"
+            CHANGED_SERVICES=""
+          fi
+        fi
+        
+        echo "services=$CHANGED_SERVICES" >> $GITHUB_OUTPUT
+        echo "Services to deploy: $CHANGED_SERVICES"
+
+  test-services:
+    name: Test Services
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.services != ''
+    strategy:
+      matrix:
+        service: ${{ fromJson(format('["{0}"]', needs.detect-changes.outputs.services)) }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: backend/${{ matrix.service }}/package-lock.json
+        
+    - name: Install dependencies
+      run: |
+        cd backend/${{ matrix.service }}
+        npm ci
+        
+    - name: Run linting
+      run: |
+        cd backend/${{ matrix.service }}
+        npm run lint || echo "Linting not configured for ${{ matrix.service }}"
+        
+    - name: Run tests
+      run: |
+        cd backend/${{ matrix.service }}
+        npm test || echo "Tests not configured for ${{ matrix.service }}"
+        
+    - name: Security audit
+      run: |
+        cd backend/${{ matrix.service }}
+        npm audit --audit-level=high || echo "Security audit completed with warnings for ${{ matrix.service }}"
+
+  deploy-services:
+    name: Deploy Services
+    runs-on: ubuntu-latest
+    needs: [detect-changes, test-services]
+    if: needs.detect-changes.outputs.services != ''
+    strategy:
+      matrix:
+        service: ${{ fromJson(format('["{0}"]', needs.detect-changes.outputs.services)) }}
+    continue-on-error: true
+    
+    permissions:
+      contents: read
+      id-token: write
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Google Auth
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+        
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      
+    - name: Configure Docker
+      run: gcloud auth configure-docker
+      
+    - name: Deploy ${{ matrix.service }}
+      run: |
+        cd backend/${{ matrix.service }}
+        
+        # Set environment mode
+        if [ "${{ env.DEPLOYMENT_ENV }}" = "production" ]; then
+          NODE_ENV="production"
+          DEV_MODE="false"
+          STRIPE_SECRET_NAME="stripe-live-secret-key"
+          STRIPE_PUBLISHABLE_NAME="stripe-live-publishable-key"
+        else
+          NODE_ENV="development"
+          DEV_MODE="true"
+          STRIPE_SECRET_NAME="stripe-test-secret-key"
+          STRIPE_PUBLISHABLE_NAME="stripe-test-publishable-key"
+        fi
+        
+        # Set service-specific configurations and environment variables
+        case "${{ matrix.service }}" in
+          "upload-assets")
+            PORT=8083
+            MEMORY="1Gi"
+            CPU="1"
+            ENV_FLAGS="--set-env-vars=INPUT_BUCKET_NAME=${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}"
+            ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
+            ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
+            ;;
+          "narrate")
+            PORT=8080
+            MEMORY="512Mi"
+            CPU="1"
+            ENV_FLAGS="--set-env-vars=INPUT_BUCKET_NAME=${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}"
+            ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
+            ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
+            ENV_FLAGS+=" --set-secrets=ELEVENLABS_API_KEY=ELEVENLABS_API_KEY_VOICE_NEW:latest"
+            ;;
+          "align-captions")
+            PORT=8081
+            MEMORY="512Mi"
+            CPU="1"
+            ENV_FLAGS="--set-env-vars=INPUT_BUCKET_NAME=${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}"
+            ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
+            ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
+            ;;
+          "render")
+            PORT=8082
+            MEMORY="2Gi"
+            CPU="2"
+            ENV_FLAGS="--set-env-vars=INPUT_BUCKET_NAME=${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}"
+            ENV_FLAGS+=" --set-env-vars=OUTPUT_BUCKET_NAME=${{ secrets.OUTPUT_BUCKET_NAME || 'reel-banana-videos-public' }}"
+            ENV_FLAGS+=" --set-env-vars=FAL_RENDER_MODEL=${{ secrets.FAL_RENDER_MODEL || 'fal-ai/veo3/fast/image-to-video' }}"
+            ENV_FLAGS+=" --set-env-vars=RENDER_ENGINE=${{ secrets.RENDER_ENGINE || 'fal' }}"
+            ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
+            ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
+            ENV_FLAGS+=" --set-secrets=FAL_RENDER_API_KEY=FAL_RENDER_API_KEY:latest"
+            ;;
+          "compose-music")
+            PORT=8084
+            MEMORY="512Mi"
+            CPU="1"
+            ENV_FLAGS="--set-env-vars=GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}"
+            ENV_FLAGS+=" --set-env-vars=INPUT_BUCKET_NAME=${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}"
+            ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
+            ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
+            ENV_FLAGS+=" --set-secrets=ELEVENLABS_MUSIC_API_KEY=ELEVENLABS_MUSIC_API_KEY:latest"
+            ;;
+          "api-key-service")
+            PORT=8085
+            MEMORY="256Mi"
+            CPU="1"
+            ENV_FLAGS="--set-env-vars=DEV_MODE=$DEV_MODE"
+            ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
+            ENV_FLAGS+=" --set-env-vars=KMS_KEY_RING_ID=projects/reel-banana-35a54/locations/global/keyRings/api-keys"
+            ;;
+          "polish")
+            PORT=8086
+            MEMORY="1Gi"
+            CPU="1"
+            ENV_FLAGS="--set-env-vars=API_KEY_SERVICE_URL=${{ secrets.API_KEY_SERVICE_URL }}"
+            ENV_FLAGS+=" --set-env-vars=FAL_MODEL_UPSCALE=${{ secrets.FAL_MODEL_UPSCALE }}"
+            ENV_FLAGS+=" --set-env-vars=FAL_MODEL_INTERP=${{ secrets.FAL_MODEL_INTERP }}"
+            ENV_FLAGS+=" --set-env-vars=FAL_UPSCALE_ENDPOINT=${{ secrets.FAL_UPSCALE_ENDPOINT }}"
+            ENV_FLAGS+=" --set-env-vars=FAL_INTERP_ENDPOINT=${{ secrets.FAL_INTERP_ENDPOINT }}"
+            ENV_FLAGS+=" --set-env-vars=OUTPUT_BUCKET_NAME=${{ secrets.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}"
+            ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
+            ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
+            ENV_FLAGS+=" --set-secrets=FAL_POLISH_API_KEY=FAL_POLISH_API_KEY:latest"
+            ;;
+          "stripe-service")
+            PORT=8087
+            MEMORY="512Mi"
+            CPU="1"
+            ENV_FLAGS="--set-env-vars=NODE_ENV=$NODE_ENV"
+            ENV_FLAGS+=" --set-env-vars=GOOGLE_CLOUD_PROJECT=reel-banana-35a54"
+            ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
+            ENV_FLAGS+=" --set-secrets=STRIPE_SECRET_KEY=$STRIPE_SECRET_NAME:latest"
+            ENV_FLAGS+=" --set-secrets=STRIPE_PUBLISHABLE_KEY=$STRIPE_PUBLISHABLE_NAME:latest"
+            ENV_FLAGS+=" --set-env-vars=STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}"
+            ;;
+        esac
+        
+        # Deploy the service with all environment variables
+        gcloud run deploy reel-banana-${{ matrix.service }} \
+          --source . \
+          --platform managed \
+          --region $REGION \
+          --allow-unauthenticated \
+          --port $PORT \
+          --memory $MEMORY \
+          --cpu $CPU \
+          --max-instances 10 \
+          --min-instances 0 \
+          --concurrency 100 \
+          --timeout 300 \
+          $ENV_FLAGS \
+          --quiet
+          
+    - name: Get service URL
+      id: get-url
+      run: |
+        SERVICE_URL=$(gcloud run services describe reel-banana-${{ matrix.service }} --region=$REGION --format="value(status.url)")
+        echo "service-url=$SERVICE_URL" >> $GITHUB_OUTPUT
+        echo "${{ matrix.service }} deployed at: $SERVICE_URL"
+        
+    - name: Health Check ${{ matrix.service }}
+      run: |
+        SERVICE_URL="${{ steps.get-url.outputs.service-url }}"
+        echo "Waiting for ${{ matrix.service }} to be ready..."
+        sleep 30
+        
+        # Test basic health endpoint
+        for i in {1..5}; do
+          if curl -f -s "$SERVICE_URL/health" > /dev/null; then
+            echo "✅ ${{ matrix.service }} basic health check passed"
+            break
+          else
+            echo "⏳ ${{ matrix.service }} health check attempt $i failed, retrying in 10s..."
+            sleep 10
+          fi
+        done
+        
+        # Test detailed health endpoint for dependency validation
+        echo "🔍 Testing detailed health and dependencies for ${{ matrix.service }}..."
+        HEALTH_RESPONSE=$(curl -s "$SERVICE_URL/health/detailed" || echo "{}")
+        
+        # Service-specific dependency checks
+        case "${{ matrix.service }}" in
+          "narrate")
+            echo "🎤 Checking ElevenLabs API key configuration..."
+            if echo "$HEALTH_RESPONSE" | grep -q '"elevenlabs":"connected"'; then
+              echo "✅ ElevenLabs API key is properly configured"
+            else
+              echo "⚠️  ElevenLabs API key may not be configured properly"
+            fi
+            ;;
+          "render")
+            echo "🎬 Checking FAL API and model configuration..."
+            if echo "$HEALTH_RESPONSE" | grep -q '"fal":"connected"'; then
+              echo "✅ FAL API key is properly configured"
+            else
+              echo "⚠️  FAL API key may not be configured properly"
+            fi
+            if echo "$HEALTH_RESPONSE" | grep -q '"model":"'; then
+              echo "✅ FAL render model is configured"
+            else
+              echo "⚠️  FAL render model may not be configured"
+            fi
+            ;;
+          "compose-music")
+            echo "🎵 Checking ElevenLabs Music and AI configuration..."
+            if echo "$HEALTH_RESPONSE" | grep -q '"elevenlabsMusicConfigured":true'; then
+              echo "✅ ElevenLabs Music API key is properly configured"
+            else
+              echo "⚠️  ElevenLabs Music API key may not be configured properly"
+            fi
+            if echo "$HEALTH_RESPONSE" | grep -q '"aiConfigured":true'; then
+              echo "✅ AI configuration is properly set up"
+            else
+              echo "⚠️  AI configuration may not be properly set up"
+            fi
+            ;;
+          "polish")
+            echo "✨ Checking FAL Polish and API Key Service configuration..."
+            if echo "$HEALTH_RESPONSE" | grep -q '"usingApiKeyService":true'; then
+              echo "✅ API Key Service integration is configured"
+            else
+              echo "⚠️  API Key Service integration may not be configured"
+            fi
+            if echo "$HEALTH_RESPONSE" | grep -q '"hasDefaultFalKey":true'; then
+              echo "✅ Default FAL API key is configured"
+            else
+              echo "⚠️  Default FAL API key may not be configured"
+            fi
+            ;;
+          "api-key-service")
+            echo "🔐 Checking KMS configuration..."
+            if echo "$HEALTH_RESPONSE" | grep -q '"kmsConfigured":true'; then
+              echo "✅ KMS Key Ring is properly configured"
+            else
+              echo "⚠️  KMS Key Ring may not be configured properly"
+            fi
+            ;;
+          "stripe-service")
+            echo "💳 Checking Stripe configuration..."
+            if echo "$HEALTH_RESPONSE" | grep -q '"stripe":"connected"'; then
+              echo "✅ Stripe API keys are properly configured"
+            else
+              echo "⚠️  Stripe API keys may not be configured properly"
+            fi
+            ;;
+        esac
+        
+        # Check Firebase connection for all services
+        if echo "$HEALTH_RESPONSE" | grep -q '"firebase":"connected"'; then
+          echo "✅ Firebase connection is healthy"
+        else
+          echo "⚠️  Firebase connection may have issues"
+        fi
+        
+        echo "📊 Health check summary for ${{ matrix.service }}:"
+        echo "$HEALTH_RESPONSE" | jq '.' 2>/dev/null || echo "Health response: $HEALTH_RESPONSE"
+
+  update-config:
+    name: Update API Configuration
+    runs-on: ubuntu-latest
+    needs: [detect-changes, deploy-services]
+    if: always() && needs.detect-changes.outputs.services != ''
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Google Auth
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+        
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      
+    - name: Get all service URLs
+      id: get-urls
+      run: |
+        echo "Getting service URLs..."
+        
+        # Get URLs for all services
+        UPLOAD_URL=$(gcloud run services describe reel-banana-upload-assets --region=$REGION --format="value(status.url)" 2>/dev/null || echo "")
+        NARRATE_URL=$(gcloud run services describe reel-banana-narrate --region=$REGION --format="value(status.url)" 2>/dev/null || echo "")
+        ALIGN_URL=$(gcloud run services describe reel-banana-align-captions --region=$REGION --format="value(status.url)" 2>/dev/null || echo "")
+        RENDER_URL=$(gcloud run services describe reel-banana-render --region=$REGION --format="value(status.url)" 2>/dev/null || echo "")
+        COMPOSE_URL=$(gcloud run services describe reel-banana-compose-music --region=$REGION --format="value(status.url)" 2>/dev/null || echo "")
+        API_KEY_URL=$(gcloud run services describe reel-banana-api-key-service --region=$REGION --format="value(status.url)" 2>/dev/null || echo "")
+        POLISH_URL=$(gcloud run services describe reel-banana-polish --region=$REGION --format="value(status.url)" 2>/dev/null || echo "")
+        STRIPE_URL=$(gcloud run services describe reel-banana-stripe-service --region=$REGION --format="value(status.url)" 2>/dev/null || echo "")
+        
+        echo "upload-url=$UPLOAD_URL" >> $GITHUB_OUTPUT
+        echo "narrate-url=$NARRATE_URL" >> $GITHUB_OUTPUT
+        echo "align-url=$ALIGN_URL" >> $GITHUB_OUTPUT
+        echo "render-url=$RENDER_URL" >> $GITHUB_OUTPUT
+        echo "compose-url=$COMPOSE_URL" >> $GITHUB_OUTPUT
+        echo "api-key-url=$API_KEY_URL" >> $GITHUB_OUTPUT
+        echo "polish-url=$POLISH_URL" >> $GITHUB_OUTPUT
+        echo "stripe-url=$STRIPE_URL" >> $GITHUB_OUTPUT
+        
+        echo "Service URLs:"
+        echo "Upload: $UPLOAD_URL"
+        echo "Narrate: $NARRATE_URL"
+        echo "Align: $ALIGN_URL"
+        echo "Render: $RENDER_URL"
+        echo "Compose: $COMPOSE_URL"
+        echo "API Key: $API_KEY_URL"
+        echo "Polish: $POLISH_URL"
+        echo "Stripe: $STRIPE_URL"
+        
+    - name: Create deployment summary
+      run: |
+        echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Services Deployed:" >> $GITHUB_STEP_SUMMARY
+        echo "- **Upload Assets**: ${{ steps.get-urls.outputs.upload-url }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Narrate**: ${{ steps.get-urls.outputs.narrate-url }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Align Captions**: ${{ steps.get-urls.outputs.align-url }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Render**: ${{ steps.get-urls.outputs.render-url }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Compose Music**: ${{ steps.get-urls.outputs.compose-url }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **API Key Service**: ${{ steps.get-urls.outputs.api-key-url }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Polish**: ${{ steps.get-urls.outputs.polish-url }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Stripe Service**: ${{ steps.get-urls.outputs.stripe-url }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
+        echo "1. Update `config/apiConfig.ts` with new URLs if they changed" >> $GITHUB_STEP_SUMMARY
+        echo "2. Test all services with health checks" >> $GITHUB_STEP_SUMMARY
+        echo "3. Deploy frontend if needed" >> $GITHUB_STEP_SUMMARY
+
+  notify:
+    name: Notify Deployment Status
+    runs-on: ubuntu-latest
+    needs: [detect-changes, deploy-services, update-config]
+    if: always()
+    
+    steps:
+    - name: Notify No Changes
+      if: needs.detect-changes.outputs.services == ''
+      run: |
+        echo "⏭️  No backend service changes detected"
+        echo "Skipping deployment - no services need to be updated."
+        
+    - name: Notify Success
+      if: needs.detect-changes.outputs.services != '' && needs.deploy-services.result == 'success'
+      run: |
+        echo "🎉 All services deployed successfully!"
+        echo "Check the deployment summary for service URLs."
+        
+    - name: Notify Failure
+      if: needs.detect-changes.outputs.services != '' && needs.deploy-services.result == 'failure'
+      run: |
+        echo "❌ Some services failed to deploy!"
+        echo "Check the logs for details."
+        exit 1

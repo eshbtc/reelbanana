@@ -12,6 +12,7 @@ const admin = require('firebase-admin');
 const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
 const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
 const { createSLIMiddleware, SLIMonitor } = require('./shared/sliMonitor');
+const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('./shared/creditService');
 
 const app = express();
 
@@ -235,7 +236,12 @@ app.post('/generate-clip', appCheckVerification, async (req, res) => {
  *   "videoUrl": "https://storage.googleapis.com/..."
  * }
  */
-app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerification, async (req, res) => {
+app.post('/render', 
+  requireCredits('videoRendering', (req) => ({ sceneCount: req.body.scenes?.length || 0 })),
+  deductCreditsAfter('videoRendering', (req) => ({ sceneCount: req.body.scenes?.length || 0 })),
+  ...createExpensiveOperationLimiter('render'), 
+  appCheckVerification, 
+  async (req, res) => {
     const renderStartTime = Date.now();
     const { projectId, scenes, gsAudioPath, srtPath, gsMusicPath, useFal, force } = req.body;
 
@@ -516,6 +522,11 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
             req.sliMonitor.recordSuccess('render', true, { projectId, cached: false, engine: 'fal-per-scene-ffmpeg' });
             req.sliMonitor.recordLatency('render', renderDuration, { projectId, cached: false, engine: 'fal-per-scene-ffmpeg' });
             
+            // Complete credit operation
+            if (req.creditDeduction?.idempotencyKey) {
+                await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
+            }
+            
             return res.status(200).json({ videoUrl, engine: 'fal-per-scene-ffmpeg', skipPolish: true });
         }
         // Early path: if a final video already exists, allow "publish-only" requests
@@ -550,6 +561,11 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
             req.sliMonitor.recordSuccess('render', true, { projectId, cached: true });
             req.sliMonitor.recordLatency('render', renderDuration, { projectId, cached: true });
             cacheMetrics.hits++;
+            
+            // Complete credit operation
+            if (req.creditDeduction?.idempotencyKey) {
+                await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
+            }
             
             return res.status(200).json({ videoUrl, cached: true });
         }
@@ -643,6 +659,11 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
             req.sliMonitor.recordSuccess('render', true, { projectId, cached: true, engine: 'ffmpeg', cacheId: manifestHash });
             req.sliMonitor.recordLatency('render', Date.now() - renderStartTime, { projectId, cached: true, engine: 'ffmpeg' });
             cacheMetrics.hits++;
+            // Complete credit operation
+            if (req.creditDeduction?.idempotencyKey) {
+                await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
+            }
+            
             return res.status(200).json({ videoUrl: videoUrlCached, cached: true });
         }
 
@@ -882,10 +903,20 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         req.sliMonitor.recordSuccess('render', true, { projectId, cached: false });
         req.sliMonitor.recordLatency('render', renderDuration, { projectId, cached: false });
         
+        // Complete credit operation
+        if (req.creditDeduction?.idempotencyKey) {
+            await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
+        }
+        
         res.status(200).json({ videoUrl });
 
     } catch (error) {
         console.error(`Error rendering video for projectId ${projectId}:`, error);
+        
+        // Mark credit operation as failed
+        if (req.creditDeduction?.idempotencyKey) {
+            await completeCreditOperation(req.creditDeduction.idempotencyKey, 'failed', error.message);
+        }
         
         // Record failed render SLI
         const renderDuration = Date.now() - renderStartTime;

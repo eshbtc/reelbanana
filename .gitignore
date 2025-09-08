@@ -107,6 +107,8 @@ docs/HYPE_MODE_HANDOFF.md
 
 # Development scripts and tools
 scripts/
+!scripts/deploy-*.sh
+!scripts/monitor-services.sh
 demo-config.json
 youtube_description.txt
 restore-dockerfiles.sh

@@ -9,6 +9,7 @@ const { Storage } = require('@google-cloud/storage');
 const admin = require('firebase-admin');
 const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
 const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
+const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('./shared/creditService');
 
 const app = express();
 
@@ -151,7 +152,12 @@ async function retryWithBackoff(operation, maxRetries = 3, baseDelay = 1000) {
  *   "gsAudioPath": "gs://bucket-name/project-id/narration.mp3"
  * }
  */
-app.post('/narrate', ...createExpensiveOperationLimiter('narrate'), appCheckVerification, async (req, res) => {
+app.post('/narrate', 
+  requireCredits('narration', (req) => ({ textLength: req.body.narrationScript?.length || 0 })),
+  deductCreditsAfter('narration', (req) => ({ textLength: req.body.narrationScript?.length || 0 })),
+  ...createExpensiveOperationLimiter('narrate'), 
+  appCheckVerification, 
+  async (req, res) => {
   const { projectId, narrationScript, emotion } = req.body;
 
   if (!projectId || !narrationScript) {
@@ -284,10 +290,21 @@ app.post('/narrate', ...createExpensiveOperationLimiter('narrate'), appCheckVeri
       console.warn('Failed to write narration cache:', e.message);
     }
 
+    // Complete credit operation
+    if (req.creditDeduction?.idempotencyKey) {
+      await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
+    }
+
     res.status(200).json({ gsAudioPath: gcsPath });
 
   } catch (error) {
     console.error(`Error generating narration for projectId ${projectId}:`, error);
+    
+    // Mark credit operation as failed
+    if (req.creditDeduction?.idempotencyKey) {
+      await completeCreditOperation(req.creditDeduction.idempotencyKey, 'failed', error.message);
+    }
+    
     return sendError(req, res, 500, 'INTERNAL', 'Failed to generate narration.', error.message);
   }
 });

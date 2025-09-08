@@ -11,6 +11,7 @@ export interface ApiConfig {
     render: string;
     compose: string;
     apiKey: string;
+    stripe: string;
   };
   firebase: {
     projectId: string;
@@ -31,6 +32,7 @@ const PRODUCTION_CONFIG: ApiConfig = {
     render: 'https://reel-banana-render-nyckt4dazq-uc.a.run.app',
     compose: 'https://reel-banana-compose-music-nyckt4dazq-uc.a.run.app',
     apiKey: 'https://reel-banana-api-key-service-nyckt4dazq-uc.a.run.app',
+    stripe: 'https://reel-banana-stripe-service-223097908182.us-central1.run.app',
   },
   firebase: {
     projectId: 'reel-banana-35a54', // Not sensitive
@@ -51,6 +53,7 @@ const DEVELOPMENT_CONFIG: ApiConfig = {
     render: 'http://localhost:8082',
     compose: 'http://localhost:8084',
     apiKey: 'http://localhost:8085',
+    stripe: 'http://localhost:8087',
   },
   firebase: {
     projectId: 'reel-banana-35a54',
@@ -71,6 +74,7 @@ const AI_STUDIO_CONFIG: ApiConfig = {
     render: 'https://reel-banana-render-nyckt4dazq-uc.a.run.app',
     compose: 'https://reel-banana-compose-music-nyckt4dazq-uc.a.run.app',
     apiKey: 'https://reel-banana-api-key-service-nyckt4dazq-uc.a.run.app',
+    stripe: 'https://reel-banana-stripe-service-223097908182.us-central1.run.app',
   },
   firebase: {
     projectId: 'reel-banana-35a54',
@@ -187,6 +191,14 @@ export const API_ENDPOINTS = {
     use: `${apiConfig.baseUrls.apiKey}/use-api-key`,
     check: `${apiConfig.baseUrls.apiKey}/check-api-key`,
     remove: `${apiConfig.baseUrls.apiKey}/remove-api-key`,
+  },
+  stripe: {
+    config: `${apiConfig.baseUrls.stripe}/config`,
+    createCustomer: `${apiConfig.baseUrls.stripe}/create-customer`,
+    createSubscription: `${apiConfig.baseUrls.stripe}/create-subscription`,
+    subscriptionStatus: `${apiConfig.baseUrls.stripe}/subscription-status`,
+    purchaseCredits: `${apiConfig.baseUrls.stripe}/purchase-credits`,
+    webhook: `${apiConfig.baseUrls.stripe}/webhook`,
   },
 };
 

@@ -73,33 +73,33 @@ const TemplatesPage: React.FC<TemplatesPageProps> = ({ onNavigate, onLoadTemplat
       {/* Hero Section */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 to-orange-500/10"></div>
-        <div className="relative max-w-7xl mx-auto px-6 py-16">
-          <div className="text-center mb-12">
-            <h1 className="text-5xl font-bold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent mb-4">
+        <div className="relative max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-16">
+          <div className="text-center mb-8 md:mb-12">
+            <h1 className="text-3xl md:text-5xl font-bold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent mb-4">
               Create Your Story
             </h1>
-            <p className="text-xl text-gray-300 max-w-2xl mx-auto">
+            <p className="text-lg md:text-xl text-gray-300 max-w-2xl mx-auto px-4">
               Choose from our curated templates or start with a blank canvas. 
               Let AI bring your vision to life.
             </p>
           </div>
 
           {/* Start from Scratch - Hero Card */}
-          <div className="max-w-2xl mx-auto mb-16">
+          <div className="max-w-2xl mx-auto mb-8 md:mb-16">
             <div 
-              className="group relative bg-gradient-to-r from-amber-500/20 to-orange-500/20 backdrop-blur-sm border border-amber-500/30 rounded-2xl p-8 cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-amber-500/25"
+              className="group relative bg-gradient-to-r from-amber-500/20 to-orange-500/20 backdrop-blur-sm border border-amber-500/30 rounded-2xl p-4 md:p-8 cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-amber-500/25"
               onClick={handleStartFromScratch}
             >
               <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 to-orange-500/10 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div className="relative flex items-center gap-6">
-                <div className="w-16 h-16 bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
-                  <SparklesIcon className="w-8 h-8 text-white" />
+              <div className="relative flex items-center gap-4 md:gap-6">
+                <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
+                  <SparklesIcon className="w-6 h-6 md:w-8 md:h-8 text-white" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-2xl font-bold text-white mb-2">Start from Scratch</h3>
-                  <p className="text-gray-300 text-lg">Create a completely original story with AI assistance</p>
+                  <h3 className="text-xl md:text-2xl font-bold text-white mb-2">Start from Scratch</h3>
+                  <p className="text-gray-300 text-sm md:text-lg">Create a completely original story with AI assistance</p>
                 </div>
-                <div className="text-amber-400 text-2xl group-hover:translate-x-2 transition-transform">→</div>
+                <div className="text-amber-400 text-xl md:text-2xl group-hover:translate-x-2 transition-transform hidden sm:block">→</div>
               </div>
             </div>
           </div>
@@ -107,13 +107,13 @@ const TemplatesPage: React.FC<TemplatesPageProps> = ({ onNavigate, onLoadTemplat
       </div>
 
       {/* Templates Section */}
-      <div className="max-w-7xl mx-auto px-6 pb-16">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold text-white mb-4">Or Choose a Template</h2>
-          <p className="text-gray-400 text-lg">Pre-crafted stories to get you started</p>
+      <div className="max-w-7xl mx-auto px-4 md:px-6 pb-16">
+        <div className="text-center mb-8 md:mb-12">
+          <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">Or Choose a Template</h2>
+          <p className="text-gray-400 text-base md:text-lg">Pre-crafted stories to get you started</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8">
           {/* Built-in Templates */}
           {TEMPLATES.map((template) => (
             <div

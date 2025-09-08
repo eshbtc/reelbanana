@@ -235,15 +235,15 @@ const MyProjectsPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 px-6 py-4">
-        <div className="flex items-center justify-between">
+      <div className="bg-gray-800 border-b border-gray-700 px-4 md:px-6 py-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">My Projects</h1>
-            <p className="text-gray-400 mt-1">Manage your AI-generated stories and movies</p>
+            <h1 className="text-xl md:text-2xl font-bold">My Projects</h1>
+            <p className="text-gray-400 mt-1 text-sm md:text-base">Manage your AI-generated stories and movies</p>
           </div>
           <button
             onClick={() => window.location.href = '/'}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors duration-200"
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors duration-200 text-sm md:text-base"
           >
             ← Back to Home
           </button>
@@ -251,7 +251,7 @@ const MyProjectsPage: React.FC = () => {
       </div>
 
       {/* Content */}
-      <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 md:py-8">
         {/* Authentication Loading */}
         {authLoading && (
           <div className="text-center py-12">
@@ -292,9 +292,9 @@ const MyProjectsPage: React.FC = () => {
         {!authLoading && user && (
           <>
             {/* Top Controls - 2 Row Layout */}
-            <div className="bg-gray-800 rounded-lg p-4 mb-6">
+            <div className="bg-gray-800 rounded-lg p-3 md:p-4 mb-6">
               {/* Row 1: Search and View Mode */}
-              <div className="flex items-center gap-4 mb-4">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 mb-4">
                 <div className="flex-1">
                   <input
                     type="text"
@@ -332,8 +332,8 @@ const MyProjectsPage: React.FC = () => {
               </div>
 
               {/* Row 2: Sort Options and Actions */}
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
+              <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-400">Sort by:</span>
                     <select
@@ -355,7 +355,7 @@ const MyProjectsPage: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button onClick={load} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">
                     Refresh
                   </button>

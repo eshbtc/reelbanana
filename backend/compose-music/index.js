@@ -24,6 +24,7 @@ const { ElevenLabsClient } = require('elevenlabs');
 const { createHash } = require('crypto');
 const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
 const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
+const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('./shared/creditService');
 
 const app = express();
 
@@ -210,7 +211,12 @@ function musicCacheKey({ narrationScript, normalized = false }) {
  *   "gsMusicPath": "gs://bucket-name/project-id/music.mp3"
  * }
  */
-app.post('/compose-music', ...createExpensiveOperationLimiter('compose'), appCheckVerification, async (req, res) => {
+app.post('/compose-music', 
+  requireCredits('musicGeneration'),
+  deductCreditsAfter('musicGeneration'),
+  ...createExpensiveOperationLimiter('compose'), 
+  appCheckVerification, 
+  async (req, res) => {
   const { projectId, narrationScript } = req.body;
 
   if (!projectId || !narrationScript) {
@@ -231,6 +237,11 @@ app.post('/compose-music', ...createExpensiveOperationLimiter('compose'), appChe
       const gsMusicPath = `gs://${bucketName}/${fileName}`;
       console.log(`Music already exists for ${projectId} at ${gsMusicPath}, skipping Gemini processing`);
       metrics.cacheHits++;
+      // Complete credit operation
+      if (req.creditDeduction?.idempotencyKey) {
+        await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
+      }
+      
       return res.status(200).json({ 
         gsMusicPath: gsMusicPath,
         musicPrompt: "Previously generated",
@@ -250,6 +261,11 @@ app.post('/compose-music', ...createExpensiveOperationLimiter('compose'), appChe
       const gsMusicPath = `gs://${bucketName}/${fileName}`;
       console.log(`Music cache hit ${exactExists ? exactId : normId} (${exactExists ? 'exact' : 'norm'}); copied to ${gsMusicPath}`);
       metrics.cacheHits++;
+      // Complete credit operation
+      if (req.creditDeduction?.idempotencyKey) {
+        await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
+      }
+      
       return res.status(200).json({ 
         gsMusicPath,
         musicPrompt: 'Previously generated',
@@ -287,6 +303,11 @@ app.post('/compose-music', ...createExpensiveOperationLimiter('compose'), appChe
       console.warn('Failed to write music cache:', e.message);
     }
 
+    // Complete credit operation
+    if (req.creditDeduction?.idempotencyKey) {
+      await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
+    }
+    
     res.status(200).json({ 
       gsMusicPath: gsMusicPath,
       musicPrompt: musicPrompt,
@@ -295,6 +316,12 @@ app.post('/compose-music', ...createExpensiveOperationLimiter('compose'), appChe
 
   } catch (error) {
     console.error(`Error composing music for projectId ${projectId}:`, error);
+    
+    // Mark credit operation as failed
+    if (req.creditDeduction?.idempotencyKey) {
+      await completeCreditOperation(req.creditDeduction.idempotencyKey, 'failed', error.message);
+    }
+    
     return sendError(req, res, 500, 'INTERNAL', 'Failed to compose music.', error.message);
   }
 });

@@ -1,0 +1,26 @@
+{
+  "name": "reel-banana-stripe-service",
+  "version": "1.0.0",
+  "description": "Stripe subscription service for ReelBanana",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "node test.js",
+    "lint": "echo 'Linting not configured for Stripe service'",
+    "health": "curl -f http://localhost:8087/health || exit 1"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "stripe": "^14.0.0",
+    "firebase-admin": "^11.11.0",
+    "@google-cloud/secret-manager": "^4.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -5,6 +5,7 @@ const admin = require('firebase-admin');
 const { Storage } = require('@google-cloud/storage');
 const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
 const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
+const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('./shared/creditService');
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 const app = express();
@@ -104,7 +105,12 @@ const appCheckVerification = async (req, res, next) => {
  * Request: { projectId: string, videoUrl: string }
  * Response: { polishedUrl: string }
  */
-app.post('/polish', ...createExpensiveOperationLimiter('polish'), appCheckVerification, async (req, res) => {
+app.post('/polish', 
+  requireCredits('proPolish'),
+  deductCreditsAfter('proPolish'),
+  ...createExpensiveOperationLimiter('polish'), 
+  appCheckVerification, 
+  async (req, res) => {
   const { projectId, videoUrl, userId } = req.body || {};
   if (!projectId || !videoUrl) {
     return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required fields: projectId, videoUrl');
@@ -144,6 +150,11 @@ app.post('/polish', ...createExpensiveOperationLimiter('polish'), appCheckVerifi
       key = process.env.FAL_POLISH_API_KEY || process.env.FAL_API_KEY || process.env.FAL_KEY;
       if (!key) {
         console.warn('No FAL API key available (neither customer nor default). Returning original video URL.');
+        // Complete credit operation
+        if (req.creditDeduction?.idempotencyKey) {
+          await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
+        }
+        
         return res.status(200).json({ polishedUrl: videoUrl });
       }
       console.log('Using default FAL API key for polishing');
@@ -314,16 +325,31 @@ app.post('/polish', ...createExpensiveOperationLimiter('polish'), appCheckVerifi
           await file.makePublic();
         });
         const publicUrl = file.publicUrl();
+        // Complete credit operation
+        if (req.creditDeduction?.idempotencyKey) {
+          await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
+        }
+        
         return res.status(200).json({ polishedUrl: publicUrl });
       } catch (e) {
         console.warn('GCS persistence failed; returning remote URL:', e?.message || e);
       }
     }
 
+    // Complete credit operation
+    if (req.creditDeduction?.idempotencyKey) {
+      await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
+    }
+    
     return res.status(200).json({ polishedUrl: currentUrl });
 
   } catch (error) {
     console.error('Polish failed:', error);
+    
+    // Mark credit operation as failed
+    if (req.creditDeduction?.idempotencyKey) {
+      await completeCreditOperation(req.creditDeduction.idempotencyKey, 'failed', error.message);
+    }
     return sendError(req, res, 500, 'INTERNAL', 'Failed to polish video', error?.message);
   }
 });

@@ -6,6 +6,7 @@ const { Storage } = require('@google-cloud/storage');
 const admin = require('firebase-admin');
 const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
 const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
+const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('./shared/creditService');
 
 const app = express();
 
@@ -148,7 +149,12 @@ validateBucket().catch(error => {
  *   "gcsPath": "gs://reel-banana-35a54.firebasestorage.app/projectId/fileName"
  * }
  */
-app.post('/upload-image', ...createExpensiveOperationLimiter('upload'), appCheckVerification, async (req, res) => {
+app.post('/upload-image', 
+  requireCredits('uploadAsset'),
+  deductCreditsAfter('uploadAsset'),
+  ...createExpensiveOperationLimiter('upload'), 
+  appCheckVerification, 
+  async (req, res) => {
   const { projectId, fileName, base64Image } = req.body;
 
   if (!projectId || !fileName || !base64Image) {
@@ -206,6 +212,11 @@ app.post('/upload-image', ...createExpensiveOperationLimiter('upload'), appCheck
     
     console.log(`✅ Successfully uploaded ${safeName} for project ${safeProjectId} to ${gcsPath}`);
     
+    // Complete credit operation
+    if (req.creditDeduction?.idempotencyKey) {
+        await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
+    }
+    
     res.status(200).json({ 
         message: 'Image uploaded successfully.',
         gcsPath,
@@ -216,6 +227,11 @@ app.post('/upload-image', ...createExpensiveOperationLimiter('upload'), appCheck
 
   } catch (error) {
     console.error(`❌ Error uploading image for projectId ${projectId}:`, error);
+    
+    // Mark credit operation as failed
+    if (req.creditDeduction?.idempotencyKey) {
+        await completeCreditOperation(req.creditDeduction.idempotencyKey, 'failed', error.message);
+    }
     
     // Provide more specific error messages
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {

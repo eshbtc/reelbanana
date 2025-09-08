@@ -7,6 +7,7 @@ const admin = require('firebase-admin');
 const { createHash } = require('crypto');
 const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
 const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
+const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('./shared/creditService');
 
 const app = express();
 
@@ -171,7 +172,12 @@ const convertToSrt = (words) => {
  *   "srtPath": "gs://bucket-name/project-id/captions.srt"
  * }
  */
-app.post('/align', ...createExpensiveOperationLimiter('align'), appCheckVerification, async (req, res) => {
+app.post('/align', 
+  requireCredits('alignCaptions'),
+  deductCreditsAfter('alignCaptions'),
+  ...createExpensiveOperationLimiter('align'), 
+  appCheckVerification, 
+  async (req, res) => {
     const { projectId, gsAudioPath } = req.body;
 
     if (!projectId || !gsAudioPath) {
@@ -190,6 +196,11 @@ app.post('/align', ...createExpensiveOperationLimiter('align'), appCheckVerifica
         if (exists) {
             const gcsPath = `gs://${bucketName}/${fileName}`;
             console.log(`Captions already exist for ${projectId} at ${gcsPath}, skipping Speech-to-Text processing`);
+            // Complete credit operation
+            if (req.creditDeduction?.idempotencyKey) {
+                await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
+            }
+            
             return res.status(200).json({ 
                 srtPath: gcsPath, 
                 requestId: req.requestId,
@@ -219,6 +230,11 @@ app.post('/align', ...createExpensiveOperationLimiter('align'), appCheckVerifica
               const gcsPath = `gs://${bucketName}/${fileName}`;
               console.log(`Align cache hit ${cacheId}; copied to ${gcsPath}`);
               cacheMetrics.hits++;
+              // Complete credit operation
+              if (req.creditDeduction?.idempotencyKey) {
+                  await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
+              }
+              
               return res.status(200).json({ srtPath: gcsPath, requestId: req.requestId, cached: true, cacheId });
             }
             // attach to req for later save
@@ -267,10 +283,20 @@ app.post('/align', ...createExpensiveOperationLimiter('align'), appCheckVerifica
         const gcsPath = `gs://${bucketName}/${fileName}`;
         console.log(`Successfully uploaded captions for ${projectId} to ${gcsPath}`);
 
+        // Complete credit operation
+        if (req.creditDeduction?.idempotencyKey) {
+            await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
+        }
+        
         res.status(200).json({ srtPath: gcsPath, requestId: req.requestId });
 
     } catch (error) {
         console.error(`Error aligning captions for projectId ${projectId}:`, error);
+        
+        // Mark credit operation as failed
+        if (req.creditDeduction?.idempotencyKey) {
+            await completeCreditOperation(req.creditDeduction.idempotencyKey, 'failed', error.message);
+        }
         if (error && error.message === 'NO_WORDS') {
             return sendError(req, res, 422, 'UNPROCESSABLE', 'No words returned from Speech-to-Text');
         }

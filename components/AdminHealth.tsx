@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { apiConfig } from '../config/apiConfig';
+import { AdminUsageDashboard } from './AdminUsageDashboard';
 
 type ServiceKey = 'upload' | 'narrate' | 'align' | 'render' | 'compose' | 'polish' | 'apiKey';
 
@@ -161,6 +162,11 @@ const AdminHealth: React.FC = () => {
       </div>
       <div className="text-[11px] text-gray-500 mt-3">
         Note: Health checks do not require App Check and only verify HTTP reachability of each service.
+      </div>
+      
+      {/* Usage Dashboard */}
+      <div className="mt-8">
+        <AdminUsageDashboard />
       </div>
     </div>
   );
