@@ -211,7 +211,7 @@ async function post(url, body, tokens) {
     gsAudioPath: narr.gsAudioPath,
     srtPath: align.srtPath,
     useFal: true, // FAL full video generation
-    force: true,
+    force: process.env.FORCE_RENDER === 'true', // Use cached clips by default
     // Auto-generate per-scene Veo3 i2v clips before assembly when requested
     ...(AUTO_CLIPS ? { autoGenerateClips: true, forceClips: FORCE_CLIPS, clipSeconds: SECS } : {}),
     ...(PRECLIP ? { autoGenerateClips: false } : {}),

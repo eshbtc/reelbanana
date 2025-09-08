@@ -222,7 +222,7 @@ app.post('/generate-clip', appCheckVerification, async (req, res) => {
  */
 app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerification, async (req, res) => {
     const renderStartTime = Date.now();
-    const { projectId, scenes, gsAudioPath, srtPath, gsMusicPath, useFal } = req.body;
+    const { projectId, scenes, gsAudioPath, srtPath, gsMusicPath, useFal, force } = req.body;
 
     if (!projectId) {
         return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required field: projectId');
@@ -275,7 +275,26 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
             const clipUrls = [];
             
             for (let i = 0; i < scenes.length; i++) {
-                console.log(`Generating clip for scene ${i}...`);
+                console.log(`Checking for existing clip for scene ${i}...`);
+                
+                // Check if clip already exists in output bucket (unless force is true)
+                const clipFileName = `${projectId}/clips/scene-${i}.mp4`;
+                const existingClip = outputBucket.file(clipFileName);
+                const [exists] = await existingClip.exists();
+                
+                if (exists && !force) {
+                    console.log(`✅ Using cached clip for scene ${i}: ${clipFileName}`);
+                    // Get signed URL for existing clip
+                    const [signedClipUrl] = await existingClip.getSignedUrl({ 
+                        version: 'v4', 
+                        action: 'read', 
+                        expires: Date.now() + 60*60*1000 
+                    });
+                    clipUrls.push(signedClipUrl);
+                    continue;
+                }
+                
+                console.log(`Generating new clip for scene ${i}...`);
                 
                 // Find scene image
                 const [files] = await inputBucket.getFiles({ prefix: `${projectId}/scene-${i}-` });
@@ -307,8 +326,26 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                     if (!clipUrl) {
                         throw new Error('FAL did not return a video URL');
                     }
-                    clipUrls.push(clipUrl);
-                    console.log(`Scene ${i} clip generated: ${clipUrl}`);
+                    
+                    // Download and save clip to output bucket for caching
+                    const clipResponse = await fetch(clipUrl);
+                    if (!clipResponse.ok) {
+                        throw new Error(`Failed to download generated clip: ${clipResponse.status}`);
+                    }
+                    const clipBuffer = await clipResponse.arrayBuffer();
+                    await existingClip.save(Buffer.from(clipBuffer), { 
+                        metadata: { contentType: 'video/mp4' }
+                    });
+                    console.log(`💾 Cached clip for scene ${i}: ${clipFileName}`);
+                    
+                    // Use the cached clip URL
+                    const [signedClipUrl] = await existingClip.getSignedUrl({ 
+                        version: 'v4', 
+                        action: 'read', 
+                        expires: Date.now() + 60*60*1000 
+                    });
+                    clipUrls.push(signedClipUrl);
+                    console.log(`Scene ${i} clip generated and cached: ${signedClipUrl}`);
                 } catch (e) {
                     console.error(`Failed to generate clip for scene ${i}:`, e?.message || e);
                     return sendError(req, res, 500, 'FAL_CLIP_FAILURE', `Failed to generate clip for scene ${i}`, e?.message || String(e));
@@ -994,6 +1031,39 @@ app.post('/playback-tracking', appCheckVerification, (req, res) => {
     console.error('Playback tracking error:', error);
     sendError(req, res, 500, 'INTERNAL', 'Failed to track playback', error.message);
   }
+});
+
+/**
+ * GET /cache-status/:projectId
+ * Check what clips are cached for a project
+ */
+app.get('/cache-status/:projectId', appCheckVerification, async (req, res) => {
+    const { projectId } = req.params;
+    
+    try {
+        const outputBucket = storage.bucket(outputBucketName);
+        const [files] = await outputBucket.getFiles({ prefix: `${projectId}/clips/` });
+        
+        const clips = files.map(file => ({
+            name: file.name,
+            size: file.metadata.size,
+            created: file.metadata.timeCreated,
+            updated: file.metadata.updated
+        }));
+        
+        res.json({
+            projectId,
+            clipsCount: clips.length,
+            clips: clips,
+            bucket: outputBucketName
+        });
+    } catch (error) {
+        console.error('Cache status error:', error);
+        res.status(500).json({
+            error: 'Failed to check cache status',
+            message: error.message
+        });
+    }
 });
 
 
