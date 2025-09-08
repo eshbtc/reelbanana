@@ -436,7 +436,10 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
             
             // Upload final video to GCS
             const finalVideoFile = outputBucket.file(`${projectId}/movie.mp4`);
-            await finalVideoFile.upload(finalVideoPath, { metadata: { contentType: 'video/mp4' } });
+            const videoBuffer = await fs.readFile(finalVideoPath);
+            await finalVideoFile.save(videoBuffer, { 
+                metadata: { contentType: 'video/mp4' }
+            });
             
             // Return appropriate URL
             let videoUrl;
