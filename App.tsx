@@ -11,16 +11,15 @@ import DemoWizardHelpModal from './components/DemoWizardHelpModal';
 import UserDashboard from './components/UserDashboard';
 import MyProjectsPage from './components/MyProjectsPage';
 import AdBlockerWarning from './components/AdBlockerWarning';
-import DemoUI from './components/DemoUI';
-import MetaDemoUI from './components/MetaDemoUI';
 import AdminDashboard from './components/AdminDashboard';
+import TechWriteup from './components/TechWriteup';
 import { Scene } from './types';
 import { getCurrentUser } from './services/authService';
 import { API_ENDPOINTS } from './config/apiConfig';
 import { authFetch } from './lib/authFetch';
 // Removed auto-publish; handled in MoviePlayer for one-click publish UX
 
-type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects' | 'demo' | 'meta-demo' | 'admin';
+type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects' | 'admin' | 'writeup';
 
 const App: React.FC = () => {
   // Defensive context usage to prevent null context errors
@@ -36,12 +35,11 @@ const App: React.FC = () => {
   // Initialize view based on URL path
   const getInitialView = (): View => {
     const path = window.location.pathname;
-    if (path === '/meta-demo') return 'meta-demo';
-    if (path === '/demo') return 'demo';
     if (path === '/projects') return 'projects';
     if (path === '/gallery') return 'gallery';
     if (path === '/dashboard') return 'dashboard';
     if (path === '/admin') return 'admin';
+    if (path === '/writeup') return 'writeup';
     return 'editor';
   };
 
@@ -178,7 +176,7 @@ const App: React.FC = () => {
     setVideoUrl(null);
   }, []);
 
-  const handleNavigate = useCallback((newView: 'editor' | 'gallery' | 'dashboard' | 'projects' | 'demo' | 'meta-demo') => {
+  const handleNavigate = useCallback((newView: 'editor' | 'gallery' | 'dashboard' | 'projects') => {
     setView(newView);
     
     // Update URL
@@ -238,22 +236,10 @@ const App: React.FC = () => {
         return <UserDashboard onClose={() => setView('editor')} />;
       case 'projects':
         return <MyProjectsPage />;
-      case 'demo':
-        return (
-          <DemoUI 
-            onComplete={handleRenderComplete}
-            onFail={handleRenderFail}
-          />
-        );
-      case 'meta-demo':
-        return (
-          <MetaDemoUI 
-            onComplete={handleRenderComplete}
-            onFail={handleRenderFail}
-          />
-        );
       case 'admin':
         return <AdminDashboard />;
+      case 'writeup':
+        return <TechWriteup />;
       case 'editor':
       default:
         return (
@@ -316,6 +302,14 @@ const App: React.FC = () => {
                 <button onClick={() => setShowHelp(true)} className="ml-2 text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded">
                   Help
                 </button>
+                <a 
+                  href="/writeup" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="ml-2 text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"
+                >
+                  AI Integration Details
+                </a>
               </div>
             </div>
             <StoryboardEditor 
