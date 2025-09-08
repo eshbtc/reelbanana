@@ -86,12 +86,6 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
   const [clipSeconds, setClipSeconds] = useState<number | ''>('');
   const [clipConcurrency, setClipConcurrency] = useState<number>(2);
   const [clipModel, setClipModel] = useState<string>('fal-ai/veo3/fast/image-to-video');
-  // Motion clip generation controls (default ON, backend stitches)
-  const [autoGenerateClips, setAutoGenerateClips] = useState<boolean>(true);
-  const [forceClips, setForceClips] = useState<boolean>(false);
-  const [clipSeconds, setClipSeconds] = useState<number | ''>('');
-  const [clipConcurrency, setClipConcurrency] = useState<number>(2);
-  const [clipModel, setClipModel] = useState<string>('fal-ai/veo3/fast/image-to-video');
 
   // Defensive context usage to prevent null context errors
   let confirm: any = null;
@@ -157,7 +151,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
     ].filter(Boolean);
     const checkClips = async () => {
       if (!projectId || !Array.isArray(scenes) || scenes.length === 0) return;
-      const updates: Array<{ exists: boolean; url?: string }>> = [] as any;
+      const updates: Array<{ exists: boolean; url?: string }> = [];
       for (let i = 0; i < scenes.length; i++) {
         let found = false; let url: string | undefined;
         for (const bucket of bucketCandidates) {
