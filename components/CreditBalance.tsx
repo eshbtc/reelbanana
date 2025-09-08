@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useUserCredits } from '../hooks/useUserCredits';
-import { getCreditBalance, CreditBalance } from '../services/creditService';
+import { getCreditBalance } from '../services/creditService';
+import type { CreditBalance as CreditBalanceDetail } from '../services/creditService';
 import { formatCredits } from '../utils/costCalculator';
 import { CreditPurchaseModal } from './CreditPurchaseModal';
 
@@ -14,7 +15,7 @@ export const CreditBalance: React.FC<CreditBalanceProps> = ({
   className = '',
 }) => {
   const { freeCredits, isAdmin, isLoading } = useUserCredits();
-  const [detailedBalance, setDetailedBalance] = useState<CreditBalance | null>(null);
+  const [detailedBalance, setDetailedBalance] = useState<CreditBalanceDetail | null>(null);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 

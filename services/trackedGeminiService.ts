@@ -1,7 +1,10 @@
 // Wrapper service that adds usage tracking to Gemini operations
-import { generateStory as originalGenerateStory, generateImageSequence as originalGenerateImageSequence, generateCharacter, generateStyle } from './geminiService';
+import {
+  generateStory as originalGenerateStory,
+  generateImageSequence as originalGenerateImageSequence,
+  generateCharacterAndStyle,
+} from './geminiService';
 import { OPERATION_COSTS } from '../utils/costCalculator';
-import type { CharacterOption } from '../types';
 
 /**
  * Tracked story generation with automatic credit management
@@ -50,8 +53,15 @@ export const generateStory = async (topic: string, forceUseApiKey?: boolean) => 
  */
 export const generateImageSequence = async (
   prompt: string,
-  characterRefs: CharacterOption[],
+  characterAndStyle: string,
   opts?: {
+    characterRefs?: string[];
+    backgroundImage?: string;
+    frames?: number;
+    projectId?: string;
+    forceUseApiKey?: boolean;
+    sceneIndex?: number;
+    onInfo?: (info: { cached?: boolean }) => void;
     location?: string;
     props?: string[];
     costumes?: string[];
@@ -67,7 +77,7 @@ export const generateImageSequence = async (
   }
 
   const operation = 'imageGeneration';
-  const imageCount = 5; // Default number of images
+  const imageCount = Math.min(Math.max(opts?.frames || 5, 1), 5);
   const requiredCredits = OPERATION_COSTS[operation] * imageCount;
   
   // Generate idempotency key
@@ -75,13 +85,13 @@ export const generateImageSequence = async (
   
   try {
     // Reserve credits
-    const reserveResult = await reserveCredits(operation, { imageCount }, { prompt, characterRefs, opts });
+    const reserveResult = await reserveCredits(operation, { imageCount }, { prompt, characterAndStyle, opts });
     if (!reserveResult.success) {
       throw new Error(reserveResult.error || 'Failed to reserve credits');
     }
 
     // Execute the original function
-    const result = await originalGenerateImageSequence(prompt, characterRefs, opts);
+    const result = await originalGenerateImageSequence(prompt, characterAndStyle, opts);
     
     // Mark as completed
     await completeCreditOperation(reserveResult.idempotencyKey, 'completed');
@@ -94,5 +104,5 @@ export const generateImageSequence = async (
   }
 };
 
-// Re-export other functions without tracking for now
-export { generateCharacter, generateStyle };
+// Re-export character/style generation with same name as in base service
+export { generateCharacterAndStyle };

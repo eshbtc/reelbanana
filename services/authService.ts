@@ -199,7 +199,7 @@ export const updateUserApiKey = async (userId: string, apiKey: string, email: st
 /**
  * Check if user has API key stored (server-side)
  */
-export const hasUserApiKey = async (userId: string, keyType: 'google' | 'fal' = 'google'): Promise<boolean> => {
+export const hasUserApiKey = async (userId: string, keyType: 'google' | 'fal' | 'elevenlabs' = 'google'): Promise<boolean> => {
   try {
     const response = await authFetch(`${API_ENDPOINTS.apiKey.check}?keyType=${keyType}`, { method: 'GET' });
 
@@ -364,4 +364,3 @@ export const getUserUsageStats = async (userId: string): Promise<{
     return { freeCredits: 0, totalUsage: 0, hasCustomApiKey: false };
   }
 };
-

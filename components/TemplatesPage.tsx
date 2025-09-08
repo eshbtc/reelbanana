@@ -136,7 +136,7 @@ const TemplatesPage: React.FC<TemplatesPageProps> = ({ onNavigate, onLoadTemplat
                   {template.title}
                 </h3>
                 <p className="text-gray-400 text-sm leading-relaxed">
-                  {template.description}
+                  {template.topic}
                 </p>
               </div>
 

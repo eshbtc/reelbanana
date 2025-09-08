@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { apiConfig, apiCall } from '../config/apiConfig';
+import { apiConfig } from '../config/apiConfig';
 import AdminAnalytics from './AdminAnalytics';
+import type { HealthResponse, CacheStatusResponse } from '../types/backend';
 
 interface ServiceMetrics {
   service: string;
@@ -30,6 +31,8 @@ interface CacheStats {
   render: { hits: number; misses: number; size: string };
 }
 
+type CacheEntry = { hits: number; misses: number; size: string };
+
 const AdminDashboard: React.FC = () => {
   const [services, setServices] = useState<ServiceMetrics[]>([]);
   const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
@@ -58,15 +61,15 @@ const AdminDashboard: React.FC = () => {
               },
             });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const data = await response.json();
+            const data = (await response.json()) as HealthResponse;
             return {
               service: service.name,
-              status: data.status === 'ok' || data.status === 'healthy' ? 'healthy' : 'unhealthy',
-              requests: data.metrics?.requests || 0,
-              errors: data.metrics?.errors || 0,
-              avgResponseTime: data.metrics?.avgResponseTime || 0,
+              status: data?.status === 'ok' || data?.status === 'healthy' ? 'healthy' : 'unhealthy',
+              requests: data?.metrics?.requests ?? 0,
+              errors: data?.metrics?.errors ?? 0,
+              avgResponseTime: data?.metrics?.avgResponseTime ?? 0,
               lastChecked: new Date().toISOString(),
-              dependencies: data.dependencies,
+              dependencies: data?.dependencies,
             };
           } catch (error) {
             return {
@@ -76,7 +79,7 @@ const AdminDashboard: React.FC = () => {
               errors: 1,
               avgResponseTime: 0,
               lastChecked: new Date().toISOString(),
-              error: error.message,
+              error: (error as Error)?.message,
             };
           }
         })
@@ -138,10 +141,10 @@ const AdminDashboard: React.FC = () => {
               },
             });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const data = await response.json();
+            const data = (await response.json()) as CacheStatusResponse;
             return { service: endpoint.service, data };
           } catch (error) {
-            return { service: endpoint.service, error: error.message };
+            return { service: endpoint.service, error: (error as Error)?.message };
           }
         })
       );
@@ -153,13 +156,13 @@ const AdminDashboard: React.FC = () => {
         render: { hits: 0, misses: 0, size: '0 MB' },
       };
 
-      cacheResults.forEach((result, index) => {
-        if (result.status === 'fulfilled' && result.value.data) {
+      cacheResults.forEach((result) => {
+        if (result.status === 'fulfilled' && result.value && result.value.data) {
           const service = result.value.service as keyof CacheStats;
           cacheStats[service] = {
-            hits: result.value.data.hits || 0,
-            misses: result.value.data.misses || 0,
-            size: result.value.data.size || '0 MB',
+            hits: result.value.data.hits ?? 0,
+            misses: result.value.data.misses ?? 0,
+            size: result.value.data.size ?? '0 MB',
           };
         }
       });
@@ -367,7 +370,7 @@ const AdminDashboard: React.FC = () => {
             </div>
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {Object.entries(cacheStats).map(([service, stats]) => (
+                {(Object.entries(cacheStats) as [string, CacheEntry][]).map(([service, stats]) => (
                   <div key={service} className="p-4 rounded-lg border border-gray-600">
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="font-semibold text-white capitalize">{service}</h3>

@@ -5,6 +5,7 @@ import { useConfirm } from './ConfirmProvider';
 import { getCurrentUser } from '../services/authService';
 import { API_ENDPOINTS } from '../config/apiConfig';
 import { authFetch } from '../lib/authFetch';
+import { getUserApiKeysStatus } from '../services/apiKeys';
 import { useUserCredits } from '../hooks/useUserCredits';
 import AdminHealth from './AdminHealth';
 import { apiConfig } from '../config/apiConfig';
@@ -83,28 +84,19 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ onClose }) => {
       setCustomApiKey('');
       setFalApiKey('');
       
-      // Check if user has FAL API key
+      // Check API keys status (Google, FAL, ElevenLabs)
       try {
-        const falKeyResponse = await authFetch(`${API_ENDPOINTS.apiKey.check}?keyType=fal`);
-        const falKeyData = await falKeyResponse.json();
-        setHasFalApiKey(falKeyData.hasApiKey || false);
+        const keyStatus = await getUserApiKeysStatus(currentUser.uid);
+        setHasFalApiKey(keyStatus.fal);
+        setHasElevenLabsApiKey(keyStatus.elevenlabs);
+        // Check if user has any API keys (for "Use My API Keys" checkbox)
+        setUseMyApiKeys(Boolean(stats?.hasCustomApiKey || keyStatus.google || keyStatus.fal || keyStatus.elevenlabs));
       } catch (error) {
-        console.error('Error checking FAL API key:', error);
+        console.error('Error checking API key status:', error);
         setHasFalApiKey(false);
-      }
-
-      // Check if user has ElevenLabs API key
-      try {
-        const elevenLabsKeyResponse = await authFetch(`${API_ENDPOINTS.apiKey.check}?keyType=elevenlabs`);
-        const elevenLabsKeyData = await elevenLabsKeyResponse.json();
-        setHasElevenLabsApiKey(elevenLabsKeyData.hasApiKey || false);
-      } catch (error) {
-        console.error('Error checking ElevenLabs API key:', error);
         setHasElevenLabsApiKey(false);
+        setUseMyApiKeys(Boolean(stats?.hasCustomApiKey));
       }
-
-      // Check if user has any API keys (for "Use My API Keys" checkbox)
-      setUseMyApiKeys(profile.hasCustomApiKey || false);
     } catch (error) {
       console.error('Error loading user data:', error);
     }

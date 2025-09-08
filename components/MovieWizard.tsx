@@ -5,6 +5,7 @@ import { firebaseApp } from '../lib/firebase';
 import { getCurrentUser as getUser } from '../services/authService';
 import { Check, Play, Loader2, AlertCircle, SkipForward, PlayCircle, Settings, Sparkles, Image as ImageIcon } from 'lucide-react';
 import { API_ENDPOINTS, apiCall, apiConfig } from '../config/apiConfig';
+import { uploadImage, narrate, alignCaptions, composeMusic, renderVideo } from '../services/pipelineService';
 import { getCurrentUser } from '../services/authService';
 
 interface WizardStep {
@@ -330,20 +331,13 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       return { message: 'No images to upload (using persisted images)', cached: true };
     }
 
-    await Promise.all(
-      imagesToUpload.map(image =>
-        apiCall(API_ENDPOINTS.upload, { projectId, ...image }, 'Failed to upload image')
-      )
-    );
+    await Promise.all(imagesToUpload.map(image => uploadImage({ projectId, ...image })));
     return { message: `Uploaded ${imagesToUpload.length} images` };
   };
 
   const executeNarrate = async () => {
     const narrationScript = scenes.map((s: any) => s.narration).join(' ');
-    return await apiCall(API_ENDPOINTS.narrate, 
-      { projectId, narrationScript, emotion }, 
-      'Failed to generate narration'
-    );
+    return await narrate({ projectId, narrationScript, emotion });
   };
 
   const executeAlign = async () => {
@@ -354,10 +348,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       throw new Error('No audio path from narration step');
     }
 
-    return await apiCall(API_ENDPOINTS.align,
-      { projectId, gsAudioPath },
-      'Failed to align captions'
-    );
+    return await alignCaptions({ projectId, gsAudioPath });
   };
 
   const executeCompose = async () => {
@@ -365,10 +356,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       return { message: 'Compose skipped in demo mode', cached: true };
     }
     const narrationScript = scenes.map((s: any) => s.narration).join(' ');
-    return await apiCall(API_ENDPOINTS.compose,
-      { projectId, narrationScript },
-      'Failed to compose music'
-    );
+    return await composeMusic({ projectId, narrationScript });
   };
 
   const executeRender = async () => {
@@ -401,7 +389,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       if (clipSeconds && typeof clipSeconds === 'number') body.clipSeconds = clipSeconds;
       if (clipConcurrency) body.clipConcurrency = clipConcurrency;
       if (clipModel) body.clipModel = clipModel;
-      return await apiCall(API_ENDPOINTS.render, body, 'Failed to render video');
+      return await renderVideo(body);
     } catch (e) {
       // Retry without force if needed
       const bodyRetry: any = { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: true };
@@ -410,7 +398,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       if (clipSeconds && typeof clipSeconds === 'number') bodyRetry.clipSeconds = clipSeconds;
       if (clipConcurrency) bodyRetry.clipConcurrency = clipConcurrency;
       if (clipModel) bodyRetry.clipModel = clipModel;
-      return await apiCall(API_ENDPOINTS.render, bodyRetry, 'Failed to render video (retry)');
+      return await renderVideo(bodyRetry);
     }
   };
 

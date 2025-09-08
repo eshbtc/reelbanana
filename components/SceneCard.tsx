@@ -22,7 +22,7 @@ interface SceneCardProps {
   framesPerScene?: number;
 }
 
-const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerateImage, onGenerateVariant, onUpdateScene, onUpdateSequence, framesPerScene = 5 }) => {
+const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerateImage, onGenerateVariant, onGenerateVideo, onUpdateScene, onUpdateSequence, framesPerScene = 5 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedPrompt, setEditedPrompt] = useState(scene.prompt);
   const [editedNarration, setEditedNarration] = useState(scene.narration);

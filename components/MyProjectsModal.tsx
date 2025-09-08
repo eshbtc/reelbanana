@@ -200,7 +200,7 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
       cancelText: 'Cancel'
     });
     if (!ok) return;
-    for (const id of Array.from(selectedIds)) {
+    for (const id of (Array.from(selectedIds) as string[])) {
       await handleDelete(id);
     }
     setSelectedIds(new Set());
@@ -208,7 +208,7 @@ const MyProjectsModal: React.FC<MyProjectsModalProps> = ({ isOpen, onClose }) =>
 
   const bulkDuplicate = async () => {
     if (selectedIds.size === 0) return;
-    for (const id of Array.from(selectedIds)) {
+    for (const id of (Array.from(selectedIds) as string[])) {
       await handleDuplicate(id);
     }
     setSelectedIds(new Set());

@@ -4,6 +4,7 @@ import { useToast } from './ToastProvider';
 import { Scene } from '../types';
 import { publishMovie } from '../services/firebaseService';
 import { API_ENDPOINTS, apiCall } from '../config/apiConfig';
+import { trackPlayback, markPublished } from '../services/pipelineService';
 
 interface MoviePlayerProps {
   scenes: Scene[];
@@ -145,13 +146,13 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
     
     try {
       // Send playback tracking to a monitoring endpoint
-      await apiCall(API_ENDPOINTS.playbackTracking, {
+      await trackPlayback({
         projectId,
         success,
         error,
         timestamp: new Date().toISOString(),
         videoType: usePolished ? 'polished' : 'original'
-      }, 'Failed to track playback');
+      });
       
       setPlaybackTracked(true);
     } catch (error) {
@@ -260,7 +261,7 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
       let durableUrl = actualVideoUrl;
       try {
         console.log('🎬 MoviePlayer: Requesting durable URL from render service...');
-        const r = await apiCall(API_ENDPOINTS.render, { projectId: actualProjectId, published: true }, 'Failed to finalize published video URL');
+        const r = await markPublished(actualProjectId);
         durableUrl = r?.videoUrl || actualVideoUrl;
         console.log('🎬 MoviePlayer: Durable URL received:', durableUrl);
       } catch (e) {

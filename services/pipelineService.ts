@@ -1,0 +1,94 @@
+import { apiCall, API_ENDPOINTS } from '../config/apiConfig';
+
+// Upload
+export interface UploadImageRequest {
+  projectId: string;
+  base64Image: string; // data URI
+  fileName: string; // e.g., scene-0-0.jpeg
+}
+export interface UploadImageResponse {
+  gsPath?: string;
+  cached?: boolean;
+  message?: string;
+}
+export const uploadImage = (req: UploadImageRequest) =>
+  apiCall(API_ENDPOINTS.upload, req, 'Failed to upload image') as Promise<UploadImageResponse>;
+
+// Narration
+export interface NarrateRequest {
+  projectId: string;
+  narrationScript: string;
+  emotion?: string;
+  voiceId?: string;
+  voiceName?: string;
+}
+export interface NarrateResponse {
+  gsAudioPath: string;
+  narrationScript?: string;
+  cached?: boolean;
+}
+export const narrate = (req: NarrateRequest) =>
+  apiCall(API_ENDPOINTS.narrate, req, 'Failed to generate narration') as Promise<NarrateResponse>;
+
+// Alignment
+export interface AlignRequest { projectId: string; gsAudioPath: string }
+export interface AlignResponse { srtPath: string; cached?: boolean }
+export const alignCaptions = (req: AlignRequest) =>
+  apiCall(API_ENDPOINTS.align, req, 'Failed to align captions') as Promise<AlignResponse>;
+
+// Music
+export interface ComposeRequest { projectId: string; narrationScript: string }
+export interface ComposeResponse { gsMusicPath?: string; cached?: boolean }
+export const composeMusic = (req: ComposeRequest) =>
+  apiCall(API_ENDPOINTS.compose, req, 'Failed to compose music') as Promise<ComposeResponse>;
+
+// Render
+export interface RenderSceneSpec {
+  narration: string;
+  imageCount: number;
+  camera?: string;
+  transition?: string;
+  duration?: number;
+}
+export interface RenderRequest {
+  projectId: string;
+  scenes: RenderSceneSpec[];
+  gsAudioPath?: string;
+  srtPath?: string;
+  gsMusicPath?: string;
+  useFal?: boolean;
+  force?: boolean;
+  autoGenerateClips?: boolean;
+  forceClips?: boolean;
+  clipSeconds?: number;
+  clipConcurrency?: number;
+  clipModel?: string;
+  published?: boolean;
+}
+export interface RenderResponse {
+  videoUrl: string;
+  cached?: boolean;
+}
+export const renderVideo = (req: RenderRequest) =>
+  apiCall(API_ENDPOINTS.render, req, 'Failed to render video') as Promise<RenderResponse>;
+
+export const markPublished = (projectId: string) =>
+  apiCall(API_ENDPOINTS.render, { projectId, published: true }, 'Failed to finalize published video URL') as Promise<RenderResponse>;
+
+// Polish
+export interface PolishRequest { projectId: string; videoUrl: string; userId?: string }
+export interface PolishResponse { polishedUrl?: string; cached?: boolean }
+export const polishVideo = (req: PolishRequest) =>
+  apiCall(API_ENDPOINTS.polish, req, 'Failed to polish video') as Promise<PolishResponse>;
+
+// Playback tracking
+export interface PlaybackEventRequest {
+  projectId: string;
+  success: boolean;
+  error?: string;
+  timestamp: string;
+  videoType: 'polished' | 'original';
+}
+export const trackPlayback = (req: PlaybackEventRequest) =>
+  apiCall(API_ENDPOINTS.playbackTracking, req, 'Failed to track playback') as Promise<{ ok?: boolean }>;
+

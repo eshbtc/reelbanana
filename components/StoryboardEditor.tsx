@@ -14,10 +14,23 @@ import { useUserCredits } from '../hooks/useUserCredits';
 import { CostEstimator } from './CostEstimator';
 import { OperationCostDisplay } from './OperationCostDisplay';
 import { CreditPurchaseModal } from './CreditPurchaseModal';
-import { getCurrentUser, hasUserApiKey } from '../services/authService';
+import { getCurrentUser } from '../services/authService';
 import { useToast } from './ToastProvider';
-import ReactDOM from 'react-dom';
 import { useConfirm } from './ConfirmProvider';
+
+// Augment window for optional template passthrough
+declare global {
+  interface Window {
+    templateToLoad?: {
+      id: string;
+      title: string;
+      topic: string;
+      characterAndStyle: string;
+      scenes: Array<{ prompt: string; narration: string }>;
+      characterRefs?: string[];
+    } | null;
+  }
+}
 
 interface StoryboardEditorProps {
   onPlayMovie: (scenes: Scene[]) => void;
@@ -160,13 +173,11 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
-  const [showTemplates, setShowTemplates] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [showCharacterPicker, setShowCharacterPicker] = useState(false);
   const [showCharacterGenerator, setShowCharacterGenerator] = useState(false);
   const [renderMode, setRenderMode] = useState<'draft' | 'final'>('draft');
-  const [forceUseApiKey, setForceUseApiKey] = useState(false);
-  const [userHasApiKey, setUserHasApiKey] = useState(false);
+  const [forceUseApiKey] = useState(false);
   const [isGeneratingInspiration, setIsGeneratingInspiration] = useState(false);
   const [generatedInspiration, setGeneratedInspiration] = useState<string>('');
   const [projectVideoUrl, setProjectVideoUrl] = useState<string | null>(null);
@@ -232,7 +243,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
 
   
   // Use the real-time credits hook
-  const { refreshCredits } = useUserCredits();
+  const { refreshCredits, freeCredits, isAdmin } = useUserCredits();
 
   // Effect to load project from URL on initial mount
   useEffect(() => {
@@ -263,32 +274,9 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         setIsLoadingProject(false);
     };
     loadProjectFromUrl();
-  }, []);
+  }, [onProjectIdChange, toast]);
 
-  // Check if user has API key for BYOK option
-  useEffect(() => {
-    const checkUserApiKey = async () => {
-      const currentUser = getCurrentUser();
-      if (!currentUser) {
-        setUserHasApiKey(false);
-        return;
-      }
-
-      try {
-        const hasGoogleKey = await hasUserApiKey(currentUser.uid, 'google');
-        const hasFalKey = await hasUserApiKey(currentUser.uid, 'fal');
-        console.log('🔍 BYOK Check: Google key =', hasGoogleKey, ', FAL key =', hasFalKey);
-        const hasAnyKey = hasGoogleKey || hasFalKey;
-        setUserHasApiKey(hasAnyKey);
-        console.log('🔍 BYOK: userHasApiKey =', hasAnyKey);
-      } catch (error) {
-        console.error('Error checking API key:', error);
-        setUserHasApiKey(false);
-      }
-    };
-
-    checkUserApiKey();
-  }, []);
+  // (Removed unused BYOK check state to satisfy lints while preserving functionality)
 
   const handleGenerateStory = useCallback(async (storyTopic: string) => {
     if (demoMode) {
@@ -302,7 +290,6 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
     }
 
     // Check credits before proceeding
-    const { freeCredits, isAdmin } = useUserCredits();
     const requiredCredits = 2; // 2 credits for story generation
     
     if (!isAdmin && freeCredits < requiredCredits) {
@@ -379,7 +366,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
     } finally {
       setIsLoadingStory(false);
     }
-  }, [projectName, forceUseApiKey, demoMode, productDemoMode, productImages, onProjectIdChange, refreshCredits, toast]);
+  }, [projectName, forceUseApiKey, demoMode, productDemoMode, productImages, onProjectIdChange, refreshCredits, toast, freeCredits, isAdmin]);
   
   const handleSaveProject = useCallback(async () => {
     if (!projectId) return;
@@ -441,7 +428,6 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
     // Skip autosave while images are generating to reduce churn
     const generating = scenes.some(s => s.status === 'generating');
     if (generating) return;
-    const lastToastKey = 'rb_last_autosave_toast';
     const t = setTimeout(() => {
       updateProject(projectId, { topic, characterAndStyle, scenes })
         .then(() => {
@@ -566,7 +552,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       console.error('📝 Failed to load template:', e);
       alert('Failed to load template. Please try again.');
     }
-  }, []);
+  }, [onLoadTemplate, onProjectIdChange]);
 
   const handleGenerateImageSequence = useCallback(async (id: string, prompt: string) => {
     if (demoMode) {
@@ -579,7 +565,6 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
     }
 
     // Check credits before proceeding
-    const { freeCredits, isAdmin } = useUserCredits();
     const imageCount = renderMode === 'draft' ? 3 : 5;
     const requiredCredits = 3 * imageCount; // 3 credits per image
     
@@ -634,7 +619,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
     } finally {
         setSaveStatus('idle'); // Mark project as having unsaved changes
     }
-  }, [characterAndStyle, scenes, characterRefs, renderMode]);
+  }, [characterAndStyle, scenes, characterRefs, renderMode, demoMode, projectId, forceUseApiKey, refreshCredits, toast, freeCredits, isAdmin]);
 
   // Local helper to read file as data URL
   const fileToDataUrl = (file: File): Promise<string> => {
@@ -706,7 +691,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       const errorMessage = e instanceof Error ? e.message : 'Variant generation failed.';
       setScenes(prev => prev.map(s => s.id === id ? { ...s, status: 'error', error: errorMessage } : s));
     }
-  }, [scenes, characterAndStyle, characterRefs, renderMode]);
+  }, [scenes, characterAndStyle, characterRefs, renderMode, demoMode, projectId, forceUseApiKey]);
 
 
   const handleUpdateScene = useCallback((id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration' | 'backgroundImage' | 'stylePreset' | 'voiceId' | 'voiceName' | 'videoModel' | 'sceneDirection' | 'location' | 'props' | 'costumes' | 'videoUrl' | 'videoStatus'>>) => {
@@ -735,7 +720,6 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
     }
 
     // Check credits before proceeding
-    const { freeCredits, isAdmin } = useUserCredits();
     const requiredCredits = 5; // 5 credits for video rendering
     
     if (!isAdmin && freeCredits < requiredCredits) {
@@ -767,7 +751,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       );
       toast.error('Failed to generate video');
     }
-  }, [scenes, toast]);
+  }, [scenes, toast, freeCredits, isAdmin]);
 
   const handleDeleteScene = useCallback((id: string) => {
     setScenes(prevScenes => prevScenes.filter(s => s.id !== id));
@@ -839,7 +823,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
               </button>
             </div>
           </div>
-        )}
+          )}
         
         {/* Product Demo Mode Toggle */}
         {!demoMode && (
@@ -1306,8 +1290,8 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                     Play My Movie!
                   </button>
                 </div>
-                  
-                  {projectVideoUrl && (
+                
+                {projectVideoUrl && (
                     <button
                       onClick={() => {
                         // Navigate to player view with the existing video
@@ -1334,67 +1318,65 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                   <p className="text-sm text-green-400 mt-2">✅ Video already generated! Click "View Generated Video" to watch it.</p>
                 )}
               </div>
-            </div>
-            <TemplatesModal open={showTemplatePicker} onClose={() => setShowTemplatePicker(false)} onPick={handleLoadTemplate} />
-            <CharacterPicker
-              topic={topic || 'an adventurous banana'}
-              open={showCharacterPicker}
-              onClose={() => setShowCharacterPicker(false)}
-              currentDescription={characterAndStyle}
-              currentImages={characterRefs}
-              onPick={(opt) => {
-                setCharacterAndStyle(opt.description);
-                setCharacterRefs(opt.images);
-                setShowCharacterPicker(false);
+          <TemplatesModal open={showTemplatePicker} onClose={() => setShowTemplatePicker(false)} onPick={handleLoadTemplate} />
+          <CharacterPicker
+            topic={topic || 'an adventurous banana'}
+            open={showCharacterPicker}
+            onClose={() => setShowCharacterPicker(false)}
+            currentDescription={characterAndStyle}
+            currentImages={characterRefs}
+            onPick={(opt) => {
+              setCharacterAndStyle(opt.description);
+              setCharacterRefs(opt.images);
+              setShowCharacterPicker(false);
+              setSaveStatus('idle');
+              // Persist to project if available
+              if (projectId) {
+                try {
+                  const updateData: any = { 
+                    topic, 
+                    characterAndStyle: opt.description, 
+                    scenes 
+                  };
+                  // Only add characterRefs if opt.images exists and is not empty
+                  if (opt.images && opt.images.length > 0) {
+                    updateData.characterRefs = opt.images;
+                  }
+                  updateProject(projectId, updateData);
+                } catch (error) {
+                  console.error('Error updating project with character selection:', error);
+                }
+              }
+            }}
+          />
+          <CharacterGenerator
+            topic={topic || 'an adventurous character'}
+            open={showCharacterGenerator}
+            onClose={() => setShowCharacterGenerator(false)}
+            onGenerate={(characters) => {
+              if (characters.length > 0) {
+                setCharacterAndStyle(characters[0].description);
+                setCharacterRefs(characters[0].images);
                 setSaveStatus('idle');
                 // Persist to project if available
                 if (projectId) {
                   try {
                     const updateData: any = { 
                       topic, 
-                      characterAndStyle: opt.description, 
+                      characterAndStyle: characters[0].description, 
                       scenes 
                     };
-                    // Only add characterRefs if opt.images exists and is not empty
-                    if (opt.images && opt.images.length > 0) {
-                      updateData.characterRefs = opt.images;
+                    if (characters[0].images && characters[0].images.length > 0) {
+                      updateData.characterRefs = characters[0].images;
                     }
                     updateProject(projectId, updateData);
                   } catch (error) {
-                    console.error('Error updating project with character selection:', error);
+                    console.error('Error updating project with generated character:', error);
                   }
                 }
-              }}
-            />
-            <CharacterGenerator
-              topic={topic || 'an adventurous character'}
-              open={showCharacterGenerator}
-              onClose={() => setShowCharacterGenerator(false)}
-              onGenerate={(characters) => {
-                if (characters.length > 0) {
-                  setCharacterAndStyle(characters[0].description);
-                  setCharacterRefs(characters[0].images);
-                  setSaveStatus('idle');
-                  // Persist to project if available
-                  if (projectId) {
-                    try {
-                      const updateData: any = { 
-                        topic, 
-                        characterAndStyle: characters[0].description, 
-                        scenes 
-                      };
-                      if (characters[0].images && characters[0].images.length > 0) {
-                        updateData.characterRefs = characters[0].images;
-                      }
-                      updateProject(projectId, updateData);
-                    } catch (error) {
-                      console.error('Error updating project with generated character:', error);
-                    }
-                  }
-                }
-                setShowCharacterGenerator(false);
-              }}
-            />
+              }
+            }}
+          />
         </>
       )}
 

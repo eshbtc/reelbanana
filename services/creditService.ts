@@ -6,6 +6,7 @@ const db = getFirestore(firebaseApp);
 import { getCurrentUser } from './authService';
 import { OPERATION_COSTS, validateCredits, getOperationCost } from '../utils/costCalculator';
 import { API_ENDPOINTS, apiCall } from '../config/apiConfig';
+import { purchaseCreditsApi, type PurchaseCreditsResponse } from './billingService';
 import { handleBillingError, retryOperation, getUserErrorMessage } from './billingErrorHandler';
 
 // Types for credit operations
@@ -309,13 +310,10 @@ export const getCreditBalance = async (userId?: string): Promise<CreditBalance> 
 export const purchaseCredits = async (
   packageId: string,
   paymentMethodId: string
-): Promise<{ success: boolean; transactionId?: string; error?: string }> => {
+): Promise<PurchaseCreditsResponse> => {
   try {
     const response = await retryOperation(async () => {
-      return await apiCall(API_ENDPOINTS.stripe.purchaseCredits, {
-        packageId,
-        paymentMethodId,
-      }, 'Failed to purchase credits');
+      return await purchaseCreditsApi({ packageId, paymentMethodId });
     }, 3, 1000);
 
     // Update user's credit balance

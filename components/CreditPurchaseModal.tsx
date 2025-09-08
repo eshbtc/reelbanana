@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Modal } from './Modal';
-import { Spinner } from './Spinner';
+import Modal from './Modal';
+import Spinner from './Spinner';
 import { CREDIT_PACKAGES, formatPrice, formatCredits } from '../utils/costCalculator';
 import { purchaseCredits } from '../services/creditService';
 import { useUserCredits } from '../hooks/useUserCredits';

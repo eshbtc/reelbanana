@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getCreditHistory, CreditTransaction } from '../services/creditService';
 import { useUserCredits } from '../hooks/useUserCredits';
 import { formatCredits, formatPrice } from '../utils/costCalculator';
-import { Spinner } from './Spinner';
+import Spinner from './Spinner';
 
 interface AdminUsageDashboardProps {
   className?: string;

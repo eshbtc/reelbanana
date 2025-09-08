@@ -51,6 +51,7 @@ const cachedMessages: Record<RenderStage, string> = {
 };
 
 import { API_ENDPOINTS, apiCall } from './config/apiConfig';
+import { uploadImage, narrate, alignCaptions, composeMusic, renderVideo, polishVideo } from './services/pipelineService';
 import { useToast } from './components/ToastProvider';
 
 const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'neutral', proPolish = false, projectId: providedProjectId, demoMode = false, onRenderComplete, onRenderFail }) => {
@@ -152,10 +153,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
               isValidDataUri: image.base64Image.startsWith('data:image/'),
               dataUriPrefix: image.base64Image.substring(0, 50)
             });
-            await apiCall(API_ENDPOINTS.upload, 
-              { projectId, ...image }, 
-              'Failed to upload image'
-            );
+            await uploadImage({ projectId, ...image });
             uploadedCount++;
             setProgress(Math.round((uploadedCount / allImageUrls.length) * 100));
             console.log(`🎬 Upload debug - Successfully uploaded image ${index + 1}`);
@@ -195,10 +193,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
         setStage('narrating');
         setUseCachedMessage(false); // Reset for new stage
         const narrationScript = scenes.map(s => s.narration).join(' ');
-        const narrationResponse = await apiCall(API_ENDPOINTS.narrate, 
-          { projectId, narrationScript, emotion }, 
-          'Failed to generate narration'
-        );
+        const narrationResponse = await narrate({ projectId, narrationScript, emotion });
         const { gsAudioPath } = narrationResponse;
         
         // Show cached message if response indicates cached result
@@ -209,10 +204,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
         // 4. Align captions
         setStage('aligning');
         setUseCachedMessage(false); // Reset for new stage
-        const alignResponse = await apiCall(API_ENDPOINTS.align, 
-          { projectId, gsAudioPath }, 
-          'Failed to align captions'
-        );
+        const alignResponse = await alignCaptions({ projectId, gsAudioPath });
         const { srtPath } = alignResponse;
         
         if (alignResponse.cached) {
@@ -224,10 +216,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
         if (!demoMode) {
           setStage('composing');
           setUseCachedMessage(false); // Reset for new stage
-          const composeResponse = await apiCall(API_ENDPOINTS.compose, 
-            { projectId, narrationScript }, 
-            'Failed to compose music'
-          );
+          const composeResponse = await composeMusic({ projectId, narrationScript });
           gsMusicPath = composeResponse?.gsMusicPath;
           if (composeResponse.cached) {
             setUseCachedMessage(true);
@@ -245,11 +234,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
             duration: scene.duration || 3,
         }));
         // Assemble with per‑scene motion clips (auto‑generated server‑side), precise captions, and audio
-        const renderResponse: any = await apiCall(
-          API_ENDPOINTS.render,
-          { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: false, force: true },
-          'Failed to render video'
-        );
+        const renderResponse = await renderVideo({ projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: false, force: true });
         const { videoUrl } = renderResponse;
         
         if (renderResponse.cached) {
@@ -265,11 +250,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
           setUseCachedMessage(false); // Reset for new stage
           try {
             const currentUser = getCurrentUser();
-            const polishResponse = await apiCall(API_ENDPOINTS.polish, { 
-              projectId, 
-              videoUrl, 
-              userId: currentUser?.uid 
-            }, 'Failed to polish video');
+            const polishResponse = await polishVideo({ projectId, videoUrl, userId: currentUser?.uid });
             const { polishedUrl } = polishResponse;
             
             if (polishResponse.cached) {
