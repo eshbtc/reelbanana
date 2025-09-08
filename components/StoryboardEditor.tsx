@@ -61,6 +61,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   const [userHasApiKey, setUserHasApiKey] = useState(false);
   const [isGeneratingInspiration, setIsGeneratingInspiration] = useState(false);
   const [generatedInspiration, setGeneratedInspiration] = useState<string>('');
+  const [projectVideoUrl, setProjectVideoUrl] = useState<string | null>(null);
   
   // Defensive context usage to prevent null context errors
   let toast: any = null;
@@ -137,6 +138,8 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                     setProjectName(projectData.topic); // Use topic as project name for existing projects
                     setCharacterAndStyle(projectData.characterAndStyle);
                     setScenes(projectData.scenes);
+                    // Load video URL if it exists
+                    setProjectVideoUrl((projectData as any).videoUrl || null);
                 } else {
                     toast.info('Project not found. You can start a new one.');
                     window.history.replaceState({}, '', window.location.pathname);
@@ -870,18 +873,41 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
               <div className="text-center">
                  <h2 className="text-2xl font-bold text-amber-400 mb-4">Create Your Movie</h2>
                  <p className="text-gray-400 mb-6 max-w-2xl mx-auto">Once you have generated images for your scenes, you can assemble them into a short movie. The backend will narrate, add captions, and render your video.</p>
-                <button
-                  onClick={() => onPlayMovie(scenes)}
-                  disabled={demoMode ? !hasAnyImages : !hasGeneratedImages}
-                  className="bg-green-600 hover:bg-green-700 text-white font-extrabold text-xl py-4 px-10 rounded-lg transition-all disabled:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Play My Movie!
-                </button>
+                
+                <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                  <button
+                    onClick={() => onPlayMovie(scenes)}
+                    disabled={demoMode ? !hasAnyImages : !hasGeneratedImages}
+                    className="bg-green-600 hover:bg-green-700 text-white font-extrabold text-xl py-4 px-10 rounded-lg transition-all disabled:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Play My Movie!
+                  </button>
+                  
+                  {projectVideoUrl && (
+                    <button
+                      onClick={() => {
+                        // Navigate to player view with the existing video
+                        window.history.pushState({}, '', `?projectId=${projectId}&view=player`);
+                        window.location.reload();
+                      }}
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xl py-4 px-10 rounded-lg transition-all flex items-center gap-2"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h1m4 0h1m-6-8h8a2 2 0 012 2v8a2 2 0 01-2 2H8a2 2 0 01-2-2V8a2 2 0 012-2z" />
+                      </svg>
+                      View Generated Video
+                    </button>
+                  )}
+                </div>
+                
                 {!hasGeneratedImages && !demoMode && (
                   <p className="text-sm text-gray-500 mt-2">Generate at least one image to enable this button.</p>
                 )}
                 {demoMode && (
                   <p className="text-sm text-amber-400 mt-1">Demo Mode: Renders with narration and captions (no music or polish).</p>
+                )}
+                {projectVideoUrl && (
+                  <p className="text-sm text-green-400 mt-2">✅ Video already generated! Click "View Generated Video" to watch it.</p>
                 )}
               </div>
             </div>

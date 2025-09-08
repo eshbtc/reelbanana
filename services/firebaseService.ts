@@ -37,6 +37,11 @@ interface ProjectData {
         description: string;
         images: string[];
     };
+    // Video URLs for generated videos
+    videoUrl?: string;
+    videoUrlOriginal?: string;
+    videoUrlPolished?: string;
+    videoGeneratedAt?: any; // Firestore timestamp
 }
 
 /**
@@ -212,6 +217,57 @@ const removeUndefinedValues = (obj: any): any => {
     }
     
     return obj;
+};
+
+/**
+ * Updates a project with video URLs after video generation.
+ * @param projectId The ID of the project to update.
+ * @param videoData The video URLs and metadata.
+ */
+export const updateProjectWithVideo = async (projectId: string, videoData: {
+    videoUrl?: string;
+    videoUrlOriginal?: string;
+    videoUrlPolished?: string;
+}): Promise<void> => {
+    try {
+        const currentUser = getCurrentUser();
+        if (!currentUser) {
+            console.warn('updateProjectWithVideo: no authenticated user; skipping update');
+            return;
+        }
+
+        const docRef = doc(db, PROJECTS_COLLECTION, projectId);
+        
+        // Ownership guard: only allow the owner to update
+        try {
+            const existing = await getDoc(docRef);
+            const ownerId = (existing.exists() ? (existing.data() as any).userId : undefined) as string | undefined;
+            if (ownerId && ownerId !== currentUser.uid) {
+                console.warn(`updateProjectWithVideo: user ${currentUser.uid} is not owner of project ${projectId}; skipping update`);
+                return;
+            }
+        } catch (e) {
+            // Non-fatal: continue; rules will still enforce
+        }
+        
+        const updateData: any = {
+            ...videoData,
+            videoGeneratedAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        };
+
+        // Ensure userId is present to satisfy Firestore rules on updates
+        try {
+            if (currentUser?.uid) updateData.userId = currentUser.uid;
+        } catch {}
+        
+        console.log('Updating project with video URLs:', updateData);
+        await updateDoc(docRef, updateData);
+        
+    } catch (error) {
+        console.error("Error updating project with video URLs:", error);
+        throw new Error("Could not update project with video data.");
+    }
 };
 
 export const updateProject = async (projectId: string, data: ProjectData): Promise<void> => {

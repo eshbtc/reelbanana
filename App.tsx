@@ -121,8 +121,50 @@ const App: React.FC = () => {
       setVideoUrlPolished(p || videoUrl);
     } catch {}
     setProjectId(actualProjectId || null);
+    
+    // Save video URLs to project data
+    if (actualProjectId) {
+      try {
+        const { updateProjectWithVideo } = await import('./services/firebaseService');
+        await updateProjectWithVideo(actualProjectId, {
+          videoUrl,
+          videoUrlOriginal: sessionStorage.getItem('lastRenderOriginalUrl') || videoUrl,
+          videoUrlPolished: sessionStorage.getItem('lastRenderPolishedUrl') || videoUrl
+        });
+        console.log('✅ Video URLs saved to project data');
+      } catch (error) {
+        console.warn('Failed to save video URLs to project:', error);
+      }
+    }
+    
     setView('player');
   }, [scenes]);
+
+  // Effect to handle URL parameters for player view
+  useEffect(() => {
+    const handleUrlParams = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const projectIdParam = urlParams.get('projectId');
+      const viewParam = urlParams.get('view');
+      
+      if (projectIdParam && viewParam === 'player') {
+        try {
+          const { getProject } = await import('./services/firebaseService');
+          const projectData = await getProject(projectIdParam);
+          if (projectData && (projectData as any).videoUrl) {
+            setProjectId(projectIdParam);
+            setVideoUrl((projectData as any).videoUrl);
+            setVideoUrlOriginal((projectData as any).videoUrlOriginal || (projectData as any).videoUrl);
+            setVideoUrlPolished((projectData as any).videoUrlPolished || (projectData as any).videoUrl);
+            setView('player');
+          }
+        } catch (error) {
+          console.error('Failed to load project for player view:', error);
+        }
+      }
+    };
+    handleUrlParams();
+  }, []);
 
   // Persist preferences
   useEffect(() => { try { localStorage.setItem('rb_useWizardMode', String(useWizardMode)); } catch {} }, [useWizardMode]);

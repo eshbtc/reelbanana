@@ -146,14 +146,8 @@ const DemoUI: React.FC<DemoUIProps> = ({ onComplete, onFail }) => {
       }, 'Video rendering failed');
       updateProgress(96, 'Composing final video...');
       
-      // Apply polish
-      updateProgress(98, 'Applying pro polish...');
-      const polishResult = await apiCall(API_ENDPOINTS.polish, {
-        projectId: newProjectId,
-        videoUrl: renderResult.videoUrl
-      }, 'Polish failed');
-      
-      const finalVideoUrl = polishResult.polishedUrl || renderResult.videoUrl;
+      // Finalize
+      const finalVideoUrl = renderResult.videoUrl;
       setVideoUrl(finalVideoUrl);
       
       updateProgress(100, 'Complete!');

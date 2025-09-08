@@ -200,14 +200,8 @@ const MetaDemoUI: React.FC<MetaDemoUIProps> = ({ onComplete, onFail }) => {
       }, 'Video rendering failed');
       updateProgress(96, 'Composing final video...');
       
-      // Apply polish
-      updateProgress(98, 'Applying final polish...');
-      const polishResult = await apiCall(API_ENDPOINTS.polish, {
-        projectId: newProjectId,
-        videoUrl: renderResult.videoUrl
-      }, 'Polish failed');
-      
-      const finalVideoUrl = polishResult.polishedUrl || renderResult.videoUrl;
+      // Finalize
+      const finalVideoUrl = renderResult.videoUrl;
       setVideoUrl(finalVideoUrl);
       
       updateProgress(100, 'Meta demo complete!');
