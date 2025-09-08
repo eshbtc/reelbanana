@@ -99,10 +99,12 @@ GEMINI.md
 REMEDIATION_PLAN.md
 HACKATHON_README.md
 SUBMISSION_README.md
+docs/HYPE_MODE_HANDOFF.md
 
 # Development scripts and tools
 scripts/
 demo-config.json
+youtube_description.txt
 
 # Large media files
 *.gif
