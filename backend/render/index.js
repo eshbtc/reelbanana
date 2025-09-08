@@ -14,6 +14,9 @@ const { createSLIMiddleware, SLIMonitor } = require('./shared/sliMonitor');
 
 const app = express();
 
+// Helper function to extract video URL from FAL response
+const pickUrl = (j) => j?.output_url || j?.result?.url || j?.data?.url || j?.output?.url || j?.video?.url || null;
+
 // Trust proxy for Cloud Run (fixes X-Forwarded-For header issue for IP rate limiting)
 app.set('trust proxy', true);
 
@@ -240,9 +243,10 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         const isSingleScene = (scenes || []).length <= 1;
         const isImageToVideo = falRenderModel.includes('image-to-video');
         
-        // Use FAL if explicitly requested AND (short video OR single scene OR image-to-video model)
-        const useFalEngine = (typeof useFal === 'boolean') ? !!useFal && (isShortVideo || isSingleScene || isImageToVideo) : false;
-        console.log(`Render engine selected: ${useFalEngine ? 'FAL' : 'FFmpeg'} (env=${renderEngineEnv}, body.useFal=${useFal}, duration=${totalDuration}s, scenes=${(scenes || []).length})`);
+        // Use FAL for per-scene clip generation + FFmpeg compose for assembly
+        // This approach: 1) Generate 8s clips per scene with FAL, 2) Compose final video with FAL FFmpeg API
+        const useFalEngine = (typeof useFal === 'boolean') ? !!useFal : false;
+        console.log(`Render engine selected: ${useFalEngine ? 'FAL (per-scene + compose)' : 'FFmpeg'} (env=${renderEngineEnv}, body.useFal=${useFal}, duration=${totalDuration}s, scenes=${(scenes || []).length})`);
         
         if (useFalEngine) {
             if (!falApiKey) {
@@ -252,221 +256,173 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                 return sendError(req, res, 500, 'CONFIG', 'FAL_RENDER_MODEL is not configured');
             }
 
-            // Early cache path as usual
-            const outputBucket = storage.bucket(outputBucketName);
-            const finalVideoFile = outputBucket.file(`${projectId}/movie.mp4`);
-            const [exists] = await finalVideoFile.exists();
-            if (exists && !req.body.force) {
-                const isPublishedCached = req.body.published || false;
-                let videoUrlCached;
-                if (isPublishedCached) {
-                    try { await finalVideoFile.makePublic(); } catch (_) {}
-                    videoUrlCached = finalVideoFile.publicUrl();
-                } else {
-                    const [signedUrl] = await finalVideoFile.getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 7*24*60*60*1000 });
-                    videoUrlCached = signedUrl;
-                }
-                req.sliMonitor.recordSuccess('render', true, { projectId, cached: true, engine: 'fal' });
-                req.sliMonitor.recordLatency('render', Date.now() - renderStartTime, { projectId, cached: true, engine: 'fal' });
-                return res.status(200).json({ videoUrl: videoUrlCached, cached: true, skipPolish: true });
-            }
-
+            // FAL Per-Scene + Compose Approach
+            // 1. Generate 8-second clips for each scene using FAL
+            // 2. Use FAL's FFmpeg compose API to merge clips with audio/captions
+            
             if (!scenes || !gsAudioPath || !srtPath) {
                 return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required fields for rendering.');
             }
 
-            // Determine plan → resolution
-            let plan = 'free';
-            try {
-                const authHeader = req.headers.authorization || '';
-                if (authHeader.startsWith('Bearer ')) {
-                    const idToken = authHeader.split('Bearer ')[1];
-                    const decoded = await admin.auth().verifyIdToken(idToken);
-                    const userDoc = await admin.firestore().collection('users').doc(decoded.uid).get();
-                    if (userDoc.exists) plan = String(userDoc.data().plan || 'free').toLowerCase();
-                }
-            } catch (e) { console.warn('Render plan lookup failed; defaulting to free'); }
-            const PLAN_RES = { free: { w: 854, h: 480 }, plus: { w: 1280, h: 720 }, pro: { w: 1920, h: 1080 }, studio: { w: 3840, h: 2160 } };
-            const { w: targetW, h: targetH } = PLAN_RES[plan] || PLAN_RES.free;
+            console.log(`FAL per-scene approach: generating ${scenes.length} clips, then composing final video`);
 
-            // Helper: parse gs://bucket/path → { bucket, path }
+            // Step 1: Generate clips for each scene
+            const { fal } = await import('@fal-ai/client');
+            fal.config({ credentials: falApiKey });
+            
+            const outputBucket = storage.bucket(outputBucketName);
+            const inputBucket = storage.bucket(inputBucketName);
+            const clipUrls = [];
+            
+            for (let i = 0; i < scenes.length; i++) {
+                console.log(`Generating clip for scene ${i}...`);
+                
+                // Find scene image
+                const [files] = await inputBucket.getFiles({ prefix: `${projectId}/scene-${i}-` });
+                const first = files && files[0];
+                if (!first) {
+                    console.warn(`No image found for scene ${i}, skipping`);
+                    continue;
+                }
+                
+                // Get signed URL for image
+                const [signedUrl] = await inputBucket.file(first.name).getSignedUrl({ 
+                    version: 'v4', 
+                    action: 'read', 
+                    expires: Date.now() + 60*60*1000 
+                });
+                
+                // Generate clip using FAL
+                const falInput = {
+                    prompt: scenes[i].prompt || 'Cinematic parallax over UI; subtle camera motion; modern tech vibe.',
+                    image_url: signedUrl,
+                    duration: 8, // 8 seconds per clip
+                    seconds: 8,
+                    video_length: 8
+                };
+                
+                try {
+                    const result = await fal.subscribe(falRenderModel, { input: falInput, logs: false });
+                    const clipUrl = pickUrl(result?.data);
+                    if (!clipUrl) {
+                        throw new Error('FAL did not return a video URL');
+                    }
+                    clipUrls.push(clipUrl);
+                    console.log(`Scene ${i} clip generated: ${clipUrl}`);
+                } catch (e) {
+                    console.error(`Failed to generate clip for scene ${i}:`, e?.message || e);
+                    return sendError(req, res, 500, 'FAL_CLIP_FAILURE', `Failed to generate clip for scene ${i}`, e?.message || String(e));
+                }
+            }
+            
+            if (clipUrls.length === 0) {
+                return sendError(req, res, 500, 'FAL_CLIP_FAILURE', 'No clips were generated');
+            }
+            
+            // Step 2: Compose final video using FAL's FFmpeg compose API
+            console.log(`Composing final video from ${clipUrls.length} clips...`);
+            
+            // Get signed URLs for audio and captions
             const parseGs = (gs) => {
                 if (!gs || !gs.startsWith('gs://')) return null;
                 const rest = gs.substring('gs://'.length);
                 const firstSlash = rest.indexOf('/');
-                if (firstSlash < 0) return null;
                 return { bucket: rest.substring(0, firstSlash), path: rest.substring(firstSlash + 1) };
             };
+            
             const signReadUrl = async ({ bucket, path }) => {
                 const file = storage.bucket(bucket).file(path);
                 const [url] = await file.getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 60 * 60 * 1000 });
                 return url;
             };
-
-            // List images and pick first for each scene index
-            const inputBucket = storage.bucket(inputBucketName);
-            const imageFiles = (await inputBucket.getFiles({ prefix: `${projectId}/scene-` }))[0];
-            const pickFirstForIndex = (idx) => {
-                const match = imageFiles.find(f => path.basename(f.name).startsWith(`scene-${idx}-`));
-                return match || null;
-            };
-
-            const imageUrls = [];
-            for (let i = 0; i < scenes.length; i++) {
-                const file = pickFirstForIndex(i);
-                if (!file) {
-                    console.warn(`FAL render: no image for scene ${i}`);
-                    continue;
-                }
-                const signed = await inputBucket.file(file.name).getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 60*60*1000 });
-                imageUrls.push({ url: signed[0], duration: scenes[i].duration || 3, camera: scenes[i].camera || 'static', transition: scenes[i].transition || 'fade' });
-            }
-
+            
             const audioObj = parseGs(gsAudioPath);
             const srtObj = parseGs(srtPath);
             const musicObj = gsMusicPath ? parseGs(gsMusicPath) : null;
+            
             const audioUrl = audioObj ? await signReadUrl(audioObj) : null;
             const srtUrl = srtObj ? await signReadUrl(srtObj) : null;
             const musicUrl = musicObj ? await signReadUrl(musicObj) : null;
-
-            // Prepare input for FAL model
-            const totalDuration = (scenes || []).reduce((sum, s) => sum + (s?.duration || 3), 0);
-            let falInput;
-            if (falRenderModel.includes('veo3/fast/image-to-video') || falRenderModel.includes('image-to-video')) {
-                // Veo 3 Fast Image-to-Video expects a single image_url and a prompt
-                const inputBucket = storage.bucket(inputBucketName);
-                const imageFiles = (await inputBucket.getFiles({ prefix: `${projectId}/scene-` }))[0];
-                const first = imageFiles.find(f => /scene-0-/.test(path.basename(f.name))) || imageFiles[0];
-                if (!first) {
-                    return sendError(req, res, 400, 'INVALID_ARGUMENT', 'No scene images found for Veo image-to-video');
-                }
-                const [signedUrl] = await inputBucket.file(first.name).getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 60*60*1000 });
-                falInput = {
-                    prompt: req.body.veoPrompt || `Create a short cinematic video for: ${String((req.body && req.body.prompt) || '').slice(0,200) || 'story'}`,
-                    image_url: signedUrl
-                };
-                // Allow caller to specify clip duration for image-to-video models
-                try {
-                  const secs = parseInt(String(req.body.falVideoSeconds || process.env.FAL_IMAGE_TO_VIDEO_SECONDS || ''), 10);
-                  if (!isNaN(secs) && secs > 0) {
-                    falInput.duration = secs;
-                    falInput.seconds = secs;
-                    falInput.video_length = secs;
-                  }
-                } catch (_) {}
-                // Raw overrides for forward-compatibility with new models
-                if (req.body && typeof req.body.falInput === 'object') {
-                  try { falInput = { ...falInput, ...req.body.falInput }; } catch (_) {}
-                }
-            } else if (falRenderModel.includes('veo3/fast') || falRenderModel.includes('veo')) {
-                // Veo 3 Fast text-to-video expects just a prompt
-                falInput = {
-                    prompt: req.body.veoPrompt || 'A cinematic short illustrating the provided narration in two short scenes.'
-                };
-            } else {
-                // Generic compose input (images + audio)
-                falInput = {
-                    images: imageUrls,
-                    narrationUrl: audioUrl,
-                    musicUrl: musicUrl,
-                    captionsUrl: srtUrl,
-                    resolution: { width: targetW, height: targetH },
-                    published: !!req.body.published
-                };
-            }
             
-            // Before calling FAL: global cache by manifest (fal engine)
-            const falManifest = {
-              v: 1,
-              engine: 'fal',
-              model: falRenderModel,
-              prompt: req.body.veoPrompt || null,
-              plan,
-              size: { width: targetW, height: targetH },
-              inputs: {
-                images: await Promise.all(imageUrls.map(async (it, idx) => {
-                  const f = pickFirstForIndex(idx);
-                  if (!f) return '';
-                  try { const [m] = await inputBucket.file(f.name).getMetadata(); return m.md5Hash || ''; } catch { return ''; }
-                })),
-                audio: audioObj ? (await (async()=>{ try { const [m]=await storage.bucket(audioObj.bucket).file(audioObj.path).getMetadata(); return m.md5Hash||'';} catch {return '';} })()) : '',
-                music: musicObj ? (await (async()=>{ try { const [m]=await storage.bucket(musicObj.bucket).file(musicObj.path).getMetadata(); return m.md5Hash||'';} catch {return '';} })()) : '',
-                captions: srtObj ? (await (async()=>{ try { const [m]=await storage.bucket(srtObj.bucket).file(srtObj.path).getMetadata(); return m.md5Hash||'';} catch {return '';} })()) : ''
-              }
+            // Prepare compose input
+            const composeInput = {
+                tracks: [
+                    // Video tracks (clips)
+                    ...clipUrls.map((url, index) => ({
+                        type: 'video',
+                        url: url,
+                        start: index * 8, // Each clip is 8 seconds
+                        duration: 8
+                    })),
+                    // Audio track (narration)
+                    ...(audioUrl ? [{
+                        type: 'audio',
+                        url: audioUrl,
+                        start: 0
+                    }] : []),
+                    // Music track (if available)
+                    ...(musicUrl ? [{
+                        type: 'audio',
+                        url: musicUrl,
+                        start: 0,
+                        volume: 0.3 // Lower volume for background music
+                    }] : [])
+                ],
+                output: {
+                    format: 'mp4',
+                    resolution: { width: 854, height: 480 } // Default resolution
+                }
             };
-            const falManifestHash = createHash('sha256').update(JSON.stringify(falManifest)).digest('hex');
-            const falCacheFile = outputBucket.file(`cache/render/${falManifestHash}.mp4`);
-            const [falCacheExists] = await falCacheFile.exists();
-            if (falCacheExists) {
-              await falCacheFile.copy(finalVideoFile);
-              const isPub = req.body.published || false;
-              let url;
-              if (isPub) { try { await finalVideoFile.makePublic(); } catch(_){} url = finalVideoFile.publicUrl(); }
-              else { const [u] = await finalVideoFile.getSignedUrl({ version:'v4', action:'read', expires: Date.now()+7*24*60*60*1000 }); url = u; }
-              req.sliMonitor.recordSuccess('render', true, { projectId, cached: true, engine: 'fal', cacheId: falManifestHash });
-              req.sliMonitor.recordLatency('render', Date.now() - renderStartTime, { projectId, cached: true, engine: 'fal' });
-              return res.status(200).json({ videoUrl: url, cached: true, engine: 'fal', skipPolish: true });
-            }
-
-            // Call FAL (queue API for long-running models like Veo 3 Fast)
-            const { fal } = await import('@fal-ai/client');
-            fal.config({ credentials: falApiKey });
-            let outputUrl = null;
+            
             try {
-                const pickUrl = (j) => j?.output_url || j?.result?.url || j?.data?.url || j?.output?.url || j?.video?.url || null;
-                if (falRenderModel.includes('fal-ai/veo3/fast')) {
-                    const submit = await fal.queue.submit(falRenderModel, { input: falInput, logs: false });
-                    const requestId = submit?.request_id || submit?.requestId;
-                    if (!requestId) throw new Error('Missing FAL request id');
-                    const timeoutMs = parseInt(process.env.FAL_RENDER_TIMEOUT_MS || '600000', 10); // 10 minutes
-                    const pollMs = parseInt(process.env.FAL_RENDER_POLL_MS || '3000', 10);
-                    const start = Date.now();
-                    while (Date.now() - start < timeoutMs) {
-                        const st = await fal.queue.status(falRenderModel, { requestId, logs: false });
-                        const s = (st?.status || '').toString().toUpperCase();
-                        if (s === 'COMPLETED') break;
-                        if (s === 'FAILED' || s === 'ERROR') throw new Error(`FAL status ${s}`);
-                        await new Promise(r => setTimeout(r, pollMs));
-                    }
-                    const result = await fal.queue.result(falRenderModel, { requestId });
-                    outputUrl = pickUrl(result?.data);
+                const composeResult = await fal.subscribe('fal-ai/ffmpeg-api/compose', { 
+                    input: composeInput, 
+                    logs: false 
+                });
+                const finalVideoUrl = pickUrl(composeResult?.data);
+                if (!finalVideoUrl) {
+                    throw new Error('FAL compose did not return a video URL');
+                }
+                
+                // Download and save to GCS
+                const remoteRes = await fetch(finalVideoUrl);
+                if (!remoteRes.ok) {
+                    throw new Error(`Failed to download composed video: ${remoteRes.status}`);
+                }
+                
+                const arrayBuffer = await remoteRes.arrayBuffer();
+                const finalVideoFile = outputBucket.file(`${projectId}/movie.mp4`);
+                await finalVideoFile.save(Buffer.from(arrayBuffer), { metadata: { contentType: 'video/mp4' } });
+                
+                // Return appropriate URL
+                let videoUrl;
+                if (req.body.published) {
+                    try {
+                        await finalVideoFile.makePublic();
+                    } catch (_) {}
+                    videoUrl = finalVideoFile.publicUrl();
                 } else {
-                    // Subscribe path for simpler/fast models
-                    const result = await fal.subscribe(falRenderModel, { input: falInput, logs: false });
-                    outputUrl = pickUrl(result?.data);
+                    const [signedUrl] = await finalVideoFile.getSignedUrl({
+                        version: 'v4',
+                        action: 'read',
+                        expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+                    });
+                    videoUrl = signedUrl;
                 }
-                if (!outputUrl) {
-                    return sendError(req, res, 500, 'FAL_RENDER_FAILURE', 'FAL did not return a video URL');
-                }
+                
+                console.log(`FAL per-scene render complete: ${videoUrl}`);
+                
+                // Record successful render
+                const renderDuration = Date.now() - renderStartTime;
+                req.sliMonitor.recordSuccess('render', true, { projectId, cached: false, engine: 'fal-per-scene' });
+                req.sliMonitor.recordLatency('render', renderDuration, { projectId, cached: false, engine: 'fal-per-scene' });
+                
+                return res.status(200).json({ videoUrl, engine: 'fal-per-scene', skipPolish: true });
+                
             } catch (e) {
-                console.error('FAL render error:', e?.message || e);
-                return sendError(req, res, 500, 'FAL_RENDER_FAILURE', 'FAL rendering failed', e?.message || String(e));
+                console.error('FAL compose error:', e?.message || e);
+                return sendError(req, res, 500, 'FAL_COMPOSE_FAILURE', 'FAL compose failed', e?.message || String(e));
             }
-
-            // Persist output to GCS and return final URL
-            const file = outputBucket.file(`${projectId}/movie.mp4`);
-            const remoteRes = await fetch(outputUrl);
-            if (!remoteRes.ok) {
-                return sendError(req, res, 500, 'FAL_DOWNLOAD_FAILED', `Failed to download FAL output: ${remoteRes.status}`);
-            }
-            const arrayBuffer = await remoteRes.arrayBuffer();
-            await file.save(Buffer.from(arrayBuffer), { metadata: { contentType: 'video/mp4' } });
-
-            // Save to global cache
-            try {
-              await file.copy(falCacheFile);
-              console.log(`Saved FAL render to cache key ${falManifestHash}`);
-            } catch (e) {
-              console.warn('FAL render cache write failed:', e.message);
-            }
-
-            // FAL videos are uploaded to public bucket for direct GCS URL access
-            const videoUrl = file.publicUrl();
-            console.log(`FAL video uploaded to public bucket for direct access`);
-
-            req.sliMonitor.recordSuccess('render', true, { projectId, cached: false, engine: 'fal' });
-            req.sliMonitor.recordLatency('render', Date.now() - renderStartTime, { projectId, cached: false, engine: 'fal' });
-            return res.status(200).json({ videoUrl, engine: 'fal', skipPolish: true });
         }
         // Early path: if a final video already exists, allow "publish-only" requests
         // This supports calling /render with just { projectId, published: true }
@@ -486,9 +442,9 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                 videoUrl = finalVideoFile.publicUrl();
                 console.log(`Returning durable public URL for published video: ${videoUrl}`);
             } else {
-                const [signedUrl] = await finalVideoFile.getSignedUrl({
-                    version: 'v4',
-                    action: 'read',
+            const [signedUrl] = await finalVideoFile.getSignedUrl({
+                version: 'v4',
+                action: 'read',
                     expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
                 });
                 videoUrl = signedUrl;
@@ -641,8 +597,8 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                     musicLocalPath = path.join(tempDir, 'music.wav');
                     downloadPromises.push(inputBucket.file(`${projectId}/music.wav`).download({ destination: musicLocalPath }));
                 } catch (__) {
-                    musicLocalPath = path.join(tempDir, 'music.mp3');
-                    downloadPromises.push(inputBucket.file(`${projectId}/music.mp3`).download({ destination: musicLocalPath }));
+                musicLocalPath = path.join(tempDir, 'music.mp3');
+                downloadPromises.push(inputBucket.file(`${projectId}/music.mp3`).download({ destination: musicLocalPath }));
                 }
             }
         }
@@ -803,7 +759,7 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
           cmd.outputOptions(['-map 0:v:0','-map [final_audio]','-filter_complex',filterComplex,'-c:v libx264','-preset slow','-crf 22','-c:a aac','-b:a 192k','-pix_fmt yuv420p','-movflags +faststart'])
             .on('end', resolve)
             .on('error',(err)=>{ console.error('FFmpeg mux error:', err.message); reject(new Error('FFMPEG_FAILURE')); })
-            .save(outputVideoPath);
+                .save(outputVideoPath);
         });
 
         // 4. Upload the final video to the output bucket
@@ -811,9 +767,9 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         // Reuse outputBucket variable from cache check above
         const [uploadedFile] = await retryWithBackoff(async () => {
             return await outputBucket.upload(outputVideoPath, {
-                destination: `${projectId}/movie.mp4`,
-                metadata: { contentType: 'video/mp4' },
-            });
+            destination: `${projectId}/movie.mp4`,
+            metadata: { contentType: 'video/mp4' },
+        });
         });
         // Save to global cache for reuse
         try {
