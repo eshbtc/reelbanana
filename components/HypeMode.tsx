@@ -372,7 +372,15 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
       setProgress(70);
       let render;
       try {
-        render = await apiCall(API_ENDPOINTS.render, { projectId: pid, scenes: renderScenes, gsAudioPath: narr.gsAudioPath, srtPath: align.srtPath, gsMusicPath: comp.gsMusicPath, useFal: true, force: true }, 'Video rendering failed');
+        render = await apiCall(API_ENDPOINTS.render, { 
+          projectId: pid, 
+          scenes: sceneDocs, // Use full scene objects instead of simplified renderScenes
+          gsAudioPath: narr.gsAudioPath, 
+          srtPath: align.srtPath, 
+          gsMusicPath: comp.gsMusicPath, 
+          useFal: true, 
+          force: true 
+        }, 'Video rendering failed');
         setStatus('Composing final video…');
         setProgress(85);
       } catch (e) {
@@ -381,7 +389,15 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
         setStatus('Rendering with FFmpeg fallback…');
         render = await apiCall(
           API_ENDPOINTS.render,
-          { projectId: pid, scenes: renderScenes, gsAudioPath: narr.gsAudioPath, srtPath: align.srtPath, gsMusicPath: comp.gsMusicPath, useFal: false, force: true },
+          { 
+            projectId: pid, 
+            scenes: sceneDocs, // Use full scene objects instead of simplified renderScenes
+            gsAudioPath: narr.gsAudioPath, 
+            srtPath: align.srtPath, 
+            gsMusicPath: comp.gsMusicPath, 
+            useFal: false, 
+            force: true 
+          },
           'Video rendering failed (FFmpeg fallback)'
         );
       }
