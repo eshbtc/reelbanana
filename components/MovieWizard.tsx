@@ -147,8 +147,8 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
     let timer: any;
     let attempts = 0;
     const MAX_ATTEMPTS = 10; // ~30s total at 3s interval
-    // Only probe the public videos bucket to avoid 403s on private buckets
-    const bucketCandidates = ['reel-banana-videos-public'];
+    // Check main bucket first for clips (clips are private, final videos are public)
+    const bucketCandidates = ['reel-banana-35a54.firebasestorage.app'];
     const checkClips = async () => {
       if (!projectId || !Array.isArray(scenes) || scenes.length === 0) return;
       const updates: Array<{ exists: boolean; url?: string }> = [];

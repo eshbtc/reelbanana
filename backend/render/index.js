@@ -189,10 +189,10 @@ app.post('/generate-clip', appCheckVerification, async (req, res) => {
     }
     if (!outUrl) return sendError(req, res, 500, 'FAL_RENDER_FAILURE', 'FAL did not return a video URL');
 
-    // Download and persist to clips folder
-    const outBucket = storage.bucket(outputBucketName);
+    // Download and persist to clips folder in main bucket (private)
+    const inputBucket = storage.bucket(inputBucketName);
     const clipPath = `${projectId}/clips/scene-${sceneIndex}.mp4`;
-    const file = outBucket.file(clipPath);
+    const file = inputBucket.file(clipPath);
     const remote = await fetch(outUrl);
     if (!remote.ok) return sendError(req, res, 500, 'FAL_DOWNLOAD_FAILED', `HTTP ${remote.status}`);
     const buf = Buffer.from(await remote.arrayBuffer());
@@ -271,16 +271,16 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
             const { fal } = await import('@fal-ai/client');
             fal.config({ credentials: falApiKey });
             
-            const outputBucket = storage.bucket(outputBucketName);
-            const inputBucket = storage.bucket(inputBucketName);
+            const outputBucket = storage.bucket(outputBucketName); // Public bucket for final videos
+            const inputBucket = storage.bucket(inputBucketName); // Main bucket for clips and assets
             const clipUrls = [];
             
             for (let i = 0; i < scenes.length; i++) {
                 console.log(`Checking for existing clip for scene ${i}...`);
                 
-                // Check if clip already exists in output bucket (unless force is true)
+                // Check if clip already exists in input bucket (main bucket) - clips stay private
                 const clipFileName = `${projectId}/clips/scene-${i}.mp4`;
-                const existingClip = outputBucket.file(clipFileName);
+                const existingClip = inputBucket.file(clipFileName);
                 const [exists] = await existingClip.exists();
                 
                 if (exists && !force) {
@@ -328,7 +328,7 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                         throw new Error('FAL did not return a video URL');
                     }
                     
-                    // Download and save clip to output bucket for caching
+                    // Download and save clip to input bucket (main bucket) for caching
                     const clipResponse = await fetch(clipUrl);
                     if (!clipResponse.ok) {
                         throw new Error(`Failed to download generated clip: ${clipResponse.status}`);
@@ -694,7 +694,7 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
           const modelForClips = (req.body && (req.body.clipModel || req.body.clipModelOverride)) || falRenderModel || 'fal-ai/veo3/fast/image-to-video';
           if (wantAutoClips && falApiKey && modelForClips.includes('image-to-video')) {
             console.log(`Auto-generating missing motion clips via FAL (${modelForClips})...`);
-            const outBucket = storage.bucket(outputBucketName);
+            const inputBucket = storage.bucket(inputBucketName);
             const forceClips = !!(req.body && req.body.forceClips);
             const maxConcurrency = Math.max(1, parseInt(String(req.body?.clipConcurrency || process.env.FAL_CLIP_CONCURRENCY || '2'), 10));
 
@@ -776,8 +776,8 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         const sceneOffsets = []; { let acc=0; for (const s of (scenes||[])) { sceneOffsets.push(acc); acc += (s?.duration||3); } }
 
         // Pre-fetch clips and ensure image fallbacks are local
-        const outBucket = storage.bucket(outputBucketName);
-        const clipLocalPaths = await Promise.all((scenes || []).map(async (_, i) => { try { const clipFile=outBucket.file(`${projectId}/clips/scene-${i}.mp4`); const [ex]=await clipFile.exists(); if(!ex) return null; const local=path.join(tempDir,`clip_${i}.mp4`); await clipFile.download({ destination: local }); return local; } catch { return null; } }));
+        const inputBucket = storage.bucket(inputBucketName);
+        const clipLocalPaths = await Promise.all((scenes || []).map(async (_, i) => { try { const clipFile=inputBucket.file(`${projectId}/clips/scene-${i}.mp4`); const [ex]=await clipFile.exists(); if(!ex) return null; const local=path.join(tempDir,`clip_${i}.mp4`); await clipFile.download({ destination: local }); return local; } catch { return null; } }));
         const localFirstImages = await Promise.all((scenes || []).map(async (_, i) => { try { const c=imageFiles.filter(f=>path.basename(f.name).startsWith(`scene-${i}-`)); if(!c.length) return null; const first=c[0]; const local=path.join(tempDir, path.basename(first.name)); try { await fs.stat(local); } catch { await inputBucket.file(first.name).download({ destination: local }); } return local; } catch { return null; } }));
 
         // Create per-scene silent MP4s with optional burnt-in scene captions
@@ -1042,8 +1042,8 @@ app.get('/cache-status/:projectId', appCheckVerification, async (req, res) => {
     const { projectId } = req.params;
     
     try {
-        const outputBucket = storage.bucket(outputBucketName);
-        const [files] = await outputBucket.getFiles({ prefix: `${projectId}/clips/` });
+        const inputBucket = storage.bucket(inputBucketName);
+        const [files] = await inputBucket.getFiles({ prefix: `${projectId}/clips/` });
         
         const clips = files.map(file => ({
             name: file.name,
@@ -1056,7 +1056,7 @@ app.get('/cache-status/:projectId', appCheckVerification, async (req, res) => {
             projectId,
             clipsCount: clips.length,
             clips: clips,
-            bucket: outputBucketName
+            bucket: inputBucketName
         });
     } catch (error) {
         console.error('Cache status error:', error);
