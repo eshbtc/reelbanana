@@ -145,14 +145,15 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
   // Per-scene clip detection (best-effort), polls until clips appear
   useEffect(() => {
     let timer: any;
-    const bucketCandidates = [
-      'reel-banana-videos-public',
-      apiConfig.firebase.storageBucket,
-    ].filter(Boolean);
+    let attempts = 0;
+    const MAX_ATTEMPTS = 10; // ~30s total at 3s interval
+    // Only probe the public videos bucket to avoid 403s on private buckets
+    const bucketCandidates = ['reel-banana-videos-public'];
     const checkClips = async () => {
       if (!projectId || !Array.isArray(scenes) || scenes.length === 0) return;
       const updates: Array<{ exists: boolean; url?: string }> = [];
-      for (let i = 0; i < scenes.length; i++) {
+      const maxScenes = Math.min(scenes.length, 8);
+      for (let i = 0; i < maxScenes; i++) {
         let found = false; let url: string | undefined;
         for (const bucket of bucketCandidates) {
           const test = `https://storage.googleapis.com/${bucket}/${projectId}/clips/scene-${i}.mp4`;
@@ -162,7 +163,8 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       }
       setClipStatus(updates);
       const allDone = updates.every(x => x?.exists);
-      if (!allDone) timer = setTimeout(checkClips, 3000);
+      attempts++;
+      if (!allDone && attempts < MAX_ATTEMPTS) timer = setTimeout(checkClips, 3000);
     };
     checkClips();
     return () => { if (timer) clearTimeout(timer); };
