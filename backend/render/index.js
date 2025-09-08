@@ -1,5 +1,5 @@
 
-// Render service with Veo3 Fast model support
+// Render service with Veo3 Fast model support - Updated for proper audio sync
 const express = require('express');
 const cors = require('cors');
 const { Storage } = require('@google-cloud/storage');
@@ -388,19 +388,25 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                     .save(silentVideoPath);
             });
             
-            // Add audio to the video
+            // Add audio to the video with proper synchronization
             const finalVideoPath = path.join(tempDir, 'final_video.mp4');
             const audioInputs = [silentVideoPath];
             const audioFilters = [];
             
+            // Calculate total video duration (8 seconds per clip)
+            const totalVideoDuration = clipUrls.length * 8;
+            console.log(`Total video duration: ${totalVideoDuration} seconds`);
+            
             if (await fs.access(audioPath).then(() => true).catch(() => false)) {
                 audioInputs.push(audioPath);
-                audioFilters.push('[1:a]volume=1.0[audio1]');
+                // Trim narration to match video duration and add fade out
+                audioFilters.push(`[1:a]atrim=0:${totalVideoDuration},afade=t=out:st=${Math.max(0, totalVideoDuration-1)}:d=1,volume=1.0[audio1]`);
             }
             
             if (await fs.access(musicPath).then(() => true).catch(() => false)) {
                 audioInputs.push(musicPath);
-                audioFilters.push('[2:a]volume=0.3[audio2]');
+                // Trim music to match video duration and add fade out
+                audioFilters.push(`[2:a]atrim=0:${totalVideoDuration},afade=t=out:st=${Math.max(0, totalVideoDuration-1)}:d=1,volume=0.3[audio2]`);
             }
             
             if (audioFilters.length > 0) {
@@ -415,7 +421,7 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                     audioInputs.forEach(input => command.input(input));
                     command
                         .complexFilter(audioFilters)
-                        .outputOptions(['-map', '0:v', '-map', '[audio]', '-c:v', 'copy', '-c:a', 'aac'])
+                        .outputOptions(['-map', '0:v', '-map', '[audio]', '-c:v', 'copy', '-c:a', 'aac', '-shortest'])
                         .on('end', resolve)
                         .on('error', (err) => {
                             console.error('FFmpeg audio mix error:', err.message);
