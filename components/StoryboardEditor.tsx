@@ -603,23 +603,19 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         
         {/* Product Demo Mode Toggle */}
         {!demoMode && (
-          <div className="mb-4 p-4 bg-blue-900/30 border border-blue-600 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="productDemoMode"
-                  checked={productDemoMode}
-                  onChange={(e) => setProductDemoMode(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
-                />
-                <label htmlFor="productDemoMode" className="text-blue-200 font-medium">
-                  Product Demo Mode
-                </label>
-              </div>
-              <div className="text-blue-300 text-sm">
-                Upload product images to create custom demo videos
-              </div>
+          <div className="mb-6 p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="productDemoMode"
+                checked={productDemoMode}
+                onChange={(e) => setProductDemoMode(e.target.checked)}
+                className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
+              />
+              <label htmlFor="productDemoMode" className="text-blue-200 font-medium">
+                Product Demo Mode
+              </label>
+              <span className="text-blue-300 text-sm">• Upload product images to create custom demo videos</span>
             </div>
             
             {productDemoMode && (
@@ -682,9 +678,10 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         {/* Step 1 & 2: Project Creation */}
         {!projectId && (
              <div className="bg-gray-800 p-6 rounded-lg shadow-xl border border-gray-700 mb-8">
-                <h2 className="text-2xl font-bold mb-4 text-amber-400">Create Your Story</h2>
-                <div className="mb-4">
-                    <h3 className="text-lg font-semibold text-gray-300 mb-2">Quick Start Ideas</h3>
+                <h2 className="text-2xl font-bold mb-6 text-amber-400">Create Your Story</h2>
+                
+                <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-gray-300 mb-3">Quick Start Ideas</h3>
                     <div className="flex flex-wrap gap-2 mb-3">
                         {quickStartIdeas.map(idea => (
                             <button key={idea} onClick={() => handleInspirationClick(idea)} disabled={isLoadingStory} className="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-wait">
@@ -718,39 +715,30 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                         )}
                     </div>
                 </div>
-                <div className="flex flex-col gap-4">
-                   <input
-                       type="text"
-                       value={topic}
-                       onChange={(e) => setTopic(e.target.value)}
-                       placeholder="Or write your own story idea, e.g., A banana who wants to be a superhero"
-                       className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition"
-                       disabled={isLoadingStory}
-                   />
-                   
-                   <input
-                       type="text"
-                       value={projectName}
-                       onChange={(e) => setProjectName(e.target.value)}
-                       placeholder="Project name (optional - will use story topic if empty)"
-                       className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition"
-                       disabled={isLoadingStory}
-                   />
-                   
-                   <div className="flex items-center gap-3">
-                     <input
-                       type="checkbox"
-                       id="forceUseApiKey"
-                       checked={forceUseApiKey}
-                       onChange={(e) => setForceUseApiKey(e.target.checked)}
-                       disabled={!userHasApiKey}
-                       className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2 disabled:opacity-50"
-                     />
-                     <label htmlFor="forceUseApiKey" className={`text-sm ${userHasApiKey ? 'text-gray-300' : 'text-gray-500'}`}>
-                       🔑 Use My API Key (Skip free credits)
-                       {!userHasApiKey && <span className="text-xs block text-gray-600">→ Add an API key in Settings to enable</span>}
-                     </label>
-                   </div>
+                
+                <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-gray-300 mb-3">Your Story Idea</h3>
+                    <input
+                        type="text"
+                        value={topic}
+                        onChange={(e) => setTopic(e.target.value)}
+                        placeholder="Write your story idea, e.g., A banana who wants to be a superhero"
+                        className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition"
+                        disabled={isLoadingStory}
+                    />
+                </div>
+                
+                <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-gray-300 mb-3">Project Name</h3>
+                    <input
+                        type="text"
+                        value={projectName}
+                        onChange={(e) => setProjectName(e.target.value)}
+                        placeholder="Optional - will use story topic if empty"
+                        className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none transition"
+                        disabled={isLoadingStory}
+                    />
+                </div>
                    
                    <div className="flex flex-col md:flex-row gap-4">
                    <button
@@ -763,18 +751,24 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                    </button>
                     <button
                       onClick={() => {
-                        console.log('📝 Start from Template clicked');
-                        console.log('📝 Current showTemplates state:', showTemplates);
-                        console.log('📝 Available templates:', TEMPLATES.length);
-                        setShowTemplates(true);
-                        console.log('📝 Setting showTemplates to true');
+                        // Open empty storyboard editor
+                        setScenes([]);
+                        setTopic('');
+                        setProjectName('');
+                        setCharacterAndStyle('');
+                        setCharacterRefs([]);
+                        setProjectId(null);
+                        onProjectIdChange?.(null);
+                        // Clear URL params
+                        window.history.pushState({}, '', '/');
+                        toast.info('Empty storyboard opened. Start creating your story!');
                       }}
-                      className="w-full md:w-auto bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+                      className="w-full md:w-auto bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
                     >
+                      <DocumentAddIcon />
                       Start from Template
                     </button>
                    </div>
-                </div>
                 {storyError && <p className="text-red-400 mt-3">{storyError}</p>}
             </div>
         )}
@@ -862,21 +856,6 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                       .filter(s => s.status === 'idle' || s.status === 'error')
                       .reduce((sum) => sum + (renderMode === 'draft' ? 3 : 5), 0)
                   }
-                </div>
-                
-                <div className="flex items-center gap-3 mb-4">
-                  <input
-                    type="checkbox"
-                    id="forceUseApiKeyImagesGenerate"
-                    checked={forceUseApiKey}
-                    onChange={(e) => setForceUseApiKey(e.target.checked)}
-                    disabled={!userHasApiKey}
-                    className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2 disabled:opacity-50"
-                  />
-                  <label htmlFor="forceUseApiKeyImagesGenerate" className={`text-sm ${userHasApiKey ? 'text-gray-300' : 'text-gray-500'}`}>
-                    🔑 Use My API Key for image generation (Skip free credits)
-                    {!userHasApiKey && <span className="text-xs block text-gray-600">→ Add an API key in Settings to enable</span>}
-                  </label>
                 </div>
                 
                 <div className="flex items-center gap-2">

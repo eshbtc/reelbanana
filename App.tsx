@@ -12,13 +12,14 @@ import MyProjectsPage from './components/MyProjectsPage';
 import AdBlockerWarning from './components/AdBlockerWarning';
 import AdminDashboard from './components/AdminDashboard';
 import TechWriteup from './components/TechWriteup';
+import UserDashboard from './components/UserDashboard';
 import { Scene } from './types';
 import { getCurrentUser } from './services/authService';
 import { API_ENDPOINTS } from './config/apiConfig';
 import { authFetch } from './lib/authFetch';
 // Removed auto-publish; handled in MoviePlayer for one-click publish UX
 
-type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'projects' | 'admin' | 'writeup';
+type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'projects' | 'admin' | 'writeup' | 'settings';
 
 const App: React.FC = () => {
   // Defensive context usage to prevent null context errors
@@ -38,6 +39,7 @@ const App: React.FC = () => {
     if (path === '/gallery') return 'gallery';
     if (path === '/admin') return 'admin';
     if (path === '/writeup') return 'writeup';
+    if (path === '/settings') return 'settings';
     return 'editor';
   };
 
@@ -170,7 +172,7 @@ const App: React.FC = () => {
     setVideoUrl(null);
   }, []);
 
-  const handleNavigate = useCallback((newView: 'editor' | 'gallery' | 'projects') => {
+  const handleNavigate = useCallback((newView: 'editor' | 'gallery' | 'projects' | 'settings') => {
     setView(newView);
     
     // Update URL
@@ -190,6 +192,7 @@ const App: React.FC = () => {
       const path = window.location.pathname;
       if (path === '/projects') setView('projects');
       else if (path === '/gallery') setView('gallery');
+      else if (path === '/settings') setView('settings');
       else setView('editor');
   };
     window.addEventListener('popstate', onPopState);
@@ -231,6 +234,8 @@ const App: React.FC = () => {
         return <AdminDashboard />;
       case 'writeup':
         return <TechWriteup />;
+      case 'settings':
+        return <UserDashboard onClose={() => setView('editor')} />;
       case 'editor':
       default:
         return (

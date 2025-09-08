@@ -3,8 +3,8 @@ import Logo from './Logo';
 import AuthButton from './AuthButton';
 
 interface HeaderProps {
-  onNavigate?: (view: 'editor' | 'gallery' | 'projects' | 'admin') => void;
-  currentView?: 'editor' | 'gallery' | 'projects' | 'admin';
+  onNavigate?: (view: 'editor' | 'gallery' | 'projects' | 'admin' | 'settings') => void;
+  currentView?: 'editor' | 'gallery' | 'projects' | 'admin' | 'settings';
 }
 
 const Header: React.FC<HeaderProps> = ({ onNavigate, currentView = 'editor' }) => {
@@ -65,7 +65,7 @@ const Header: React.FC<HeaderProps> = ({ onNavigate, currentView = 'editor' }) =
             </nav>
           )}
           
-          <AuthButton />
+          <AuthButton onNavigate={onNavigate} />
         </div>
       </div>
     </header>

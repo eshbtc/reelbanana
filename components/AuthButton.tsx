@@ -2,9 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { signInWithGoogle, signOutUser, getCurrentUser, onAuthStateChange, UserProfile, getUserProfile } from '../services/authService';
 import { useUserCredits } from '../hooks/useUserCredits';
-import UserDashboard from './UserDashboard';
 
-const AuthButton: React.FC = () => {
+interface AuthButtonProps {
+  onNavigate?: (view: 'settings') => void;
+}
+
+const AuthButton: React.FC<AuthButtonProps> = ({ onNavigate }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -111,7 +114,8 @@ const AuthButton: React.FC = () => {
                 <div className="py-2">
                   <button
                     onClick={() => {
-                      // Keep settings open to show the modal
+                      setShowSettings(false);
+                      onNavigate?.('settings');
                     }}
                     className="w-full px-4 py-2 text-left text-gray-300 hover:bg-gray-700 hover:text-white transition-colors flex items-center gap-3"
                   >
@@ -137,14 +141,6 @@ const AuthButton: React.FC = () => {
           </div>
         </div>
 
-        {/* User Dashboard Modal */}
-        {showSettings && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowSettings(false)}>
-            <div className="bg-gray-900 rounded-lg max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <UserDashboard onClose={() => setShowSettings(false)} />
-            </div>
-          </div>
-        )}
       </>
     );
   }
