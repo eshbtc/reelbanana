@@ -650,24 +650,28 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
         await Promise.all(downloadPromises);
         console.log('Asset download complete.');
 
-        // Optionally auto-generate per-scene motion clips with FAL if missing
+        // Default: auto-generate per-scene motion clips with FAL if missing
         try {
-          const wantAutoClips = (req.body && (req.body.autoGenerateClips === true)) || (renderEngineEnv === 'fal');
-          const modelForClips = (req.body && (req.body.clipModel || req.body.clipModelOverride)) || falRenderModel || '';
+          // Make this behavior default; allow callers to opt-out with autoGenerateClips:false
+          let wantAutoClips = true;
+          if (req.body && req.body.autoGenerateClips === false) wantAutoClips = false;
+          const modelForClips = (req.body && (req.body.clipModel || req.body.clipModelOverride)) || falRenderModel || 'fal-ai/veo3/fast/image-to-video';
           if (wantAutoClips && falApiKey && modelForClips.includes('image-to-video')) {
             console.log(`Auto-generating missing motion clips via FAL (${modelForClips})...`);
             const outBucket = storage.bucket(outputBucketName);
-            for (let i = 0; i < (scenes || []).length; i++) {
-              const clipFile = outBucket.file(`${projectId}/clips/scene-${i}.mp4`);
-              const [exists] = await clipFile.exists();
-              const forceClips = !!(req.body && req.body.forceClips);
-              if (exists && !forceClips) continue;
+            const forceClips = !!(req.body && req.body.forceClips);
+            const maxConcurrency = Math.max(1, parseInt(String(req.body?.clipConcurrency || process.env.FAL_CLIP_CONCURRENCY || '2'), 10));
 
-              const sceneImage = imageFiles.find(f => path.basename(f.name).startsWith(`scene-${i}-`));
-              if (!sceneImage) { console.warn(`auto-clips: no image for scene ${i}`); continue; }
-              const [signedUrl] = await inputBucket.file(sceneImage.name).getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 60*60*1000 });
-              const secs = Math.max(2, parseInt(String((scenes[i]?.duration) || req.body?.clipSeconds || process.env.FAL_IMAGE_TO_VIDEO_SECONDS || '8'), 10));
+            const tasks = (scenes || []).map((_, i) => async () => {
               try {
+                const clipFile = outBucket.file(`${projectId}/clips/scene-${i}.mp4`);
+                const [exists] = await clipFile.exists();
+                if (exists && !forceClips) return;
+                const sceneImage = imageFiles.find(f => path.basename(f.name).startsWith(`scene-${i}-`));
+                if (!sceneImage) { console.warn(`auto-clips: no image for scene ${i}`); return; }
+                const [signedUrl] = await inputBucket.file(sceneImage.name).getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 60*60*1000 });
+                const secs = Math.max(2, parseInt(String((scenes[i]?.duration) || req.body?.clipSeconds || process.env.FAL_IMAGE_TO_VIDEO_SECONDS || '8'), 10));
+
                 const { fal } = await import('@fal-ai/client');
                 fal.config({ credentials: falApiKey });
                 const falInput = { prompt: req.body?.veoPrompt || `Cinematic short motion for scene ${i+1}.`, image_url: signedUrl, duration: secs, seconds: secs, video_length: secs };
@@ -698,7 +702,17 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
               } catch (e) {
                 console.warn(`auto-clips: failed for scene ${i}:`, e?.message || e);
               }
-            }
+            });
+
+            // Run with limited concurrency
+            const workers = Array.from({ length: Math.min(maxConcurrency, tasks.length) }, async () => {
+              for (;;) {
+                const next = tasks.shift();
+                if (!next) break;
+                await next();
+              }
+            });
+            await Promise.all(workers);
           }
         } catch (e) {
           console.warn('auto-clips block failed:', e?.message || e);
