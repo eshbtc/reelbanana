@@ -39,13 +39,12 @@ const AdminDashboard: React.FC = () => {
   const [selectedService, setSelectedService] = useState<string | null>(null);
 
   const serviceUrls = [
-    { key: 'upload', name: 'Upload Assets', url: `${apiConfig.baseUrls.upload}/status` },
-    { key: 'narrate', name: 'Narrate (TTS)', url: `${apiConfig.baseUrls.narrate}/status` },
-    { key: 'align', name: 'Align Captions', url: `${apiConfig.baseUrls.align}/status` },
-    { key: 'render', name: 'Render', url: `${apiConfig.baseUrls.render}/status` },
-    { key: 'compose', name: 'Compose Music', url: `${apiConfig.baseUrls.compose}/status` },
-    { key: 'polish', name: 'Polish (FAL)', url: `${apiConfig.baseUrls.polish}/status` },
-    { key: 'apiKey', name: 'API Key Service', url: `${apiConfig.baseUrls.apiKey}/status` },
+    { key: 'upload', name: 'Upload Assets', url: `${apiConfig.baseUrls.upload}/health` },
+    { key: 'narrate', name: 'Narrate (TTS)', url: `${apiConfig.baseUrls.narrate}/health` },
+    { key: 'align', name: 'Align Captions', url: `${apiConfig.baseUrls.align}/health` },
+    { key: 'render', name: 'Render', url: `${apiConfig.baseUrls.render}/health` },
+    { key: 'compose', name: 'Compose Music', url: `${apiConfig.baseUrls.compose}/health` },
+    { key: 'apiKey', name: 'API Key Service', url: `${apiConfig.baseUrls.apiKey}/health` },
   ];
 
   const fetchServiceMetrics = useCallback(async () => {
@@ -62,7 +61,7 @@ const AdminDashboard: React.FC = () => {
             const data = await response.json();
             return {
               service: service.name,
-              status: data.status === 'operational' ? 'healthy' : 'unhealthy',
+              status: data.status === 'ok' || data.status === 'healthy' ? 'healthy' : 'unhealthy',
               requests: data.metrics?.requests || 0,
               errors: data.metrics?.errors || 0,
               avgResponseTime: data.metrics?.avgResponseTime || 0,
