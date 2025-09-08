@@ -372,21 +372,15 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
       setProgress(80);
       let render;
       try {
-        render = await apiCall(API_ENDPOINTS.render, { projectId: pid, scenes: renderScenes, gsAudioPath: narr.gsAudioPath, srtPath: align.srtPath, gsMusicPath: comp.gsMusicPath, useFal: false, force: true }, 'Video rendering failed');
+        render = await apiCall(API_ENDPOINTS.render, { projectId: pid, scenes: renderScenes, gsAudioPath: narr.gsAudioPath, srtPath: align.srtPath, gsMusicPath: comp.gsMusicPath, useFal: true, force: true }, 'Video rendering failed');
       } catch (e) {
-        // Guard: only fallback to FAL for single-scene or short videos (<=30s)
-        const total = renderScenes.reduce((s, r) => s + (r.duration || 3), 0);
-        const isShort = total <= 30;
-        const isSingle = renderScenes.length <= 1;
-        if (isShort || isSingle) {
-          render = await apiCall(
-            API_ENDPOINTS.render,
-            { projectId: pid, scenes: renderScenes, gsAudioPath: narr.gsAudioPath, srtPath: align.srtPath, gsMusicPath: comp.gsMusicPath, useFal: true, falVideoSeconds: Math.max(8, total), force: true },
-            'Video rendering failed (FAL)'
-          );
-        } else {
-          throw e;
-        }
+        // Fallback to FFmpeg if FAL fails
+        console.log('FAL render failed, falling back to FFmpeg:', e);
+        render = await apiCall(
+          API_ENDPOINTS.render,
+          { projectId: pid, scenes: renderScenes, gsAudioPath: narr.gsAudioPath, srtPath: align.srtPath, gsMusicPath: comp.gsMusicPath, useFal: false, force: true },
+          'Video rendering failed (FFmpeg fallback)'
+        );
       }
 
       setStatus('Polishing…');

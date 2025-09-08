@@ -141,7 +141,7 @@ const DemoUI: React.FC<DemoUIProps> = ({ onComplete, onFail }) => {
       updateProgress(96, 'Rendering video...');
       const renderResult = await apiCall(API_ENDPOINTS.render, {
         projectId: newProjectId,
-        useFal: false,
+        useFal: true,
         force: true
       }, 'Video rendering failed');
       

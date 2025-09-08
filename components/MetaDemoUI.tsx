@@ -195,7 +195,7 @@ const MetaDemoUI: React.FC<MetaDemoUIProps> = ({ onComplete, onFail }) => {
         scenes: generatedScenes,
         gsAudioPath: narrateResult.gsAudioPath,
         srtPath: `gs://reel-banana-35a54.firebasestorage.app/${newProjectId}/captions.srt`,
-        useFal: false,
+        useFal: true,
         force: true
       }, 'Video rendering failed');
       

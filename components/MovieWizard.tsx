@@ -405,7 +405,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
     const narrationScript = scenes.map((s: any) => s.narration).join(' ');
     const totalSecs = Math.max(8, Math.round(scenes.reduce((s, sc) => s + (sc.duration || 3), 0)));
     try {
-      const body: any = { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: false, force: true };
+      const body: any = { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: true, force: true };
       if (autoGenerateClips !== undefined) body.autoGenerateClips = !!autoGenerateClips;
       if (forceClips) body.forceClips = true;
       if (clipSeconds && typeof clipSeconds === 'number') body.clipSeconds = clipSeconds;
@@ -414,7 +414,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       return await apiCall(API_ENDPOINTS.render, body, 'Failed to render video');
     } catch (e) {
       // Retry without force if needed
-      const bodyRetry: any = { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: false };
+      const bodyRetry: any = { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: true };
       if (autoGenerateClips !== undefined) bodyRetry.autoGenerateClips = !!autoGenerateClips;
       if (forceClips) bodyRetry.forceClips = true;
       if (clipSeconds && typeof clipSeconds === 'number') bodyRetry.clipSeconds = clipSeconds;
