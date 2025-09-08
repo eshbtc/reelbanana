@@ -187,8 +187,8 @@ const MetaDemoUI: React.FC<MetaDemoUIProps> = ({ onComplete, onFail }) => {
         narrationScript: narrationScript
       }, 'Music generation failed');
       
-      // Render video
-      updateProgress(96, 'Rendering meta demo...');
+      // Generate AI clips and compose video
+      updateProgress(80, 'Generating AI scene clips...');
       console.log('Generated scenes for render:', JSON.stringify(generatedScenes, null, 2));
       const renderResult = await apiCall(API_ENDPOINTS.render, {
         projectId: newProjectId,
@@ -198,6 +198,7 @@ const MetaDemoUI: React.FC<MetaDemoUIProps> = ({ onComplete, onFail }) => {
         useFal: true,
         force: true
       }, 'Video rendering failed');
+      updateProgress(96, 'Composing final video...');
       
       // Apply polish
       updateProgress(98, 'Applying final polish...');

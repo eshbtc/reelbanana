@@ -50,8 +50,8 @@ const WIZARD_STEPS: Omit<WizardStep, 'status' | 'result' | 'error'>[] = [
   },
   {
     id: 'render',
-    title: 'Render Video',
-    description: 'Assemble final movie with FFmpeg'
+    title: 'Generate & Compose',
+    description: 'Create AI scene clips and compose final video'
   },
   {
     id: 'polish',
@@ -667,14 +667,14 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
             </div>
           )}
 
-          {/* Render configuration: per-scene motion clips */}
+          {/* Render configuration: AI scene generation */}
           {getCurrentStep().id === 'render' && (
             <div className="mt-6 space-y-3 text-sm">
-              <div className="text-gray-300 font-medium">Motion Clips (Veo 3 i2v)</div>
+              <div className="text-gray-300 font-medium">AI Scene Generation (FAL Veo3 Fast)</div>
               <div className="flex flex-wrap items-center gap-4">
                 <label className="flex items-center gap-2 text-gray-300">
                   <input type="checkbox" checked={autoGenerateClips} onChange={(e)=>setAutoGenerateClips(e.target.checked)} />
-                  Auto-generate clips per scene (default)
+                  Generate 8-second AI clips per scene (recommended)
                 </label>
                 <label className="flex items-center gap-2 text-gray-300">
                   <input type="checkbox" checked={forceClips} onChange={(e)=>setForceClips(e.target.checked)} />

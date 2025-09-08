@@ -137,13 +137,14 @@ const DemoUI: React.FC<DemoUIProps> = ({ onComplete, onFail }) => {
         emotion: 'adventurous'
       }, 'Music generation failed');
       
-      // Render video
-      updateProgress(96, 'Rendering video...');
+      // Generate AI clips and compose video
+      updateProgress(80, 'Generating AI scene clips...');
       const renderResult = await apiCall(API_ENDPOINTS.render, {
         projectId: newProjectId,
         useFal: true,
         force: true
       }, 'Video rendering failed');
+      updateProgress(96, 'Composing final video...');
       
       // Apply polish
       updateProgress(98, 'Applying pro polish...');

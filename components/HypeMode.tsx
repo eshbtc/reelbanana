@@ -45,7 +45,7 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
   const [existingProjectId, setExistingProjectId] = useState<string>('');
 
   const defaultCallouts = useMemo(() => (
-    ['Generate Story', 'Images', 'Narration', 'Captions', 'Music', 'Render & Polish', 'Publish & Share', 'Results']
+    ['Generate Story', 'Images', 'Narration', 'Captions', 'Music', 'AI Scene Clips', 'Compose Video', 'Publish & Share', 'Results']
   ), []);
 
   const baseSceneLines = useMemo(() => (
@@ -368,14 +368,17 @@ const HypeMode: React.FC<HypeModeProps> = ({ onComplete, onFail }) => {
         await updateProject(pid, { topic: 'ReelBanana — Demo of the Demo', characterAndStyle: 'Modern cinematic tech UI; dark mode; amber accents', scenes: sceneDocs });
       } catch (e) { console.warn('Non-fatal: failed to persist scene docs', e); }
 
-      setStatus('Rendering movie…');
-      setProgress(80);
+      setStatus('Generating scene clips with AI…');
+      setProgress(70);
       let render;
       try {
         render = await apiCall(API_ENDPOINTS.render, { projectId: pid, scenes: renderScenes, gsAudioPath: narr.gsAudioPath, srtPath: align.srtPath, gsMusicPath: comp.gsMusicPath, useFal: true, force: true }, 'Video rendering failed');
+        setStatus('Composing final video…');
+        setProgress(85);
       } catch (e) {
         // Fallback to FFmpeg if FAL fails
-        console.log('FAL render failed, falling back to FFmpeg:', e);
+        console.log('FAL per-scene render failed, falling back to FFmpeg:', e);
+        setStatus('Rendering with FFmpeg fallback…');
         render = await apiCall(
           API_ENDPOINTS.render,
           { projectId: pid, scenes: renderScenes, gsAudioPath: narr.gsAudioPath, srtPath: align.srtPath, gsMusicPath: comp.gsMusicPath, useFal: false, force: true },
