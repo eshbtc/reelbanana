@@ -62,6 +62,8 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   const [isGeneratingInspiration, setIsGeneratingInspiration] = useState(false);
   const [generatedInspiration, setGeneratedInspiration] = useState<string>('');
   const [projectVideoUrl, setProjectVideoUrl] = useState<string | null>(null);
+  const [productDemoMode, setProductDemoMode] = useState(false);
+  const [productImages, setProductImages] = useState<string[]>([]);
   
   // Defensive context usage to prevent null context errors
   let toast: any = null;
@@ -194,11 +196,27 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
     setScenes([]);
 
     try {
-      // Generate both story and character/style in parallel
-      const [storyScenes, characterStyle] = await Promise.all([
-        generateStory(storyTopic, forceUseApiKey),
-        generateCharacterAndStyle(storyTopic, forceUseApiKey)
-      ]);
+      let storyScenes, characterStyle;
+      
+      if (productDemoMode && productImages.length > 0) {
+        // Product Demo Mode: Generate story based on product images
+        const productPrompts = productImages.map((_, index) => 
+          `Showcase product feature ${index + 1} with professional presentation and modern UI`
+        );
+        
+        storyScenes = productPrompts.map((prompt, index) => ({
+          prompt,
+          narration: `Introducing our innovative product feature ${index + 1}. Experience the future of technology with cutting-edge design and seamless functionality.`
+        }));
+        
+        characterStyle = 'Professional product showcase with modern UI, clean design, and cinematic presentation';
+      } else {
+        // Regular mode: Generate both story and character/style in parallel
+        [storyScenes, characterStyle] = await Promise.all([
+          generateStory(storyTopic, forceUseApiKey),
+          generateCharacterAndStyle(storyTopic, forceUseApiKey)
+        ]);
+      }
       
       if (storyScenes.length === 0) {
         throw new Error("The AI couldn't generate a story for this topic. Please try a different one.");
@@ -209,7 +227,8 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         id: `${Date.now()}-${index}`,
         prompt: s.prompt,
         narration: s.narration,
-        status: 'idle',
+        status: productDemoMode && productImages[index] ? 'success' : 'idle', // Pre-populate with product images
+        imageUrls: productDemoMode && productImages[index] ? [productImages[index]] : undefined,
       }));
 
       // Create a new project in Firestore
@@ -240,7 +259,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
     } finally {
       setIsLoadingStory(false);
     }
-  }, []);
+  }, [projectName, forceUseApiKey, demoMode, productDemoMode, productImages, onProjectIdChange, refreshCredits, toast]);
   
   const handleSaveProject = useCallback(async () => {
     if (!projectId) return;
@@ -581,6 +600,85 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
             </div>
           </div>
         )}
+        
+        {/* Product Demo Mode Toggle */}
+        {!demoMode && (
+          <div className="mb-4 p-4 bg-blue-900/30 border border-blue-600 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="productDemoMode"
+                  checked={productDemoMode}
+                  onChange={(e) => setProductDemoMode(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
+                />
+                <label htmlFor="productDemoMode" className="text-blue-200 font-medium">
+                  Product Demo Mode
+                </label>
+              </div>
+              <div className="text-blue-300 text-sm">
+                Upload product images to create custom demo videos
+              </div>
+            </div>
+            
+            {productDemoMode && (
+              <div className="mt-4 p-4 bg-gray-800 rounded-lg border border-gray-600">
+                <h3 className="text-lg font-semibold text-white mb-3">Product Images</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  {productImages.map((image, index) => (
+                    <div key={index} className="relative">
+                      <img
+                        src={image}
+                        alt={`Product ${index + 1}`}
+                        className="w-full h-24 object-cover rounded-lg border border-gray-600"
+                      />
+                      <button
+                        onClick={() => setProductImages(prev => prev.filter((_, i) => i !== index))}
+                        className="absolute -top-2 -right-2 bg-red-600 hover:bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  {productImages.length < 8 && (
+                    <div className="border-2 border-dashed border-gray-600 rounded-lg h-24 flex items-center justify-center cursor-pointer hover:border-blue-500 transition-colors"
+                         onClick={() => {
+                           const input = document.createElement('input');
+                           input.type = 'file';
+                           input.accept = 'image/*';
+                           input.multiple = true;
+                           input.onchange = (e) => {
+                             const files = (e.target as HTMLInputElement).files;
+                             if (files) {
+                               Array.from(files).forEach(file => {
+                                 const reader = new FileReader();
+                                 reader.onload = (e) => {
+                                   setProductImages(prev => [...prev, e.target?.result as string]);
+                                 };
+                                 reader.readAsDataURL(file);
+                               });
+                             }
+                           };
+                           input.click();
+                         }}>
+                      <div className="text-center text-gray-400">
+                        <svg className="w-8 h-8 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <div className="text-xs">Add Image</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <p className="text-sm text-gray-400">
+                  Upload up to 8 product images. These will be used to generate custom demo scenes.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+        
         {/* Step 1 & 2: Project Creation */}
         {!projectId && (
              <div className="bg-gray-800 p-6 rounded-lg shadow-xl border border-gray-700 mb-8">
