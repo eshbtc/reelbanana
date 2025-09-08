@@ -80,7 +80,7 @@ jobs:
         if [ -z "$CHANGED_SERVICES" ]; then
           SERVICES_JSON="[]"
         else
-          SERVICES_JSON=$(echo "$CHANGED_SERVICES" | tr ' ' '\n' | jq -R . | jq -s .)
+          SERVICES_JSON=$(echo "$CHANGED_SERVICES" | tr ' ' '\n' | jq -R . | jq -s . | jq -c .)
         fi
         echo "services=$SERVICES_JSON" >> $GITHUB_OUTPUT
         echo "Services to deploy: $CHANGED_SERVICES"
