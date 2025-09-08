@@ -26,13 +26,13 @@ export interface ApiConfig {
 // Production configuration (Google Cloud Run services)
 const PRODUCTION_CONFIG: ApiConfig = {
   baseUrls: {
-    upload: 'https://reel-banana-upload-assets-223097908182.us-central1.run.app',
-    narrate: 'https://reel-banana-narrate-223097908182.us-central1.run.app',
-    align: 'https://reel-banana-align-captions-223097908182.us-central1.run.app',
-    render: 'https://reel-banana-render-223097908182.us-central1.run.app',
-    compose: 'https://reel-banana-compose-music-223097908182.us-central1.run.app',
-    polish: 'https://reel-banana-polish-223097908182.us-central1.run.app',
-    apiKey: 'https://reel-banana-api-key-service-223097908182.us-central1.run.app',
+    upload: 'https://reel-banana-upload-assets-nyckt4dazq-uc.a.run.app',
+    narrate: 'https://reel-banana-narrate-nyckt4dazq-uc.a.run.app',
+    align: 'https://reel-banana-align-captions-nyckt4dazq-uc.a.run.app',
+    render: 'https://reel-banana-render-nyckt4dazq-uc.a.run.app',
+    compose: 'https://reel-banana-compose-music-nyckt4dazq-uc.a.run.app',
+    polish: 'https://reel-banana-polish-nyckt4dazq-uc.a.run.app',
+    apiKey: 'https://reel-banana-api-key-service-nyckt4dazq-uc.a.run.app',
   },
   firebase: {
     projectId: 'reel-banana-35a54', // Not sensitive
@@ -68,13 +68,13 @@ const DEVELOPMENT_CONFIG: ApiConfig = {
 // AI Studio configuration (for deployment on AI Studio)
 const AI_STUDIO_CONFIG: ApiConfig = {
   baseUrls: {
-    upload: 'https://reel-banana-upload-assets-423229273041.us-central1.run.app',
-    narrate: 'https://reel-banana-narrate-423229273041.us-central1.run.app',
-    align: 'https://reel-banana-align-captions-423229273041.us-central1.run.app',
-    render: 'https://reel-banana-render-423229273041.us-central1.run.app',
-    compose: 'https://reel-banana-compose-music-423229273041.us-central1.run.app',
-    polish: 'https://reel-banana-polish-423229273041.us-central1.run.app',
-    apiKey: 'https://reel-banana-api-key-service-423229273041.us-central1.run.app',
+    upload: 'https://reel-banana-upload-assets-nyckt4dazq-uc.a.run.app',
+    narrate: 'https://reel-banana-narrate-nyckt4dazq-uc.a.run.app',
+    align: 'https://reel-banana-align-captions-nyckt4dazq-uc.a.run.app',
+    render: 'https://reel-banana-render-nyckt4dazq-uc.a.run.app',
+    compose: 'https://reel-banana-compose-music-nyckt4dazq-uc.a.run.app',
+    polish: 'https://reel-banana-polish-nyckt4dazq-uc.a.run.app',
+    apiKey: 'https://reel-banana-api-key-service-nyckt4dazq-uc.a.run.app',
   },
   firebase: {
     projectId: 'reel-banana-35a54',
@@ -119,10 +119,10 @@ const validateConfig = (config: ApiConfig, envName: string): void => {
 
 // Determine which configuration to use based on environment
 // Environment Selection Logic:
-// 1. PRODUCTION: Built with Vite (import.meta.env.PROD = true) → uses 223097908182 services
-// 2. AI_STUDIO: Set VITE_TARGET_ENV=ai-studio → uses 423229273041 services  
+// 1. PRODUCTION: Built with Vite (import.meta.env.PROD = true) → uses nyckt4dazq services
+// 2. AI_STUDIO: Set VITE_TARGET_ENV=ai-studio → uses nyckt4dazq services  
 // 3. DEVELOPMENT: localhost/127.0.0.1 → uses local services (ports 8080-8086)
-// 4. FALLBACK: Any other case → defaults to PRODUCTION (223097908182)
+// 4. FALLBACK: Any other case → defaults to PRODUCTION (nyckt4dazq)
 const getConfig = (): ApiConfig => {
   let selectedConfig: ApiConfig;
   let envName: string;
