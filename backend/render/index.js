@@ -319,10 +319,28 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                 return sendError(req, res, 500, 'FAL_CLIP_FAILURE', 'No clips were generated');
             }
             
-            // Step 2: Compose final video using FAL workflow
-            console.log(`Composing final video from ${clipUrls.length} clips using FAL workflow...`);
+            // Step 2: Compose final video using FFmpeg (fallback approach)
+            console.log(`Composing final video from ${clipUrls.length} clips using FFmpeg...`);
             
-            // Get signed URLs for audio and captions
+            // Download clips and compose with FFmpeg locally
+            tempDir = path.join('/tmp', projectId);
+            await fs.mkdir(tempDir, { recursive: true });
+            
+            // Download all clips
+            const clipPaths = [];
+            for (let i = 0; i < clipUrls.length; i++) {
+                const clipPath = path.join(tempDir, `clip-${i}.mp4`);
+                const response = await fetch(clipUrls[i]);
+                if (!response.ok) {
+                    throw new Error(`Failed to download clip ${i}: ${response.status}`);
+                }
+                const arrayBuffer = await response.arrayBuffer();
+                await fs.writeFile(clipPath, Buffer.from(arrayBuffer));
+                clipPaths.push(clipPath);
+                console.log(`Downloaded clip ${i}: ${clipPath}`);
+            }
+            
+            // Get audio files
             const parseGs = (gs) => {
                 if (!gs || !gs.startsWith('gs://')) return null;
                 const rest = gs.substring('gs://'.length);
@@ -330,114 +348,114 @@ app.post('/render', ...createExpensiveOperationLimiter('render'), appCheckVerifi
                 return { bucket: rest.substring(0, firstSlash), path: rest.substring(firstSlash + 1) };
             };
             
-            const signReadUrl = async ({ bucket, path }) => {
-                const file = storage.bucket(bucket).file(path);
-                const [url] = await file.getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 60 * 60 * 1000 });
-                return url;
-            };
-            
             const audioObj = parseGs(gsAudioPath);
-            const srtObj = parseGs(srtPath);
             const musicObj = gsMusicPath ? parseGs(gsMusicPath) : null;
             
-            const audioUrl = audioObj ? await signReadUrl(audioObj) : null;
-            const srtUrl = srtObj ? await signReadUrl(srtObj) : null;
-            const musicUrl = musicObj ? await signReadUrl(musicObj) : null;
+            const audioPath = path.join(tempDir, 'narration.mp3');
+            const musicPath = path.join(tempDir, 'music.mp3');
             
-            // Create FAL workflow for video composition
-            const workflow = {
-                "input": {
-                    "id": "input",
-                    "type": "input",
-                    "depends": [],
-                    "input": {
-                        "video_urls": [],
-                        "audio_url": "",
-                        "music_url": ""
-                    }
-                },
-                "compose": {
-                    "id": "compose",
-                    "type": "run",
-                    "depends": ["input"],
-                    "app": "fal-ai/ffmpeg-api/compose",
-                    "input": {
-                        "inputs": "$input.video_urls",
-                        "audio": "$input.audio_url",
-                        "music": "$input.music_url",
-                        "output_format": "mp4"
-                    }
-                },
-                "output": {
-                    "id": "output",
-                    "type": "display",
-                    "depends": ["compose"],
-                    "input": {
-                        "video": "$compose.video"
-                    },
-                    "fields": {
-                        "video": "$compose.video"
-                    }
-                }
-            };
-            
-            try {
-                const stream = await fal.stream('workflows/execute', {
-                    input: {
-                        input: {
-                            video_urls: clipUrls,
-                            audio_url: audioUrl || '',
-                            music_url: musicUrl || ''
-                        },
-                        workflow: workflow
-                    }
-                });
-                
-                const result = await stream.done();
-                const finalVideoUrl = pickUrl(result?.data);
-                if (!finalVideoUrl) {
-                    throw new Error('FAL workflow did not return a video URL');
-                }
-                
-                // Download and save to GCS
-                const remoteRes = await fetch(finalVideoUrl);
-                if (!remoteRes.ok) {
-                    throw new Error(`Failed to download composed video: ${remoteRes.status}`);
-                }
-                
-                const arrayBuffer = await remoteRes.arrayBuffer();
-                const finalVideoFile = outputBucket.file(`${projectId}/movie.mp4`);
-                await finalVideoFile.save(Buffer.from(arrayBuffer), { metadata: { contentType: 'video/mp4' } });
-                
-                // Return appropriate URL
-                let videoUrl;
-                if (req.body.published) {
-                    try {
-                        await finalVideoFile.makePublic();
-                    } catch (_) {}
-                    videoUrl = finalVideoFile.publicUrl();
-                } else {
-                    const [signedUrl] = await finalVideoFile.getSignedUrl({
-                        version: 'v4',
-                        action: 'read',
-                        expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
-                    });
-                    videoUrl = signedUrl;
-                }
-                
-                console.log(`FAL per-scene render complete: ${videoUrl}`);
-                
-                // Record successful render
-                const renderDuration = Date.now() - renderStartTime;
-                req.sliMonitor.recordSuccess('render', true, { projectId, cached: false, engine: 'fal-per-scene' });
-                req.sliMonitor.recordLatency('render', renderDuration, { projectId, cached: false, engine: 'fal-per-scene' });
-                
-                return res.status(200).json({ videoUrl, engine: 'fal-per-scene', skipPolish: true });
-                
-            } catch (e) {
-                console.error('FAL workflow error:', e?.message || e);
-                return sendError(req, res, 500, 'FAL_WORKFLOW_FAILURE', 'FAL workflow failed', e?.message || String(e));
+            // Download narration audio
+            if (audioObj) {
+                const audioFile = storage.bucket(audioObj.bucket).file(audioObj.path);
+                await audioFile.download({ destination: audioPath });
+                console.log(`Downloaded narration: ${audioPath}`);
             }
+            
+            // Download music if available
+            if (musicObj) {
+                const musicFile = storage.bucket(musicObj.bucket).file(musicObj.path);
+                await musicFile.download({ destination: musicPath });
+                console.log(`Downloaded music: ${musicPath}`);
+            }
+            
+            // Create concat list for FFmpeg
+            const concatListPath = path.join(tempDir, 'concat_list.txt');
+            const concatList = clipPaths.map(clipPath => `file '${clipPath}'`).join('\n');
+            await fs.writeFile(concatListPath, concatList);
+            
+            // Concatenate video clips
+            const silentVideoPath = path.join(tempDir, 'silent_video.mp4');
+            await new Promise((resolve, reject) => {
+                ffmpeg()
+                    .input(concatListPath)
+                    .inputOptions(['-f', 'concat', '-safe', '0'])
+                    .outputOptions(['-c', 'copy'])
+                    .on('end', resolve)
+                    .on('error', (err) => {
+                        console.error('FFmpeg concat error:', err.message);
+                        reject(new Error('FFMPEG_FAILURE'));
+                    })
+                    .save(silentVideoPath);
+            });
+            
+            // Add audio to the video
+            const finalVideoPath = path.join(tempDir, 'final_video.mp4');
+            const audioInputs = [silentVideoPath];
+            const audioFilters = [];
+            
+            if (await fs.access(audioPath).then(() => true).catch(() => false)) {
+                audioInputs.push(audioPath);
+                audioFilters.push('[1:a]volume=1.0[audio1]');
+            }
+            
+            if (await fs.access(musicPath).then(() => true).catch(() => false)) {
+                audioInputs.push(musicPath);
+                audioFilters.push('[2:a]volume=0.3[audio2]');
+            }
+            
+            if (audioFilters.length > 0) {
+                // Mix audio tracks
+                const mixFilter = audioFilters.length === 2 
+                    ? '[audio1][audio2]amix=inputs=2:duration=longest[audio]'
+                    : '[audio1]acopy[audio]';
+                audioFilters.push(mixFilter);
+                
+                await new Promise((resolve, reject) => {
+                    const command = ffmpeg();
+                    audioInputs.forEach(input => command.input(input));
+                    command
+                        .complexFilter(audioFilters)
+                        .outputOptions(['-map', '0:v', '-map', '[audio]', '-c:v', 'copy', '-c:a', 'aac'])
+                        .on('end', resolve)
+                        .on('error', (err) => {
+                            console.error('FFmpeg audio mix error:', err.message);
+                            reject(new Error('FFMPEG_FAILURE'));
+                        })
+                        .save(finalVideoPath);
+                });
+            } else {
+                // No audio, just copy the video
+                await fs.copyFile(silentVideoPath, finalVideoPath);
+            }
+            
+            // Upload final video to GCS
+            const finalVideoFile = outputBucket.file(`${projectId}/movie.mp4`);
+            await finalVideoFile.upload(finalVideoPath, { metadata: { contentType: 'video/mp4' } });
+            
+            // Return appropriate URL
+            let videoUrl;
+            if (req.body.published) {
+                try {
+                    await finalVideoFile.makePublic();
+                } catch (_) {}
+                videoUrl = finalVideoFile.publicUrl();
+            } else {
+                const [signedUrl] = await finalVideoFile.getSignedUrl({
+                    version: 'v4',
+                    action: 'read',
+                    expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+                });
+                videoUrl = signedUrl;
+            }
+            
+            console.log(`FAL per-scene + FFmpeg compose complete: ${videoUrl}`);
+            
+            // Record successful render
+            const renderDuration = Date.now() - renderStartTime;
+            req.sliMonitor.recordSuccess('render', true, { projectId, cached: false, engine: 'fal-per-scene-ffmpeg' });
+            req.sliMonitor.recordLatency('render', renderDuration, { projectId, cached: false, engine: 'fal-per-scene-ffmpeg' });
+            
+            return res.status(200).json({ videoUrl, engine: 'fal-per-scene-ffmpeg', skipPolish: true });
         }
         // Early path: if a final video already exists, allow "publish-only" requests
         // This supports calling /render with just { projectId, published: true }
