@@ -14,13 +14,14 @@ import MyProjectsPage from './components/MyProjectsPage';
 import AdBlockerWarning from './components/AdBlockerWarning';
 import DemoUI from './components/DemoUI';
 import MetaDemoUI from './components/MetaDemoUI';
+import AdminDashboard from './components/AdminDashboard';
 import { Scene } from './types';
 import { getCurrentUser } from './services/authService';
 import { API_ENDPOINTS } from './config/apiConfig';
 import { authFetch } from './lib/authFetch';
 // Removed auto-publish; handled in MoviePlayer for one-click publish UX
 
-type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects' | 'demo' | 'meta-demo' | 'hype';
+type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'dashboard' | 'projects' | 'demo' | 'meta-demo' | 'hype' | 'admin';
 
 const App: React.FC = () => {
   // Defensive context usage to prevent null context errors
@@ -42,6 +43,7 @@ const App: React.FC = () => {
     if (path === '/gallery') return 'gallery';
     if (path === '/dashboard') return 'dashboard';
     if (path === '/hype') return 'hype';
+    if (path === '/admin') return 'admin';
     return 'editor';
   };
 
@@ -218,6 +220,8 @@ const App: React.FC = () => {
             onFail={handleRenderFail}
           />
         );
+      case 'admin':
+        return <AdminDashboard />;
       case 'editor':
       default:
         return (

@@ -1066,6 +1066,146 @@ app.get('/cache-status/:projectId', appCheckVerification, async (req, res) => {
     }
 });
 
+/**
+ * GET /cache-status
+ * Get overall cache statistics for admin dashboard
+ */
+app.get('/cache-status', appCheckVerification, async (req, res) => {
+    try {
+        const outputBucket = storage.bucket(outputBucketName);
+        const [files] = await outputBucket.getFiles({ prefix: 'cache/' });
+        
+        let totalSize = 0;
+        let totalFiles = 0;
+        const cacheStats = {
+            narrate: { hits: 0, misses: 0, size: 0 },
+            align: { hits: 0, misses: 0, size: 0 },
+            compose: { hits: 0, misses: 0, size: 0 },
+            render: { hits: 0, misses: 0, size: 0 }
+        };
+        
+        files.forEach(file => {
+            const size = parseInt(file.metadata.size || '0');
+            totalSize += size;
+            totalFiles++;
+            
+            // Categorize by service
+            if (file.name.includes('cache/narrate/')) {
+                cacheStats.narrate.size += size;
+            } else if (file.name.includes('cache/align/')) {
+                cacheStats.align.size += size;
+            } else if (file.name.includes('cache/compose/')) {
+                cacheStats.compose.size += size;
+            } else if (file.name.includes('cache/render/')) {
+                cacheStats.render.size += size;
+            }
+        });
+        
+        // Format sizes
+        const formatSize = (bytes) => {
+            if (bytes === 0) return '0 MB';
+            const mb = bytes / (1024 * 1024);
+            return `${mb.toFixed(1)} MB`;
+        };
+        
+        const formattedStats = {
+            narrate: { ...cacheStats.narrate, size: formatSize(cacheStats.narrate.size) },
+            align: { ...cacheStats.align, size: formatSize(cacheStats.align.size) },
+            compose: { ...cacheStats.compose, size: formatSize(cacheStats.compose.size) },
+            render: { ...cacheStats.render, size: formatSize(cacheStats.render.size) }
+        };
+        
+        res.json({
+            totalFiles,
+            totalSize: formatSize(totalSize),
+            services: formattedStats,
+            bucket: outputBucketName
+        });
+    } catch (error) {
+        console.error('Cache status error:', error);
+        res.status(500).json({
+            error: 'Failed to get cache status',
+            message: error.message
+        });
+    }
+});
+
+/**
+ * GET /admin/stats
+ * Get comprehensive admin statistics
+ */
+app.get('/admin/stats', appCheckVerification, async (req, res) => {
+    try {
+        const outputBucket = storage.bucket(outputBucketName);
+        const inputBucket = storage.bucket(inputBucketName);
+        
+        // Get video files
+        const [videoFiles] = await outputBucket.getFiles({ prefix: '' });
+        const videos = videoFiles.filter(f => f.name.endsWith('.mp4'));
+        
+        // Get project directories
+        const projectDirs = new Set();
+        videoFiles.forEach(file => {
+            const parts = file.name.split('/');
+            if (parts.length > 1) {
+                projectDirs.add(parts[0]);
+            }
+        });
+        
+        // Get input files
+        const [inputFiles] = await inputBucket.getFiles({ prefix: '' });
+        
+        // Calculate storage usage
+        let totalVideoSize = 0;
+        videos.forEach(video => {
+            totalVideoSize += parseInt(video.metadata.size || '0');
+        });
+        
+        let totalInputSize = 0;
+        inputFiles.forEach(file => {
+            totalInputSize += parseInt(file.metadata.size || '0');
+        });
+        
+        const formatSize = (bytes) => {
+            if (bytes === 0) return '0 MB';
+            const gb = bytes / (1024 * 1024 * 1024);
+            return `${gb.toFixed(2)} GB`;
+        };
+        
+        res.json({
+            videos: {
+                total: videos.length,
+                totalSize: formatSize(totalVideoSize),
+                averageSize: videos.length > 0 ? formatSize(totalVideoSize / videos.length) : '0 MB'
+            },
+            projects: {
+                total: projectDirs.size,
+                active: projectDirs.size // Simplified - in real implementation, check last activity
+            },
+            storage: {
+                videos: formatSize(totalVideoSize),
+                inputs: formatSize(totalInputSize),
+                total: formatSize(totalVideoSize + totalInputSize)
+            },
+            services: {
+                render: {
+                    engine: renderEngineEnv,
+                    falModel: falRenderModel,
+                    memory: process.env.MEMORY_LIMIT || 'unknown',
+                    cpu: process.env.CPU_LIMIT || 'unknown'
+                }
+            },
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Admin stats error:', error);
+        res.status(500).json({
+            error: 'Failed to get admin stats',
+            message: error.message
+        });
+    }
+});
+
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
