@@ -6,6 +6,30 @@ export type CameraMovement = 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right' |
 export type TransitionType = 'fade' | 'wipeleft' | 'wiperight' | 'circleopen' | 'dissolve' | 'none';
 export type StylePreset = 'none' | 'ghibli' | 'wes-anderson' | 'film-noir' | 'pixel-art' | 'claymation';
 
+// Aspect ratio and export presets
+export type AspectRatio = '16:9' | '9:16' | '1:1';
+export type ExportPreset = 'youtube' | 'tiktok' | 'square' | 'custom';
+
+export interface AspectRatioConfig {
+  id: AspectRatio;
+  name: string;
+  description: string;
+  width: number;
+  height: number;
+  icon: string;
+}
+
+export interface ExportPresetConfig {
+  id: ExportPreset;
+  name: string;
+  description: string;
+  platform: string;
+  aspectRatio: AspectRatio;
+  resolution: { width: number; height: number };
+  bitrate: string;
+  container: string;
+}
+
 export interface Scene {
   id: string;
   prompt: string;
@@ -43,4 +67,58 @@ export interface CharacterOption {
   name: string;
   description: string; // character + style summary
   images: string[]; // data URIs or https URLs
+}
+
+// Brand Kit types for Pro/Studio features
+export interface BrandKit {
+  id: string;
+  name: string;
+  description?: string;
+  logo?: string; // URL to logo image
+  primaryColor?: string; // Hex color
+  secondaryColor?: string; // Hex color
+  accentColor?: string; // Hex color
+  fontFamily?: string;
+  brandVoice?: string; // Tone and style description
+  brandGuidelines?: string; // Additional brand guidelines
+  createdAt: Date;
+  updatedAt: Date;
+  isDefault?: boolean;
+}
+
+export interface ReviewLink {
+  id: string;
+  projectId: string;
+  title: string;
+  description?: string;
+  status: 'active' | 'archived' | 'expired';
+  expiresAt?: Date;
+  // Permissions array for public actions on the link
+  permissions: ('view' | 'comment' | 'approve')[];
+  // Optional password protection
+  password?: string;
+  // Secure token used in the public URL
+  token: string;
+  // Owner and analytics
+  createdBy: string;
+  accessCount?: number;
+  lastAccessedAt?: Date;
+  // Reviewer allowlist (emails)
+  reviewers: string[];
+  createdAt: Date;
+  updatedAt?: Date;
+}
+
+export interface ReviewComment {
+  id: string;
+  authorEmail?: string;
+  authorName: string;
+  content: string;
+  timestamp: Date;
+  // Optional moderation/triage fields
+  status: 'pending' | 'approved' | 'rejected';
+  resolved?: boolean;
+  sceneId?: string; // If comment is scene-specific
+  parentId?: string; // For threaded comments
+  position?: { x: number; y: number }; // Optional position overlay
 }

@@ -7,6 +7,7 @@ export interface SubscriptionPlan {
   name: string;
   price: number;
   interval: 'month' | 'year';
+  priceId?: string | null;
   features: string[];
   limits: {
     dailyRenders: number;

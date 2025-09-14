@@ -85,6 +85,8 @@ export const signInWithGoogle = async (): Promise<UserProfile> => {
   }
 };
 
+ 
+
 /**
  * Sign out user
  */

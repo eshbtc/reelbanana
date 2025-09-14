@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Modal from './Modal';
 import Spinner from './Spinner';
 import { CREDIT_PACKAGES, formatPrice, formatCredits } from '../utils/costCalculator';
 import { purchaseCredits } from '../services/creditService';
 import { useUserCredits } from '../hooks/useUserCredits';
+import { getStripeConfig, initializeStripePayment } from '../services/stripeService';
+import StripeCard from './StripeCard';
 
 interface CreditPurchaseModalProps {
   isOpen: boolean;
@@ -20,6 +22,19 @@ export const CreditPurchaseModal: React.FC<CreditPurchaseModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { refreshCredits } = useUserCredits();
+  const [publishableKey, setPublishableKey] = useState<string>('');
+  const [ctx, setCtx] = useState<{ stripe: any; elements: any; card: any } | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const cfg = await getStripeConfig();
+        setPublishableKey(cfg.publishableKey);
+      } catch (e) {
+        console.error('Failed to load Stripe config:', e);
+      }
+    })();
+  }, []);
 
   const handlePurchase = async () => {
     if (!selectedPackage) return;
@@ -28,9 +43,16 @@ export const CreditPurchaseModal: React.FC<CreditPurchaseModalProps> = ({
     setError(null);
 
     try {
-      // For now, we'll simulate the purchase process
-      // In a real implementation, this would integrate with Stripe
-      const result = await purchaseCredits(selectedPackage, 'pm_card_visa');
+      if (!publishableKey || !ctx) {
+        throw new Error('Payment form not ready');
+      }
+      // Create a payment method via Stripe Elements
+      const { paymentMethod, error } = await initializeStripePayment(publishableKey, ctx.elements, ctx.card);
+      if (error || !paymentMethod?.id) {
+        throw new Error(error?.message || 'Failed to create payment method');
+      }
+
+      const result = await purchaseCredits(selectedPackage, paymentMethod.id);
       
       if (result.success) {
         await refreshCredits();
@@ -119,6 +141,16 @@ export const CreditPurchaseModal: React.FC<CreditPurchaseModalProps> = ({
           </div>
         )}
 
+        {/* Payment Method */}
+        <div>
+          <h4 className="text-sm font-semibold text-white mb-2">Payment Method</h4>
+          {publishableKey ? (
+            <StripeCard publishableKey={publishableKey} onReady={setCtx} />
+          ) : (
+            <div className="text-xs text-red-400">Unable to load payment form</div>
+          )}
+        </div>
+
         {/* Action Buttons */}
         <div className="flex gap-3">
           <button
@@ -130,7 +162,7 @@ export const CreditPurchaseModal: React.FC<CreditPurchaseModalProps> = ({
           </button>
           <button
             onClick={handlePurchase}
-            disabled={isProcessing || !selectedPackage}
+            disabled={isProcessing || !selectedPackage || !ctx}
             className="flex-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-black font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isProcessing ? (

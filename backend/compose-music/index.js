@@ -52,6 +52,49 @@ if (!admin.apps.length) {
   });
 }
 
+// Simple SSE progress for music generation
+const progressStore = new Map();
+const sseClients = new Map();
+const progressWriteTs = new Map();
+async function pushProgress(jobId, update) {
+  if (!jobId) return;
+  const prev = progressStore.get(jobId) || {};
+  const next = { progress: typeof update.progress==='number'?Math.max(0,Math.min(100,update.progress)):(prev.progress||0), stage: update.stage||prev.stage||'', message: update.message||prev.message||'', etaSeconds: typeof update.etaSeconds==='number'?update.etaSeconds:prev.etaSeconds, done: !!update.done, error: update.error||null, ts: Date.now() };
+  progressStore.set(jobId, next);
+  const set = sseClients.get(jobId);
+  if (set) { const payload = `data: ${JSON.stringify({ jobId, ...next })}\n\n`; for (const res of set) { try { res.write(payload); } catch {} } }
+  try {
+    const now = Date.now();
+    const last = progressWriteTs.get(jobId) || 0;
+    if (now - last > 900 || next.done || next.error) {
+      progressWriteTs.set(jobId, now);
+      const db = admin.firestore();
+      await db.collection('job_progress').doc(jobId).set({ jobId, service: 'compose', progress: next.progress, stage: next.stage, message: next.message, etaSeconds: next.etaSeconds||null, done: next.done, error: next.error||null, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    }
+  } catch {}
+}
+
+app.get('/progress-stream', appCheckVerification, (req, res) => {
+  const jobId = (req.query.jobId||'').toString();
+  if (!jobId) return sendError(req,res,400,'INVALID_ARGUMENT','Missing jobId');
+  res.setHeader('Content-Type','text/event-stream'); res.setHeader('Cache-Control','no-cache'); res.setHeader('Connection','keep-alive'); res.flushHeaders&&res.flushHeaders();
+  const snap = progressStore.get(jobId); if (snap) res.write(`data: ${JSON.stringify({ jobId, ...snap })}\n\n`);
+  else {
+    try {
+      const db = admin.firestore();
+      db.collection('job_progress').doc(jobId).get().then(doc => {
+        if (doc.exists) {
+          const data = doc.data() || {};
+          const payload = `data: ${JSON.stringify({ jobId, progress: data.progress||0, stage: data.stage||'', message: data.message||'', etaSeconds: data.etaSeconds||null, done: !!data.done, error: data.error||null })}\n\n`;
+          try { res.write(payload); } catch {}
+        }
+      });
+    } catch {}
+  }
+  if (!sseClients.has(jobId)) sseClients.set(jobId, new Set()); sseClients.get(jobId).add(res);
+  req.on('close', ()=>{ const set=sseClients.get(jobId); if (set) set.delete(res); });
+});
+
 // Configure Firebase Genkit for server-side AI
 let ai = null;
 try {
@@ -217,7 +260,8 @@ app.post('/compose-music',
   ...createExpensiveOperationLimiter('compose'), 
   appCheckVerification, 
   async (req, res) => {
-  const { projectId, narrationScript } = req.body;
+  const { projectId, narrationScript, jobId: providedJobId } = req.body;
+  const jobId = (providedJobId && String(providedJobId)) || `compose-${projectId}-${Date.now()}`;
 
   if (!projectId || !narrationScript) {
     return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required fields: projectId and narrationScript');
@@ -236,6 +280,7 @@ app.post('/compose-music',
     if (exists) {
       const gsMusicPath = `gs://${bucketName}/${fileName}`;
       console.log(`Music already exists for ${projectId} at ${gsMusicPath}, skipping Gemini processing`);
+      try { pushProgress(jobId, { progress: 100, stage: 'compose', message: 'Cached music', done: true }); } catch {}
       metrics.cacheHits++;
       // Complete credit operation
       if (req.creditDeduction?.idempotencyKey) {
@@ -275,6 +320,7 @@ app.post('/compose-music',
       });
     }
     // 1. Generate music prompt using AI analysis of narration content
+    pushProgress(jobId, { progress: 10, stage: 'compose', message: 'Analyzing narration…' });
     const musicPrompt = await generateMusicPromptWithAI(narrationScript);
     console.log(`Generated music prompt: "${musicPrompt}"`);
 
@@ -282,8 +328,10 @@ app.post('/compose-music',
     // Reuse bucket, fileName, and file variables from cache check above
     
     console.log('🎵 Generating real music with ElevenLabs Eleven Music...');
+    pushProgress(jobId, { progress: 40, stage: 'compose', message: 'Generating music…' });
     const audioBuffer = await generateRealMusic(musicPrompt);
     
+    pushProgress(jobId, { progress: 85, stage: 'compose', message: 'Saving music…' });
     await file.save(audioBuffer, {
       metadata: { contentType: 'audio/wav' },
     });
@@ -308,6 +356,7 @@ app.post('/compose-music',
       await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
     }
     
+    try { pushProgress(jobId, { progress: 100, stage: 'compose', message: 'Music ready', done: true }); } catch {}
     res.status(200).json({ 
       gsMusicPath: gsMusicPath,
       musicPrompt: musicPrompt,

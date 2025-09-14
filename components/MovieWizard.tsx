@@ -7,6 +7,18 @@ import { Check, Play, Loader2, AlertCircle, SkipForward, PlayCircle, Settings, S
 import { API_ENDPOINTS, apiCall, apiConfig } from '../config/apiConfig';
 import { uploadImage, narrate, alignCaptions, composeMusic, renderVideo } from '../services/pipelineService';
 import { getCurrentUser } from '../services/authService';
+import { AspectRatio, ExportPreset } from '../types';
+import { getAspectRatioConfig, getExportPresetConfig, clampResolutionToPlan } from '../lib/exportPresets';
+import { useUserPlan } from '../hooks/useUserPlan';
+import { EnhancedUpgradePrompt } from './EnhancedUpgradePrompt';
+import { checkPlanGate } from '../services/planGatingService';
+import AspectRatioSelector from './AspectRatioSelector';
+import ExportPresetSelector from './ExportPresetSelector';
+import { BrandKitManager } from './BrandKitManager';
+import { ReviewLinkManager } from './ReviewLinkManager';
+import { BrandKit } from '../types';
+import JobProgress from './JobProgress';
+import { useJobProgress } from '../hooks/useJobProgress';
 
 interface WizardStep {
   id: string;
@@ -80,6 +92,72 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
   const [clipSeconds, setClipSeconds] = useState<number | ''>('');
   const [clipConcurrency, setClipConcurrency] = useState<number>(2);
   const [clipModel, setClipModel] = useState<string>('fal-ai/veo3/fast/image-to-video');
+  
+  // Aspect ratio and export preset controls
+  const [selectedAspectRatio, setSelectedAspectRatio] = useState<AspectRatio>('16:9');
+  const [selectedExportPreset, setSelectedExportPreset] = useState<ExportPreset>('youtube');
+  
+  // Use real plan detection hook
+  const { planTier: userPlan, planConfig, isLoading: planLoading, error: planError } = useUserPlan();
+  
+  // Plan gating state
+  const [planGateResults, setPlanGateResults] = useState<Record<string, any>>({});
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradePromptData, setUpgradePromptData] = useState<any>(null);
+
+  // Pro features state
+  const [selectedBrandKit, setSelectedBrandKit] = useState<BrandKit | null>(null);
+  const [showBrandKitManager, setShowBrandKitManager] = useState(false);
+  const [showReviewLinkManager, setShowReviewLinkManager] = useState(false);
+
+  // Check plan gates for current configuration
+  const checkPlanGates = async () => {
+    try {
+      const aspectRatioConfig = getAspectRatioConfig(selectedAspectRatio);
+      const exportPresetConfig = getExportPresetConfig(selectedExportPreset);
+      
+      const gates = await Promise.all([
+        checkPlanGate({
+          feature: 'high_resolution',
+          currentState: {
+            resolution: aspectRatioConfig ? { width: aspectRatioConfig.width, height: aspectRatioConfig.height } : undefined
+          }
+        }),
+        checkPlanGate({
+          feature: 'scene_limit',
+          currentState: { sceneCount: scenes.length }
+        }),
+        checkPlanGate({
+          feature: 'pro_polish',
+          currentState: {}
+        })
+      ]);
+
+      const results = {
+        high_resolution: gates[0],
+        scene_limit: gates[1],
+        pro_polish: gates[2]
+      };
+
+      setPlanGateResults(results);
+      
+      // Show upgrade prompt if any gate fails
+      const failedGate = Object.values(results).find((result: any) => !result.allowed);
+      if (failedGate) {
+        setUpgradePromptData(failedGate);
+        setShowUpgradePrompt(true);
+      }
+    } catch (error) {
+      console.error('Failed to check plan gates:', error);
+    }
+  };
+
+  // Check plan gates when configuration changes
+  useEffect(() => {
+    if (!planLoading && scenes.length > 0) {
+      checkPlanGates();
+    }
+  }, [selectedAspectRatio, selectedExportPreset, scenes.length, planLoading]);
 
   // Defensive context usage to prevent null context errors
   let confirm: any = null;
@@ -134,6 +212,12 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
   }, [db, etas]);
 
   useEffect(() => { loadMetrics(); }, [loadMetrics]);
+
+  // Render job per-scene progress (single hook)
+  const renderStep = steps.find(s => s.id === 'render');
+  const renderJobId = renderStep?.result?.jobId;
+  const renderProgress = renderJobId ? useJobProgress({ jobId: renderJobId, endpoint: API_ENDPOINTS.progressStream, auto: true }) : null as any;
+  const perSceneMap = (renderProgress && renderProgress.perScene) || {};
 
   // Per-scene clip detection (best-effort), polls until clips appear
   useEffect(() => {
@@ -337,18 +421,23 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
 
   const executeNarrate = async () => {
     const narrationScript = scenes.map((s: any) => s.narration).join(' ');
-    return await narrate({ projectId, narrationScript, emotion });
+    const jobId = `narrate-${projectId}-${Date.now()}`;
+    const res = await narrate({ projectId, narrationScript, emotion, jobId });
+    // Attach jobId to result so UI can optionally stream it
+    return { ...res, jobId } as any;
   };
 
   const executeAlign = async () => {
     const narrateStep = steps.find(s => s.id === 'narrate');
     const gsAudioPath = narrateStep?.result?.gsAudioPath;
+    const parentJobId = narrateStep?.result?.jobId;
     
     if (!gsAudioPath) {
       throw new Error('No audio path from narration step');
     }
-
-    return await alignCaptions({ projectId, gsAudioPath });
+    // Use a derived job id for continuity
+    const res = await alignCaptions({ projectId, gsAudioPath });
+    return { ...res, jobId: parentJobId } as any;
   };
 
   const executeCompose = async () => {
@@ -356,7 +445,9 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       return { message: 'Compose skipped in demo mode', cached: true };
     }
     const narrationScript = scenes.map((s: any) => s.narration).join(' ');
-    return await composeMusic({ projectId, narrationScript });
+    const jobId = `compose-${projectId}-${Date.now()}`;
+    const res = await composeMusic({ projectId, narrationScript });
+    return { ...res, jobId } as any;
   };
 
   const executeRender = async () => {
@@ -380,16 +471,48 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       duration: scene.duration || 3,
     }));
 
+    // Get resolution from selected aspect ratio and export preset
+    const aspectRatioConfig = getAspectRatioConfig(selectedAspectRatio);
+    const exportPresetConfig = getExportPresetConfig(selectedExportPreset);
+    
+    // Use export preset resolution if available, otherwise use aspect ratio resolution
+    let targetW = aspectRatioConfig?.width || 1920;
+    let targetH = aspectRatioConfig?.height || 1080;
+    
+    if (exportPresetConfig) {
+      targetW = exportPresetConfig.resolution.width;
+      targetH = exportPresetConfig.resolution.height;
+    }
+    
+    // Clamp to user plan limits
+    const clampedResolution = clampResolutionToPlan(targetW, targetH, userPlan);
+
     const narrationScript = scenes.map((s: any) => s.narration).join(' ');
     const totalSecs = Math.max(8, Math.round(scenes.reduce((s, sc) => s + (sc.duration || 3), 0)));
     try {
-      const body: any = { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: true, force: true };
+      const jobId = `render-${projectId}-${Date.now()}`;
+      const body: any = { 
+        projectId, 
+        scenes: sceneDataForRender, 
+        gsAudioPath, 
+        srtPath, 
+        gsMusicPath, 
+        useFal: true, 
+        force: true,
+        jobId,
+        // New aspect ratio and export preset parameters
+        targetW: clampedResolution.width,
+        targetH: clampedResolution.height,
+        aspectRatio: selectedAspectRatio,
+        exportPreset: selectedExportPreset
+      };
       if (autoGenerateClips !== undefined) body.autoGenerateClips = !!autoGenerateClips;
       if (forceClips) body.forceClips = true;
       if (clipSeconds && typeof clipSeconds === 'number') body.clipSeconds = clipSeconds;
       if (clipConcurrency) body.clipConcurrency = clipConcurrency;
       if (clipModel) body.clipModel = clipModel;
-      return await renderVideo(body);
+      const res = await renderVideo(body);
+      return { ...res, jobId } as any;
     } catch (e) {
       // Retry without force if needed
       const bodyRetry: any = { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: true };
@@ -398,7 +521,8 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       if (clipSeconds && typeof clipSeconds === 'number') bodyRetry.clipSeconds = clipSeconds;
       if (clipConcurrency) bodyRetry.clipConcurrency = clipConcurrency;
       if (clipModel) bodyRetry.clipModel = clipModel;
-      return await renderVideo(bodyRetry);
+      const res = await renderVideo(bodyRetry);
+      return { ...res } as any;
     }
   };
 
@@ -501,10 +625,12 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       {/* Scene gallery */}
       <div className="mb-6">
         <h2 className="text-white font-semibold mb-3">Scenes</h2>
+        {/* Per-scene bars use renderProgress.perScene computed above */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {scenes.map((scene, i) => {
             const thumb = (scene.imageUrls && scene.imageUrls[0]) || null;
             const clip = clipStatus[i];
+            const perScenePct = (perSceneMap && (perSceneMap[String(i)] ?? perSceneMap[i])) ?? null;
             return (
               <div key={i} className="bg-gray-800 rounded-lg overflow-hidden border border-gray-700">
                 <div className="aspect-video relative bg-black">
@@ -523,9 +649,17 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
                     </div>
                   )}
                   <div className="absolute top-2 left-2 text-xs bg-black/60 text-white px-2 py-0.5 rounded">Scene {i+1}</div>
-                  <div className="absolute bottom-2 left-2 text-xs px-2 py-0.5 rounded bg-amber-500 text-black">
-                    {clip?.exists ? 'Motion: ready' : 'Motion: pending'}
-                  </div>
+                  {clip?.exists ? (
+                    <div className="absolute bottom-2 left-2 text-xs px-2 py-0.5 rounded bg-green-600 text-white">Motion: ready</div>
+                  ) : (
+                    <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-gray-700">
+                      {perScenePct !== null ? (
+                        <div className="h-1.5 bg-amber-500 transition-all" style={{ width: `${Math.max(5, Math.min(100, perScenePct))}%` }} />
+                      ) : (
+                        <div className="h-1.5 bg-amber-500 animate-pulse" style={{ width: '25%' }} />
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="p-2 text-xs text-gray-300 flex items-center justify-between">
                   <span>Duration: {scene.duration || 3}s</span>
@@ -595,6 +729,32 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
           
           {getCurrentStep().status === 'failed' && (
             <div className="text-red-400 mb-4">✗ Failed: {getCurrentStep().error}</div>
+          )}
+
+          {/* Live job progress (SSE) for supported steps */}
+          {(getCurrentStep().id === 'narrate' || getCurrentStep().id === 'render' || getCurrentStep().id === 'align' || getCurrentStep().id === 'compose') && getCurrentStep().result?.jobId && (
+            <div className="mb-4">
+              <JobProgress
+                jobId={getCurrentStep().result.jobId}
+                endpoint={
+                  getCurrentStep().id === 'narrate' ? `${apiConfig.baseUrls.narrate}/progress-stream` :
+                  getCurrentStep().id === 'align' ? `${apiConfig.baseUrls.align}/progress-stream` :
+                  getCurrentStep().id === 'compose' ? `${apiConfig.baseUrls.compose}/progress-stream` :
+                  API_ENDPOINTS.progressStream
+                }
+                compact
+              />
+              {(() => {
+                const r = etas[getCurrentStep().id] || [2,5];
+                const avg = Math.round((r[0] + r[1]) / 2);
+                const stepId = getCurrentStep().id;
+                let pct = 0;
+                if (stepId === 'render' && renderProgress && typeof renderProgress.progress === 'number') pct = renderProgress.progress / 100;
+                // For other steps we could read their job progress similarly if needed
+                const eta = pct > 0.05 ? Math.max(1, Math.round(avg * (1 - pct))) : `${r[0]}-${r[1]}`;
+                return <div className="text-xs text-gray-400 mt-1">ETA ~ {eta}s</div>;
+              })()}
+            </div>
           )}
 
           {/* Step Actions */}
@@ -690,6 +850,35 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       {/* Render Settings */}
       <div className="bg-gray-800 rounded-lg p-6 mt-6">
         <h3 className="text-lg font-semibold text-white mb-4">Render Settings</h3>
+        
+        {/* Plan Gating Upgrade Prompts */}
+        {Object.values(planGateResults).map((gateResult: any, index) => (
+          !gateResult.allowed && (
+            <EnhancedUpgradePrompt
+              key={index}
+              gateResult={gateResult}
+              variant="inline"
+              className="mb-4"
+              onDismiss={() => setShowUpgradePrompt(false)}
+            />
+          )
+        ))}
+        
+        {/* Aspect Ratio and Export Preset Selection */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <AspectRatioSelector
+            selectedAspectRatio={selectedAspectRatio}
+            onAspectRatioChange={setSelectedAspectRatio}
+            userPlan={userPlan}
+            disabled={false}
+          />
+          <ExportPresetSelector
+            selectedPreset={selectedExportPreset}
+            onPresetChange={setSelectedExportPreset}
+            userPlan={userPlan}
+            disabled={false}
+          />
+        </div>
         <div className="flex flex-wrap items-center gap-4 text-sm text-gray-300">
           <label className="flex items-center gap-2"><input type="checkbox" checked={autoGenerateClips} onChange={(e)=>setAutoGenerateClips(e.target.checked)} /> Auto-generate motion clips</label>
           <label className="flex items-center gap-2"><input type="checkbox" checked={forceClips} onChange={(e)=>setForceClips(e.target.checked)} /> Force regenerate clips</label>
@@ -698,6 +887,100 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
           <div className="flex items-center gap-2"><span>Model</span><select value={clipModel} onChange={(e)=>setClipModel(e.target.value)} className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white"><option value="fal-ai/veo3/fast/image-to-video">Veo 3 Fast (i2v)</option><option value="fal-ai/ltxv-13b-098-distilled/image-to-video">LTXV 13B (i2v)</option></select></div>
         </div>
       </div>
+
+      {/* Pro Features Section */}
+      <div className="bg-gray-800 rounded-lg p-6 mt-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Pro Features</h3>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Brand Kit */}
+          <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-md font-medium text-white">Brand Kit</h4>
+              <button
+                onClick={() => setShowBrandKitManager(true)}
+                className="text-amber-500 hover:text-amber-400 text-sm font-medium"
+              >
+                Manage
+              </button>
+            </div>
+            <p className="text-sm text-gray-400 mb-3">
+              Apply custom branding to your videos
+            </p>
+            {selectedBrandKit ? (
+              <div className="flex items-center gap-3">
+                <div className="flex gap-1">
+                  {selectedBrandKit.primaryColor && (
+                    <div
+                      className="w-4 h-4 rounded-full border border-gray-600"
+                      style={{ backgroundColor: selectedBrandKit.primaryColor }}
+                    />
+                  )}
+                  {selectedBrandKit.secondaryColor && (
+                    <div
+                      className="w-4 h-4 rounded-full border border-gray-600"
+                      style={{ backgroundColor: selectedBrandKit.secondaryColor }}
+                    />
+                  )}
+                </div>
+                <span className="text-sm text-white">{selectedBrandKit.name}</span>
+              </div>
+            ) : (
+              <span className="text-sm text-gray-500">No brand kit selected</span>
+            )}
+          </div>
+
+          {/* Review Links */}
+          <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-md font-medium text-white">Review Links</h4>
+              <button
+                onClick={() => setShowReviewLinkManager(true)}
+                className="text-amber-500 hover:text-amber-400 text-sm font-medium"
+              >
+                Manage
+              </button>
+            </div>
+            <p className="text-sm text-gray-400 mb-3">
+              Share your project for feedback
+            </p>
+            <span className="text-sm text-gray-500">Create review links to collaborate</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Upgrade Prompt Modal */}
+      {showUpgradePrompt && upgradePromptData && (
+        <EnhancedUpgradePrompt
+          gateResult={upgradePromptData}
+          variant="modal"
+          onUpgrade={(suggestedPlan) => {
+            setShowUpgradePrompt(false);
+            // TODO: Handle upgrade flow
+            console.log('Upgrade to:', suggestedPlan);
+          }}
+          onDismiss={() => setShowUpgradePrompt(false)}
+        />
+      )}
+
+      {/* Brand Kit Manager Modal */}
+      {showBrandKitManager && (
+        <BrandKitManager
+          isOpen={showBrandKitManager}
+          onClose={() => setShowBrandKitManager(false)}
+          onSelect={setSelectedBrandKit}
+        />
+      )}
+
+      {/* Review Link Manager Modal */}
+      {showReviewLinkManager && (
+        <ReviewLinkManager
+          isOpen={showReviewLinkManager}
+          onClose={() => setShowReviewLinkManager(false)}
+          projectId={projectId}
+          projectTitle="Movie Project"
+        />
+      )}
     </div>
   );
 };

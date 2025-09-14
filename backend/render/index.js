@@ -13,6 +13,7 @@ const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
 const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
 const { createSLIMiddleware, SLIMonitor } = require('./shared/sliMonitor');
 const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('./shared/creditService');
+const { mapPlanIdToTier, getPlanConfig } = require('./shared/planMapper');
 
 const app = express();
 
@@ -56,6 +57,101 @@ app.use(createSLIMiddleware('render'));
 if (!admin.apps.length) {
   admin.initializeApp();
 }
+
+// In-memory progress store and SSE client registry (best-effort; Cloud Run instances are ephemeral)
+const progressStore = new Map(); // jobId -> { progress, stage, message, etaSeconds, done, error, ts }
+const sseClients = new Map();    // jobId -> Set(res)
+const progressWriteTs = new Map();
+
+async function pushProgress(jobId, update) {
+  const prev = progressStore.get(jobId) || {};
+  const next = {
+    progress: typeof update.progress === 'number' ? Math.max(0, Math.min(100, update.progress)) : (prev.progress || 0),
+    stage: update.stage || prev.stage || '',
+    message: update.message || prev.message || '',
+    etaSeconds: (typeof update.etaSeconds === 'number' ? update.etaSeconds : prev.etaSeconds),
+    done: !!update.done,
+    error: update.error || null,
+    ts: Date.now(),
+    perScene: (() => {
+      const prevMap = prev.perScene || {};
+      const inc = update.perScene || null;
+      if (!inc) return prevMap;
+      return { ...prevMap, ...inc };
+    })(),
+    sceneCount: typeof update.sceneCount === 'number' ? update.sceneCount : (prev.sceneCount || null),
+    currentScene: typeof update.currentScene === 'number' ? update.currentScene : (prev.currentScene || null),
+  };
+  progressStore.set(jobId, next);
+  const clients = sseClients.get(jobId);
+  if (clients && clients.size) {
+    const payload = `data: ${JSON.stringify({ jobId, ...next })}\n\n`;
+    for (const res of clients) {
+      try { res.write(payload); } catch (_) {}
+    }
+  }
+  // Persist to Firestore (throttled)
+  try {
+    const now = Date.now();
+    const last = progressWriteTs.get(jobId) || 0;
+    if (now - last > 900 || next.done || next.error) {
+      progressWriteTs.set(jobId, now);
+      const db = admin.firestore();
+      await db.collection('job_progress').doc(jobId).set({
+        jobId,
+        service: 'render',
+        progress: next.progress,
+        stage: next.stage,
+        message: next.message,
+        etaSeconds: next.etaSeconds || null,
+        done: next.done,
+        error: next.error || null,
+        perScene: next.perScene || {},
+        sceneCount: next.sceneCount || null,
+        currentScene: next.currentScene || null,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+  } catch (e) { /* non-fatal */ }
+}
+
+// SSE endpoint for job progress
+app.get('/progress-stream', appCheckVerification, (req, res) => {
+  const jobId = (req.query.jobId || '').toString();
+  if (!jobId) {
+    return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing jobId');
+  }
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders && res.flushHeaders();
+  // Send initial snapshot if present
+  const snap = progressStore.get(jobId);
+  if (snap) {
+    res.write(`data: ${JSON.stringify({ jobId, ...snap })}\n\n`);
+  }
+  // Also try Firestore snapshot for persistence
+  try {
+    if (!snap) {
+      const db = admin.firestore();
+      db.collection('job_progress').doc(jobId).get().then(doc => {
+        if (doc.exists) {
+          const data = doc.data() || {};
+          const payload = `data: ${JSON.stringify({ jobId, progress: data.progress||0, stage: data.stage||'', message: data.message||'', etaSeconds: data.etaSeconds||null, done: !!data.done, error: data.error||null })}\n\n`;
+          try { res.write(payload); } catch {}
+        }
+      }).catch(()=>{});
+    }
+  } catch {}
+  // Register client
+  if (!sseClients.has(jobId)) sseClients.set(jobId, new Set());
+  sseClients.get(jobId).add(res);
+  // Clean up on close
+  req.on('close', () => {
+    const set = sseClients.get(jobId);
+    if (set) set.delete(res);
+  });
+});
 
 // Observability & Error helpers
 const { randomUUID } = require('crypto');
@@ -189,6 +285,7 @@ app.post('/generate-clip', appCheckVerification, async (req, res) => {
         while (Date.now() - start < timeoutMs) {
           const st = await fal.queue.status(mdl, { requestId, logs: false });
           const s = (st?.status || '').toString().toUpperCase();
+          // progress polling inside generate-clip; omit SSE in this endpoint
           if (s === 'COMPLETED') break;
           if (s === 'FAILED' || s === 'ERROR') throw new Error(`FAL status ${s}`);
           await new Promise(r => setTimeout(r, pollMs));
@@ -243,13 +340,15 @@ app.post('/render',
   appCheckVerification, 
   async (req, res) => {
     const renderStartTime = Date.now();
-    const { projectId, scenes, gsAudioPath, srtPath, gsMusicPath, useFal, force } = req.body;
+    const { projectId, scenes, gsAudioPath, srtPath, gsMusicPath, useFal, force, targetW, targetH, aspectRatio, exportPreset } = req.body;
+    const jobId = (req.body && req.body.jobId) ? String(req.body.jobId) : `render-${projectId}-${Date.now()}`;
 
     if (!projectId) {
         return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required field: projectId');
     }
 
     console.log(`Received render request for projectId: ${projectId}`);
+    try { await pushProgress(jobId, { progress: 1, stage: 'initializing', message: 'Starting render…' }); } catch {}
     
     // Declare tempDir outside try block so it's accessible in finally
     let tempDir;
@@ -286,6 +385,9 @@ app.post('/render',
             }
 
             console.log(`FAL per-scene approach: generating ${scenes.length} clips, then composing final video`);
+            const totalScenes = scenes.length;
+            let perSceneMap = {};
+            await pushProgress(jobId, { progress: 10, stage: 'clips', message: `Generating ${totalScenes} motion clips…`, perScene: perSceneMap, sceneCount: totalScenes, currentScene: 0 });
 
             // Step 1: Generate clips for each scene
             const { fal } = await import('@fal-ai/client');
@@ -297,6 +399,9 @@ app.post('/render',
             
             for (let i = 0; i < scenes.length; i++) {
                 console.log(`Checking for existing clip for scene ${i}...`);
+                const pct = Math.min(75, 10 + Math.round(((i) / Math.max(1, totalScenes)) * 60));
+                perSceneMap[i] = perSceneMap[i] || 5;
+                await pushProgress(jobId, { progress: pct, stage: 'clips', message: `Scene ${i+1}/${totalScenes}: preparing…`, perScene: { [i]: perSceneMap[i] }, currentScene: i });
                 
                 // Check if clip already exists in input bucket (main bucket) - clips stay private
                 const clipFileName = `${projectId}/clips/scene-${i}.mp4`;
@@ -312,6 +417,8 @@ app.post('/render',
                         expires: Date.now() + 60*60*1000 
                     });
                     clipUrls.push(signedClipUrl);
+                    perSceneMap[i] = 100;
+                    await pushProgress(jobId, { progress: pct, stage: 'clips', message: `Scene ${i+1}/${totalScenes}: cached`, perScene: { [i]: 100 }, currentScene: i });
                     continue;
                 }
                 
@@ -366,6 +473,8 @@ app.post('/render',
                         expires: Date.now() + 60*60*1000 
                     });
                     clipUrls.push(signedClipUrl);
+                    perSceneMap[i] = 100;
+                    await pushProgress(jobId, { progress: Math.min(75, 10 + Math.round(((i+1) / Math.max(1, totalScenes)) * 60)), stage: 'clips', message: `Scene ${i+1}/${totalScenes}: complete`, perScene: { [i]: 100 }, currentScene: i });
                     console.log(`Scene ${i} clip generated and cached: ${signedClipUrl}`);
                 } catch (e) {
                     console.error(`Failed to generate clip for scene ${i}:`, e?.message || e);
@@ -493,6 +602,7 @@ app.post('/render',
             }
             
             // Upload final video to GCS
+            pushProgress(jobId, { progress: 90, stage: 'uploading', message: 'Uploading final video…' });
             const finalVideoFile = outputBucket.file(`${projectId}/movie.mp4`);
             const videoBuffer = await fs.readFile(finalVideoPath);
             await finalVideoFile.save(videoBuffer, { 
@@ -516,6 +626,7 @@ app.post('/render',
             }
             
             console.log(`FAL per-scene + FFmpeg compose complete: ${videoUrl}`);
+            pushProgress(jobId, { progress: 100, stage: 'done', message: 'Done', done: true });
             
             // Record successful render
             const renderDuration = Date.now() - renderStartTime;
@@ -567,6 +678,7 @@ app.post('/render',
                 await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
             }
             
+            try { pushProgress((req.body && req.body.jobId) || `render-${projectId}`, { progress: 100, stage: 'done', message: 'Cached video', done: true }); } catch(_) {}
             return res.status(200).json({ videoUrl, cached: true });
         }
 
@@ -584,13 +696,69 @@ app.post('/render',
                 const idToken = authHeader.split('Bearer ')[1];
                 const decoded = await admin.auth().verifyIdToken(idToken);
                 const userDoc = await admin.firestore().collection('users').doc(decoded.uid).get();
-                if (userDoc.exists) plan = String(userDoc.data().plan || 'free').toLowerCase();
+                if (userDoc.exists) {
+                    const userData = userDoc.data();
+                    // Use subscription.planId if available, otherwise fall back to plan field
+                    const planId = userData.subscription?.planId || userData.plan;
+                    plan = mapPlanIdToTier(planId);
+                }
             }
         } catch (e) {
             console.warn('Render plan lookup failed; defaulting to free');
         }
-        const PLAN_RES = { free: { w: 854, h: 480 }, plus: { w: 1280, h: 720 }, pro: { w: 1920, h: 1080 }, studio: { w: 3840, h: 2160 } };
-        const { w: targetW, h: targetH } = PLAN_RES[plan] || PLAN_RES.free;
+        
+        // Use provided targetW/targetH if available, otherwise fall back to plan-based resolution
+        let finalTargetW, finalTargetH;
+        if (targetW && targetH) {
+            // Clamp provided resolution to plan limits
+            const PLAN_RES = { free: { w: 854, h: 480 }, plus: { w: 1280, h: 720 }, pro: { w: 1920, h: 1080 }, studio: { w: 3840, h: 2160 } };
+            const planLimits = PLAN_RES[plan] || PLAN_RES.free;
+            
+            // Maintain aspect ratio while clamping to plan limits
+            const aspectRatio = targetW / targetH;
+            
+            if (targetW > planLimits.w) {
+                finalTargetW = planLimits.w;
+                finalTargetH = Math.round(finalTargetW / aspectRatio);
+            } else {
+                finalTargetW = targetW;
+                finalTargetH = targetH;
+            }
+            
+            if (finalTargetH > planLimits.h) {
+                finalTargetH = planLimits.h;
+                finalTargetW = Math.round(finalTargetH * aspectRatio);
+            }
+            
+            console.log(`Using provided resolution: ${finalTargetW}x${finalTargetH} (clamped from ${targetW}x${targetH} for plan: ${plan})`);
+        } else {
+            // Fall back to plan-based resolution
+            const PLAN_RES = { free: { w: 854, h: 480 }, plus: { w: 1280, h: 720 }, pro: { w: 1920, h: 1080 }, studio: { w: 3840, h: 2160 } };
+            const { w, h } = PLAN_RES[plan] || PLAN_RES.free;
+            finalTargetW = w;
+            finalTargetH = h;
+            console.log(`Using plan-based resolution: ${finalTargetW}x${finalTargetH} for plan: ${plan}`);
+        }
+
+        // Get preset-specific FFmpeg encoding options
+        function getPresetEncodingOptions(preset) {
+            const baseOptions = ['-c:v libx264', '-pix_fmt yuv420p', '-movflags +faststart'];
+            
+            switch (preset) {
+                case 'youtube':
+                    return [...baseOptions, '-preset slow', '-crf 18', '-profile:v high', '-level 4.1', '-b:v 8000k', '-maxrate 10000k', '-bufsize 20000k'];
+                case 'tiktok':
+                    return [...baseOptions, '-preset medium', '-crf 20', '-profile:v main', '-level 4.0', '-b:v 5000k', '-maxrate 6000k', '-bufsize 12000k'];
+                case 'square':
+                    return [...baseOptions, '-preset medium', '-crf 22', '-profile:v main', '-level 3.1', '-b:v 4000k', '-maxrate 5000k', '-bufsize 10000k'];
+                case 'custom':
+                default:
+                    return [...baseOptions, '-preset medium', '-crf 22'];
+            }
+        }
+        
+        const videoEncodingOptions = getPresetEncodingOptions(exportPreset);
+        console.log(`Using encoding options for preset '${exportPreset}':`, videoEncodingOptions);
 
         // Compute global render cache key (manifest)
         const cacheInputBucket = storage.bucket(inputBucketName);
@@ -639,6 +807,9 @@ app.post('/render',
             engine: 'ffmpeg',
             plan: manifestPlan,
             size: planSize,
+            resolution: { w: finalTargetW, h: finalTargetH },
+            aspectRatio: aspectRatio || null,
+            exportPreset: exportPreset || null,
             scenes: (scenes || []).map(s => ({ d: s?.duration || 3, c: s?.camera || 'static', t: s?.transition || 'fade' })),
             inputs: { img: imgMd5s, audio: audioMd5, music: musicMd5, captions: captionsMd5 }
         };
@@ -824,18 +995,18 @@ app.post('/render',
           const segSrtPath = path.join(tempDir, `scene_${i}.srt`); if (wantSubs) { try { await fs.writeFile(segSrtPath, formatSrt(segEntries), 'utf8'); } catch {} }
           const inputClip = clipLocalPaths[i]; const inputImage = localFirstImages[i]; const partOut = path.join(tempDir, `part_${i}.mp4`);
           await new Promise((resolve,reject)=>{
-            const cmd=ffmpeg(); let vf=`format=yuv420p,scale=${targetW}:${targetH}`;
+            const cmd=ffmpeg(); let vf=`format=yuv420p,scale=${finalTargetW}:${finalTargetH}`;
             if (inputClip) { cmd.input(inputClip).inputOptions([`-t ${duration}`]); }
             else if (inputImage) {
               cmd.input(inputImage).inputOptions(['-loop 1', `-t ${duration}`]);
               switch (scene.camera||'static'){
-                case 'zoom-in': vf=`zoompan=z='min(zoom+0.001,1.3)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH},format=yuv420p`; break;
-                case 'zoom-out': vf=`zoompan=z='if(lte(zoom,1.0),1.3,max(1.001,zoom-0.001))':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH},format=yuv420p`; break;
-                case 'pan-left': vf=`zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)-50*sin(t)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH},format=yuv420p`; break;
-                case 'pan-right': vf=`zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)+50*sin(t)':y='ih/2-(ih/zoom/2)':s=${targetW}x${targetH},format=yuv420p`; break;
-                default: vf=`scale=${targetW}:${targetH},format=yuv420p`;
+                case 'zoom-in': vf=`zoompan=z='min(zoom+0.001,1.3)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${finalTargetW}x${finalTargetH},format=yuv420p`; break;
+                case 'zoom-out': vf=`zoompan=z='if(lte(zoom,1.0),1.3,max(1.001,zoom-0.001))':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${finalTargetW}x${finalTargetH},format=yuv420p`; break;
+                case 'pan-left': vf=`zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)-50*sin(t)':y='ih/2-(ih/zoom/2)':s=${finalTargetW}x${finalTargetH},format=yuv420p`; break;
+                case 'pan-right': vf=`zoompan=z='1.1':d=1:x='iw/2-(iw/zoom/2)+50*sin(t)':y='ih/2-(ih/zoom/2)':s=${finalTargetW}x${finalTargetH},format=yuv420p`; break;
+                default: vf=`scale=${finalTargetW}:${finalTargetH},format=yuv420p`;
               }
-            } else { cmd.input(`color=black:s=${targetW}x${targetH}:r=30`).inputOptions(['-f lavfi', `-t ${duration}`]); vf='format=yuv420p'; }
+            } else { cmd.input(`color=black:s=${finalTargetW}x${finalTargetH}:r=30`).inputOptions(['-f lavfi', `-t ${duration}`]); vf='format=yuv420p'; }
             let fullVf = vf;
             if (wantSubs && segEntries.length > 0) {
               const style = `force_style='Fontsize=18,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,BorderStyle=3,Outline=1,Shadow=1,MarginV=25'`;
@@ -843,7 +1014,7 @@ app.post('/render',
             }
             if (plan==='free'){ fullVf+=",drawtext=text='ReelBanana':fontcolor=white@0.6:fontsize=24:box=1:boxcolor=black@0.4:boxborderw=5:x=w-tw-10:y=h-th-10"; }
             cmd.videoFilters(fullVf)
-              .outputOptions(['-an','-c:v libx264','-preset medium','-crf 22','-pix_fmt yuv420p','-movflags +faststart'])
+              .outputOptions(['-an', ...videoEncodingOptions])
               .on('end', resolve)
               .on('error', (err)=>{ console.error(`FFmpeg part ${i} error:`, err.message); reject(new Error('FFMPEG_FAILURE')); })
               .save(partOut);
@@ -858,7 +1029,7 @@ app.post('/render',
         const silentConcatPath = path.join(tempDir, 'video_concat.mp4');
         await new Promise((resolve,reject)=>{
           ffmpeg().input(listPath).inputOptions(['-f concat','-safe 0'])
-            .outputOptions(['-c:v libx264','-preset slow','-crf 22','-pix_fmt yuv420p','-movflags +faststart'])
+            .outputOptions(videoEncodingOptions)
             .on('end', resolve)
             .on('error',(err)=>{ console.error('FFmpeg concat error:', err.message); reject(new Error('FFMPEG_FAILURE')); })
             .save(silentConcatPath);
@@ -866,19 +1037,22 @@ app.post('/render',
 
         // Mux audio (narration + optional music with ducking)
         const outputVideoPath = path.join(tempDir, 'final_movie.mp4');
+        pushProgress(jobId, { progress: 70, stage: 'composing', message: 'Concatenating scenes…' });
         await new Promise((resolve,reject)=>{
           const cmd=ffmpeg(); cmd.input(silentConcatPath); cmd.input(narrationLocalPath); if (musicLocalPath) cmd.input(musicLocalPath);
           const filterComplex = gsMusicPath
             ? `[${musicLocalPath ? 2 : 1}:a][1:a]sidechaincompress=threshold=0.05:ratio=6:attack=5:release=300[ducked];[ducked][1:a]amix=inputs=2:duration=longest:dropout_transition=2,volume=1.0[final_audio]`
             : `[1:a]volume=0.9,apad[final_audio]`;
-          cmd.outputOptions(['-map 0:v:0','-map [final_audio]','-filter_complex',filterComplex,'-c:v libx264','-preset slow','-crf 22','-c:a aac','-b:a 192k','-pix_fmt yuv420p','-movflags +faststart'])
+          cmd.outputOptions(['-map 0:v:0','-map [final_audio]','-filter_complex',filterComplex,'-c:a aac','-b:a 192k', ...videoEncodingOptions])
             .on('end', resolve)
             .on('error',(err)=>{ console.error('FFmpeg mux error:', err.message); reject(new Error('FFMPEG_FAILURE')); })
                 .save(outputVideoPath);
         });
+        pushProgress(jobId, { progress: 85, stage: 'composing', message: 'Mixing audio…' });
 
         // 4. Upload the final video to the output bucket
         console.log('Uploading final video...');
+        pushProgress(jobId, { progress: 92, stage: 'uploading', message: 'Uploading final video…' });
         // Reuse outputBucket variable from cache check above
         const [uploadedFile] = await retryWithBackoff(async () => {
             return await outputBucket.upload(outputVideoPath, {
@@ -896,6 +1070,7 @@ app.post('/render',
 
         // Videos are uploaded to public bucket for direct GCS URL access
         const videoUrl = uploadedFile.publicUrl();
+        pushProgress(jobId, { progress: 100, stage: 'done', message: 'Done', done: true });
         console.log(`Video uploaded to public bucket for direct access`);
         
         // Record successful fresh render SLI

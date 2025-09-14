@@ -7,8 +7,13 @@ import SceneCard from './SceneCard';
 import Spinner from './Spinner';
 import { PlusIcon, SparklesIcon, SaveIcon, DocumentAddIcon } from './Icon';
 import { TEMPLATES } from '../lib/templates';
-import CharacterPicker from './CharacterPicker';
 import CharacterGenerator from './CharacterGenerator';
+import HistoryPanel from './HistoryPanel';
+import PresenceChips from './PresenceChips';
+import CommentsPanel from './CommentsPanel';
+import MobileNavBar from './MobileNavBar';
+import { useViewport } from '../hooks/useViewport';
+import { updatePresence } from '../services/firebaseService';
 import { calculateTotalCost, formatCost } from '../utils/costCalculator';
 import { useUserCredits } from '../hooks/useUserCredits';
 import { CostEstimator } from './CostEstimator';
@@ -110,7 +115,10 @@ const DragGrid: React.FC<{
   onGenerateVideo?: (id: string) => void;
   onUpdateScene: (id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration' | 'backgroundImage' | 'stylePreset' | 'variantImageUrls' | 'voiceId' | 'voiceName' | 'videoModel' | 'sceneDirection' | 'location' | 'props' | 'costumes' | 'videoUrl' | 'videoStatus'>>) => void;
   onUpdateSequence: (id: string, newImageUrls: string[]) => void;
-}> = ({ scenes, renderMode, onReorder, onDelete, onGenerate, onVariant, onGenerateVideo, onUpdateScene, onUpdateSequence }) => {
+  activeSceneId?: string | null;
+  onFocusScene?: (id: string) => void;
+  commentCounts?: Record<string, number>;
+}> = ({ scenes, renderMode, onReorder, onDelete, onGenerate, onVariant, onGenerateVideo, onUpdateScene, onUpdateSequence, activeSceneId, onFocusScene, commentCounts }) => {
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
   const [overIndex, setOverIndex] = React.useState<number | null>(null);
 
@@ -135,12 +143,17 @@ const DragGrid: React.FC<{
       {scenes.map((scene, index) => (
         <div
           key={scene.id}
+          id={`scene-${scene.id}`}
           draggable
           onDragStart={() => handleDragStart(index)}
           onDragOver={(e) => handleDragOver(index, e)}
           onDragLeave={handleDragLeave}
           onDrop={() => handleDrop(index)}
-          className={overIndex === index ? 'ring-2 ring-amber-500 rounded-md' : ''}
+          onClick={() => onFocusScene?.(scene.id)}
+          className={[
+            overIndex === index ? 'ring-2 ring-amber-500 rounded-md' : '',
+            activeSceneId === scene.id ? 'ring-2 ring-blue-500 rounded-md' : ''
+          ].filter(Boolean).join(' ')}
         >
           <SceneCard
             scene={scene}
@@ -152,6 +165,8 @@ const DragGrid: React.FC<{
             onUpdateScene={onUpdateScene}
             onUpdateSequence={onUpdateSequence}
             framesPerScene={renderMode === 'draft' ? 3 : 5}
+            commentCount={commentCounts ? (commentCounts[scene.id] || 0) : 0}
+            onOpenComments={onFocusScene}
           />
         </div>
       ))}
@@ -168,13 +183,20 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   const [scenes, setScenes] = useState<Scene[]>([]);
   
   const [isLoadingStory, setIsLoadingStory] = useState(false);
+  const [storyProgress, setStoryProgress] = useState<number>(0);
+  const [storyProgressStage, setStoryProgressStage] = useState<string>('');
+  const [storySteps, setStorySteps] = useState<{ story: 'pending'|'processing'|'done'; characters: 'pending'|'processing'|'done'; project: 'pending'|'processing'|'done'; }>({ story: 'pending', characters: 'pending', project: 'pending' });
   const [isLoadingProject, setIsLoadingProject] = useState(true); // Start true for initial load check
   const [storyError, setStoryError] = useState<string | null>(null);
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
+  const [isGeneratingEverything, setIsGeneratingEverything] = useState(false);
+  const [isGeneratingFirstScene, setIsGeneratingFirstScene] = useState(false);
+  const [batchState, setBatchState] = useState<{ active: boolean; total: number; done: number; failed: number; inProgress: string | null; startedAt: number | null }>({ active: false, total: 0, done: 0, failed: 0, inProgress: null, startedAt: null });
+  const [batchCancel, setBatchCancel] = useState(false);
+  const cancelEverythingRef = React.useRef(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
-  const [showCharacterPicker, setShowCharacterPicker] = useState(false);
   const [showCharacterGenerator, setShowCharacterGenerator] = useState(false);
   const [renderMode, setRenderMode] = useState<'draft' | 'final'>('draft');
   const [forceUseApiKey] = useState(false);
@@ -184,6 +206,149 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   const [productDemoMode, setProductDemoMode] = useState(false);
   const [productImages, setProductImages] = useState<string[]>([]);
   const [showCreditPurchase, setShowCreditPurchase] = useState(false);
+  const [isRegeneratingCharacterStyle, setIsRegeneratingCharacterStyle] = useState(false);
+  const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [lastVersionSnapshot, setLastVersionSnapshot] = useState<{ topic: string; characterAndStyle: string; scenes: Scene[]; characterRefs?: string[] } | null>(null);
+  const [showComments, setShowComments] = useState(false);
+  const { isMobile } = useViewport();
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
+  const [showSwipeHint, setShowSwipeHint] = useState<boolean>(false);
+  const [timelineMenuFor, setTimelineMenuFor] = useState<string | null>(null);
+  const timelineRef = React.useRef<HTMLDivElement | null>(null);
+
+  // Default focus to first scene when scenes change
+  useEffect(() => {
+    if (scenes.length > 0 && !activeSceneId) {
+      setActiveSceneId(scenes[0].id);
+    }
+    if (scenes.length > 0) {
+      setShowSwipeHint(true);
+      const t = setTimeout(() => setShowSwipeHint(false), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [scenes, activeSceneId]);
+
+  // Keyboard navigation for timeline focus
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!scenes.length) return;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        const idx = activeSceneId ? scenes.findIndex(s => s.id === activeSceneId) : 0;
+        if (idx === -1) return;
+        const nextIdx = e.key === 'ArrowRight' ? Math.min(scenes.length - 1, idx + 1) : Math.max(0, idx - 1);
+        const nextId = scenes[nextIdx]?.id;
+        if (nextId && nextId !== activeSceneId) {
+          setActiveSceneId(nextId);
+          const el = document.getElementById(`scene-${nextId}`);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activeSceneId, scenes]);
+
+  // Close timeline menu on route clicks or outside interactions
+  useEffect(() => {
+    const onDocClick = () => setTimelineMenuFor(null);
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
+  }, []);
+
+  const handleDuplicateScene = useCallback((id: string) => {
+    setScenes(prev => {
+      const idx = prev.findIndex(s => s.id === id);
+      if (idx === -1) return prev;
+      const src = prev[idx];
+      const dup: Scene = {
+        id: `${Date.now()}-dup`,
+        prompt: src.prompt,
+        narration: src.narration,
+        status: 'idle',
+        camera: src.camera,
+        transition: src.transition,
+        duration: src.duration,
+        backgroundImage: src.backgroundImage,
+        stylePreset: src.stylePreset,
+        voiceId: src.voiceId,
+        voiceName: src.voiceName,
+        videoModel: src.videoModel,
+        sceneDirection: src.sceneDirection,
+        location: src.location,
+        props: src.props ? [...src.props] : undefined,
+        costumes: src.costumes ? [...src.costumes] : undefined,
+      };
+      const next = [...prev];
+      next.splice(idx + 1, 0, dup);
+      return next;
+    });
+    setSaveStatus('idle');
+  }, []);
+
+  const handleMoveScene = useCallback((id: string, direction: 'left' | 'right') => {
+    setScenes(prev => {
+      const idx = prev.findIndex(s => s.id === id);
+      if (idx === -1) return prev;
+      const targetIdx = direction === 'left' ? Math.max(0, idx - 1) : Math.min(prev.length - 1, idx + 1);
+      if (targetIdx === idx) return prev;
+      const next = [...prev];
+      const [item] = next.splice(idx, 1);
+      next.splice(targetIdx, 0, item);
+      return next;
+    });
+    setActiveSceneId(id);
+    setSaveStatus('idle');
+  }, []);
+
+  const handleInsertScene = useCallback((referenceId: string, where: 'before' | 'after') => {
+    const newId = `${Date.now()}-new`;
+    const newScene: Scene = {
+      id: newId,
+      prompt: 'A new scene. Edit this prompt to describe what you want to see.',
+      narration: 'A new narration. Edit this to describe what is happening.',
+      status: 'idle',
+    };
+    setScenes(prev => {
+      const idx = prev.findIndex(s => s.id === referenceId);
+      if (idx === -1) return [...prev, newScene];
+      const insertAt = where === 'before' ? idx : idx + 1;
+      const next = [...prev];
+      next.splice(insertAt, 0, newScene);
+      return next;
+    });
+    setActiveSceneId(newId);
+    setSaveStatus('idle');
+  }, []);
+
+  const handleDuplicateToEnd = useCallback((id: string) => {
+    setScenes(prev => {
+      const idx = prev.findIndex(s => s.id === id);
+      if (idx === -1) return prev;
+      const src = prev[idx];
+      const dup: Scene = {
+        id: `${Date.now()}-dup-end`,
+        prompt: src.prompt,
+        narration: src.narration,
+        status: 'idle',
+        camera: src.camera,
+        transition: src.transition,
+        duration: src.duration,
+        backgroundImage: src.backgroundImage,
+        stylePreset: src.stylePreset,
+        voiceId: src.voiceId,
+        voiceName: src.voiceName,
+        videoModel: src.videoModel,
+        sceneDirection: src.sceneDirection,
+        location: src.location,
+        props: src.props ? [...src.props] : undefined,
+        costumes: src.costumes ? [...src.costumes] : undefined,
+      };
+      const next = [...prev, dup];
+      return next;
+    });
+    setSaveStatus('idle');
+  }, []);
   
   // Defensive context usage to prevent null context errors
   let toast: any = null;
@@ -262,6 +427,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                     setScenes(projectData.scenes);
                     // Load video URL if it exists
                     setProjectVideoUrl((projectData as any).videoUrl || null);
+                    setLastVersionSnapshot({ topic: projectData.topic, characterAndStyle: projectData.characterAndStyle, scenes: projectData.scenes, characterRefs: (projectData as any).characterRefs });
                 } else {
                     toast.info('Project not found. You can start a new one.');
                     window.history.replaceState({}, '', window.location.pathname);
@@ -276,17 +442,53 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
     loadProjectFromUrl();
   }, [onProjectIdChange, toast]);
 
+  // Live comment counts per scene
+  useEffect(() => {
+    let unsub: any;
+    (async () => {
+      try {
+        if (!projectId) return;
+        const { getFirestore, collection, onSnapshot } = await import('firebase/firestore');
+        const db = getFirestore((await import('../lib/firebase')).firebaseApp as any);
+        const col = collection(db, 'projects', projectId, 'comments');
+        unsub = onSnapshot(col, (snap) => {
+          const counts: Record<string, number> = {};
+          snap.forEach((d: any) => {
+            const data = d.data() || {};
+            const sid = data.sceneId || null;
+            const key = sid || '__project__';
+            counts[key] = (counts[key] || 0) + 1;
+          });
+          setCommentCounts(counts);
+        });
+      } catch (e) {
+        console.warn('Comment count listener failed', e);
+      }
+    })();
+    return () => { if (unsub) unsub(); };
+  }, [projectId]);
+
+  // Presence updates (every 15s and on focus change)
+  useEffect(() => {
+    if (!projectId) return;
+    let timer: any;
+    const ping = async () => { try { await updatePresence(projectId, activeSceneId); } catch {} };
+    ping();
+    timer = setInterval(ping, 15000);
+    return () => { if (timer) clearInterval(timer); };
+  }, [projectId, activeSceneId]);
+
   // (Removed unused BYOK check state to satisfy lints while preserving functionality)
 
-  const handleGenerateStory = useCallback(async (storyTopic: string) => {
+  const handleGenerateStory = useCallback(async (storyTopic: string, options?: { returnData?: boolean }) => {
     if (demoMode) {
       toast.info('Demo Mode is on. Click Upgrade Demo to generate real content.');
-      return;
+      return undefined;
     }
     if (!storyTopic.trim()) {
       setStoryError("Please enter or select a topic for your story.");
       toast.info('Enter or pick a topic to start your story.');
-      return;
+      return undefined;
     }
 
     // Check credits before proceeding
@@ -300,10 +502,19 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
 
     setIsLoadingStory(true);
     setStoryError(null);
+    setStoryProgress(5);
+    setStoryProgressStage('Starting...');
+    setStorySteps({ story: 'processing', characters: 'pending', project: 'pending' });
+    setStoryError(null);
     setScenes([]);
+    
+    // Show progress to user
+    toast.info('🚀 Generating story and analyzing characters...');
 
     try {
       let storyScenes, characterStyle;
+      setStoryProgress(15);
+      setStoryProgressStage('Generating story...');
       
       if (productDemoMode && productImages.length > 0) {
         // Product Demo Mode: Generate story based on product images
@@ -318,11 +529,56 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         
         characterStyle = 'Professional product showcase with modern UI, clean design, and cinematic presentation';
       } else {
-        // Regular mode: Generate both story and character/style in parallel
-        [storyScenes, characterStyle] = await Promise.all([
+        // Optimized mode: Generate story and character analysis in parallel
+        const [storyScenes, characterAnalysis] = await Promise.all([
           generateStory(storyTopic, forceUseApiKey),
-          generateCharacterAndStyle(storyTopic, forceUseApiKey)
+          // Analyze topic for characters first (faster than analyzing full story)
+          (async () => {
+            try {
+              const { analyzeStoryCharacters } = await import('../services/geminiService');
+              // Use topic for initial analysis, then refine with story content
+              return await analyzeStoryCharacters(`Story topic: ${storyTopic}`);
+            } catch (error) {
+              console.warn('Character analysis failed, using fallback:', error);
+              return { characters: [], suggestedCount: 2 };
+            }
+          })()
         ]);
+        
+        setStorySteps(prev => ({ ...prev, story: 'done', characters: 'processing' }));
+        setStoryProgress(60);
+        setStoryProgressStage('Analyzing characters...');
+        // Create story content string from scenes for character generation
+        const storyContent = storyScenes.map(scene => 
+          `Scene: ${scene.prompt}\nNarration: ${scene.narration}`
+        ).join('\n\n');
+        
+        // Generate character and style based on the analysis (single optimized call)
+        try {
+          const { generateCharacterOptions } = await import('../services/geminiService');
+          const autoGeneratedCharacters = await generateCharacterOptions(
+            storyTopic, 
+            characterAnalysis.suggestedCount, 
+            undefined, 
+            storyContent
+          );
+          
+          // Set the first character as the main character and style
+          if (autoGeneratedCharacters.length > 0) {
+            characterStyle = autoGeneratedCharacters[0].description;
+            setCharacterRefs(autoGeneratedCharacters[0].images || []);
+          }
+          
+          console.log(`✨ Auto-generated ${autoGeneratedCharacters.length} characters from optimized analysis`);
+          toast.success(`✨ Story generated with ${autoGeneratedCharacters.length} characters automatically set!`);
+        } catch (error) {
+          console.warn('Failed to auto-generate characters, using fallback:', error);
+          // Fallback to basic character and style generation
+          characterStyle = await generateCharacterAndStyle(storyTopic, forceUseApiKey, storyContent);
+        }
+        setStorySteps(prev => ({ ...prev, characters: 'done' }));
+        setStoryProgress(80);
+        setStoryProgressStage('Creating project...');
       }
       
       if (storyScenes.length === 0) {
@@ -354,6 +610,10 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       setCharacterAndStyle(characterStyle); // Auto-generated
       setScenes(initialScenes);
       setSaveStatus('saved');
+      setStorySteps(prev => ({ ...prev, project: 'done' }));
+      setStoryProgress(100);
+      setStoryProgressStage('Ready!');
+      try { setActiveSceneId(initialScenes[0]?.id || null); } catch {}
       
       // Refresh credits after successful story generation
       await refreshCredits();
@@ -361,12 +621,25 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       // Update URL without reloading the page
       window.history.pushState({}, '', `?projectId=${newProjectId}`);
 
+      // Optionally return data for chained actions (Generate Everything)
+      if (options?.returnData) {
+        return { projectId: newProjectId, initialScenes, characterStyle } as const;
+      }
     } catch (error) {
       setStoryError(error instanceof Error ? error.message : "An unknown error occurred.");
+      setStoryProgressStage('Failed');
     } finally {
       setIsLoadingStory(false);
+      // Reset progress UI after a short delay (unless failed)
+      setTimeout(() => {
+        if (storyProgressStage !== 'Failed') {
+          setStoryProgress(0);
+          setStoryProgressStage('');
+          setStorySteps({ story: 'pending', characters: 'pending', project: 'pending' });
+        }
+      }, 800);
     }
-  }, [projectName, forceUseApiKey, demoMode, productDemoMode, productImages, onProjectIdChange, refreshCredits, toast, freeCredits, isAdmin]);
+  }, [projectName, forceUseApiKey, demoMode, productDemoMode, productImages, onProjectIdChange, refreshCredits, toast, freeCredits, isAdmin, storyProgressStage]);
   
   const handleSaveProject = useCallback(async () => {
     if (!projectId) return;
@@ -433,6 +706,19 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         .then(() => {
           setSaveStatus('saved');
           setTimeout(() => setSaveStatus('idle'), 1500);
+          try {
+            const now = Date.now();
+            const key = `rb:lastVersionAt:${projectId}`;
+            const last = parseInt(sessionStorage.getItem(key) || '0', 10);
+            if (!lastVersionSnapshot) setLastVersionSnapshot({ topic, characterAndStyle, scenes });
+            if (now - last > 60000 && lastVersionSnapshot) {
+              import('../services/firebaseService').then(async ({ recordProjectVersion }) => {
+                await recordProjectVersion(projectId, lastVersionSnapshot!, { topic, characterAndStyle, scenes } as any, 'autosave');
+                sessionStorage.setItem(key, String(now));
+                setLastVersionSnapshot({ topic, characterAndStyle, scenes });
+              });
+            }
+          } catch {}
         })
         .catch((e) => {
           console.error('Autosave failed:', e);
@@ -460,6 +746,37 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
     window.history.pushState({}, '', window.location.pathname);
   };
 
+  const handleRegenerateCharacterStyle = useCallback(async () => {
+    if (!projectId || !topic.trim() || !scenes.length) {
+      toast.error('Please ensure you have a story with scenes before regenerating character & style');
+      return;
+    }
+
+    setIsRegeneratingCharacterStyle(true);
+    try {
+      // Create story content string from scenes for character generation
+      const storyContent = scenes.map(scene => 
+        `Scene: ${scene.prompt}\nNarration: ${scene.narration}`
+      ).join('\n\n');
+      
+      // Generate new character and style based on the actual story content
+      const newCharacterStyle = await generateCharacterAndStyle(topic, forceUseApiKey, storyContent);
+      
+      setCharacterAndStyle(newCharacterStyle);
+      setSaveStatus('idle');
+      
+      // Update the project with the new character style
+      await updateProject(projectId, { topic, characterAndStyle: newCharacterStyle, scenes });
+      
+      toast.success('Character & style regenerated successfully!');
+    } catch (error) {
+      console.error('Error regenerating character & style:', error);
+      toast.error('Failed to regenerate character & style. Please try again.');
+    } finally {
+      setIsRegeneratingCharacterStyle(false);
+    }
+  }, [projectId, topic, scenes, forceUseApiKey, toast]);
+
 
   const handleInspirationClick = (inspirationTopic: string) => {
       handleGenerateStory(inspirationTopic);
@@ -483,7 +800,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       }
 
       // Use the consistent geminiService for inspiration generation
-      const inspiration = await generateCharacterAndStyle(inspirationPrompt);
+      const inspiration = await generateCharacterAndStyle(inspirationPrompt, false);
       
       setGeneratedInspiration(inspiration);
       setTopic(inspiration);
@@ -554,7 +871,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
     }
   }, [onLoadTemplate, onProjectIdChange]);
 
-  const handleGenerateImageSequence = useCallback(async (id: string, prompt: string) => {
+  const handleGenerateImageSequence = useCallback(async (id: string, prompt: string, overrideCharacterAndStyle?: string, overrideProjectId?: string) => {
     if (demoMode) {
       toast.info('Demo Mode is on. Click Upgrade Demo to enable generation.');
       return;
@@ -582,12 +899,12 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       const stylePreset = sceneObj?.stylePreset || 'none';
       const styleInstruction = ((): string => {
         switch(stylePreset as StylePreset) {
-          case 'ghibli': return characterAndStyle + '. Studio Ghibli watercolor style, soft edges, warm palette, gentle lighting.';
-          case 'wes-anderson': return characterAndStyle + '. Wes Anderson aesthetic with symmetry, pastel colors, centered framing.';
-          case 'film-noir': return characterAndStyle + '. High-contrast film noir, moody lighting, dramatic shadows, monochrome.';
-          case 'pixel-art': return characterAndStyle + '. 16-bit pixel art, crisp dithered shading, retro palette.';
-          case 'claymation': return characterAndStyle + '. Claymation stop-motion look, tactile textures, soft studio lights.';
-          default: return characterAndStyle;
+          case 'ghibli': return (overrideCharacterAndStyle ?? characterAndStyle) + '. Studio Ghibli watercolor style, soft edges, warm palette, gentle lighting.';
+          case 'wes-anderson': return (overrideCharacterAndStyle ?? characterAndStyle) + '. Wes Anderson aesthetic with symmetry, pastel colors, centered framing.';
+          case 'film-noir': return (overrideCharacterAndStyle ?? characterAndStyle) + '. High-contrast film noir, moody lighting, dramatic shadows, monochrome.';
+          case 'pixel-art': return (overrideCharacterAndStyle ?? characterAndStyle) + '. 16-bit pixel art, crisp dithered shading, retro palette.';
+          case 'claymation': return (overrideCharacterAndStyle ?? characterAndStyle) + '. Claymation stop-motion look, tactile textures, soft studio lights.';
+          default: return (overrideCharacterAndStyle ?? characterAndStyle);
         }
       })();
       const sceneIndex = scenes.findIndex(s => s.id === id);
@@ -596,14 +913,19 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         characterRefs,
         backgroundImage: bg,
         frames: demoMode ? 3 : (renderMode === 'draft' ? 3 : 5),
-        projectId: projectId || undefined,
+        projectId: overrideProjectId || projectId || undefined,
         sceneIndex,
         location: sceneObj.location,
         props: sceneObj.props,
         costumes: sceneObj.costumes,
         sceneDirection: sceneObj.sceneDirection,
         forceUseApiKey,
-        onInfo: (info) => { cachedInfo = info; }
+        onInfo: (info) => { 
+          cachedInfo = info; 
+          if (info?.retrying) {
+            try { toast.info(`Retrying scene ${sceneIndex + 1} (${info.retrying}/2)…`, 2000); } catch {}
+          }
+        }
       });
       setScenes(prevScenes =>
         prevScenes.map(s => s.id === id ? { ...s, status: 'success', imageUrls, cached: !!cachedInfo?.cached } : s)
@@ -636,14 +958,30 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         alert("Please describe your character and style before generating images.");
         return;
     }
+    // Prepare list of scenes to generate
+    const targets = scenes.filter(s => s.status === 'idle' || s.status === 'error');
+    if (targets.length === 0) return;
+
+    setBatchCancel(false);
+    setBatchState({ active: true, total: targets.length, done: 0, failed: 0, inProgress: null, startedAt: Date.now() });
     setIsGeneratingAll(true);
-    const promises = scenes
-      .filter(s => s.status === 'idle' || s.status === 'error')
-      .map(s => handleGenerateImageSequence(s.id, s.prompt));
-    
-    await Promise.allSettled(promises);
+
+    for (let i = 0; i < targets.length; i++) {
+      if (batchCancel) break;
+      const sc = targets[i];
+      setBatchState(prev => ({ ...prev, inProgress: sc.prompt }));
+      try {
+        await handleGenerateImageSequence(sc.id, sc.prompt);
+        setBatchState(prev => ({ ...prev, done: prev.done + 1 }));
+      } catch (e) {
+        setBatchState(prev => ({ ...prev, failed: prev.failed + 1 }));
+      }
+    }
+
     setIsGeneratingAll(false);
-  }, [scenes, handleGenerateImageSequence, characterAndStyle]);
+    // Allow the sticky bar to linger briefly when complete
+    setTimeout(() => setBatchState(prev => ({ ...prev, active: false, inProgress: null })), 1200);
+  }, [scenes, handleGenerateImageSequence, characterAndStyle, batchCancel]);
 
   const handleGenerateVariant = useCallback(async (id: string, prompt: string) => {
     if (demoMode) {
@@ -653,7 +991,8 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
     // reuse same options but nudge prompt for variation
     const sceneObj = scenes.find(s => s.id === id);
     if (!sceneObj) return;
-    if (!characterAndStyle.trim()) {
+    const effectiveCAS = (overrideCharacterAndStyle ?? characterAndStyle) || '';
+    if (!effectiveCAS.trim()) {
       alert('Please describe your character and style before generating images.');
       return;
     }
@@ -662,12 +1001,12 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       const stylePreset = sceneObj.stylePreset || 'none';
       const styleInstruction = ((): string => {
         switch(stylePreset) {
-          case 'ghibli': return characterAndStyle + '. Studio Ghibli watercolor style, soft edges, warm palette, gentle lighting.';
-          case 'wes-anderson': return characterAndStyle + '. Wes Anderson aesthetic with symmetry, pastel colors, centered framing.';
-          case 'film-noir': return characterAndStyle + '. High-contrast film noir, moody lighting, dramatic shadows, monochrome.';
-          case 'pixel-art': return characterAndStyle + '. 16-bit pixel art, crisp dithered shading, retro palette.';
-          case 'claymation': return characterAndStyle + '. Claymation stop-motion look, tactile textures, soft studio lights.';
-          default: return characterAndStyle;
+          case 'ghibli': return effectiveCAS + '. Studio Ghibli watercolor style, soft edges, warm palette, gentle lighting.';
+          case 'wes-anderson': return effectiveCAS + '. Wes Anderson aesthetic with symmetry, pastel colors, centered framing.';
+          case 'film-noir': return effectiveCAS + '. High-contrast film noir, moody lighting, dramatic shadows, monochrome.';
+          case 'pixel-art': return effectiveCAS + '. 16-bit pixel art, crisp dithered shading, retro palette.';
+          case 'claymation': return effectiveCAS + '. Claymation stop-motion look, tactile textures, soft studio lights.';
+          default: return effectiveCAS;
         }
       })();
       const bg = sceneObj.backgroundImage;
@@ -677,14 +1016,19 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         characterRefs,
         backgroundImage: bg,
         frames: demoMode ? 3 : (renderMode === 'draft' ? 3 : 5),
-        projectId: projectId || undefined,
+        projectId: overrideProjectId || projectId || undefined,
         sceneIndex,
         location: sceneObj.location,
         props: sceneObj.props,
         costumes: sceneObj.costumes,
         sceneDirection: sceneObj.sceneDirection,
         forceUseApiKey,
-        onInfo: (info) => { cachedInfo = info; }
+        onInfo: (info) => { 
+          cachedInfo = info; 
+          if (info?.retrying) {
+            try { toast.info(`Retrying scene ${sceneIndex + 1} (${info.retrying}/2)…`, 2000); } catch {}
+          }
+        }
       });
       setScenes(prev => prev.map(s => s.id === id ? { ...s, status: 'success', variantImageUrls: imageUrls, cached: !!cachedInfo?.cached } : s));
     } catch (e) {
@@ -780,10 +1124,22 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
 
   if (isLoadingProject) {
       return (
-          <div className="flex justify-center items-center h-64">
-              <Spinner />
-              <p className="ml-4 text-lg">Loading project...</p>
+        <div className="p-6">
+          <div className="animate-pulse">
+            <div className="h-6 w-48 bg-gray-700 rounded mb-4" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+                  <div className="h-40 bg-gray-700" />
+                  <div className="p-4">
+                    <div className="h-4 bg-gray-700 rounded w-3/4 mb-2" />
+                    <div className="h-3 bg-gray-700 rounded w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
+        </div>
       );
   }
 
@@ -793,7 +1149,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
-      <div className="container mx-auto px-4 py-6">
+      <div className="container mx-auto px-4 py-6 pb-24 md:pb-8">
         {demoMode && (
           <div className="mb-4 p-3 bg-amber-900/50 border border-amber-600 rounded">
             <div className="flex items-center justify-between">
@@ -963,6 +1319,33 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                         disabled={isLoadingStory}
                     />
                 </div>
+                {(isLoadingStory || (storyProgress > 0 && storyProgress < 100) || isGeneratingEverything) && (
+                  <div className="mb-6 p-3 bg-gray-900/60 border border-gray-700 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm text-gray-300">{storyProgressStage || 'Working...'}</div>
+                      <div className="text-xs text-gray-400">{Math.min(100, Math.max(0, Math.round(storyProgress)))}%</div>
+                    </div>
+                    <div className="w-full h-2 bg-gray-700 rounded overflow-hidden">
+                      <div className="h-full bg-amber-500 transition-all" style={{ width: `${Math.min(100, Math.max(0, storyProgress))}%` }} />
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+                      <span className={`px-2 py-1 rounded ${storySteps.story === 'done' ? 'bg-green-700 text-green-200' : storySteps.story === 'processing' ? 'bg-amber-700 text-amber-200' : 'bg-gray-800 text-gray-300'}`}>Story</span>
+                      <span className={`px-2 py-1 rounded ${storySteps.characters === 'done' ? 'bg-green-700 text-green-200' : storySteps.characters === 'processing' ? 'bg-amber-700 text-amber-200' : 'bg-gray-800 text-gray-300'}`}>Characters</span>
+                      <span className={`px-2 py-1 rounded ${storySteps.project === 'done' ? 'bg-green-700 text-green-200' : storySteps.project === 'processing' ? 'bg-amber-700 text-amber-200' : 'bg-gray-800 text-gray-300'}`}>Project</span>
+                      {isGeneratingFirstScene && (
+                        <span className="px-2 py-1 rounded bg-blue-700 text-blue-100">First Scene Images</span>
+                      )}
+                      {(isGeneratingEverything || isLoadingStory) && (
+                        <button
+                          onClick={() => { cancelEverythingRef.current = true; setIsGeneratingEverything(false); setStoryProgress(0); setStoryProgressStage(''); setStorySteps({ story: 'pending', characters: 'pending', project: 'pending' }); }}
+                          className="ml-auto text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
                    
                    <div className="flex flex-col md:flex-row gap-4">
                    <div className="w-full md:w-auto">
@@ -978,6 +1361,37 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                      >
                          {isLoadingStory ? <Spinner /> : <SparklesIcon />}
                          {isLoadingStory ? 'Generating...' : 'Generate Story'}
+                     </button>
+                   </div>
+                   <div className="w-full md:w-auto">
+                     <button
+                       onClick={async () => {
+                         if (!topic.trim()) { toast.info('Enter or pick a topic to start your story.'); return; }
+                         setIsGeneratingEverything(true);
+                         cancelEverythingRef.current = false;
+                         try {
+                           const result = await handleGenerateStory(topic, { returnData: true });
+                           if (!cancelEverythingRef.current && result && result.initialScenes && result.initialScenes.length > 0) {
+                             setIsGeneratingFirstScene(true);
+                             try {
+                               await handleGenerateImageSequence(result.initialScenes[0].id, result.initialScenes[0].prompt, result.characterStyle, result.projectId);
+                               toast.success('First scene images generated!');
+                             } finally {
+                               setIsGeneratingFirstScene(false);
+                             }
+                           }
+                         } catch (e) {
+                           console.error(e);
+                           toast.error('Failed to generate everything.');
+                         } finally {
+                           setIsGeneratingEverything(false);
+                         }
+                       }}
+                       disabled={isLoadingStory || isGeneratingEverything}
+                       className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                     >
+                       {(isLoadingStory || isGeneratingEverything) ? <Spinner /> : <SparklesIcon />}
+                       {(isLoadingStory || isGeneratingEverything) ? 'Generating…' : 'Generate Everything'}
                      </button>
                    </div>
                     <button
@@ -1009,6 +1423,39 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       {/* Main Editor for existing projects */}
       {projectId && (
         <>
+            {/* Character Preview sticky bar */}
+            {characterAndStyle.trim() && (
+              <div className="sticky top-20 z-30 mb-4 hidden md:block">
+                <div className="bg-gray-800 border border-gray-700 rounded-lg p-3 flex items-center justify-between shadow-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-md bg-gray-700 overflow-hidden flex items-center justify-center">
+                      {characterRefs && characterRefs.length > 0 ? (
+                        <img src={characterRefs[0]} alt="ref" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-gray-400 text-xs">🎭</span>
+                      )}
+                    </div>
+                    <div className="text-sm text-gray-300 truncate max-w-[48vw]">
+                      <span className="text-gray-400 mr-1">Character & Style:</span>
+                      <span title={characterAndStyle}>{characterAndStyle}</span>
+                      {characterRefs.length > 0 && (
+                        <span className="ml-2 text-gray-400">• {characterRefs.length} ref</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const el = document.getElementById('character-style-section');
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    className="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded"
+                    title="Edit character and style"
+                  >
+                    Edit
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="bg-gray-800 p-6 rounded-lg shadow-xl border border-gray-700 mb-8">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-2xl font-bold text-amber-400">Project: "{topic}"</h2>
@@ -1017,7 +1464,35 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                     </button>
                 </div>
 
-                <h3 className="text-lg font-bold mb-2 text-gray-300">Character & Style</h3>
+                <div id="character-style-section" className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-lg font-bold text-gray-300">Character & Style</h3>
+                    {projectId && <PresenceChips projectId={projectId} />}
+                  </div>
+                  {characterAndStyle.trim() && (
+                    <button
+                      onClick={handleRegenerateCharacterStyle}
+                      disabled={isRegeneratingCharacterStyle}
+                      className="bg-purple-500 hover:bg-purple-600 disabled:bg-gray-600 text-white font-bold py-1 px-3 rounded-lg flex items-center gap-2 transition-colors text-sm"
+                    >
+                      {isRegeneratingCharacterStyle ? (
+                        <>
+                          <Spinner size="sm" />
+                          Regenerating...
+                        </>
+                      ) : (
+                        <>
+                          <SparklesIcon className="w-4 h-4" />
+                          Regenerate
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center justify-end mb-2">
+                  <button onClick={() => setShowHistory(true)} className="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded" title="View version history and rollback">History</button>
+                  <button onClick={() => setShowComments(true)} className="ml-2 text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded" title="Open comments">Comments</button>
+                </div>
                 <textarea
                     value={characterAndStyle}
                     onChange={(e) => {
@@ -1030,30 +1505,29 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                 />
                 <div className="flex items-center gap-2 mt-2">
                   <button
-                    onClick={() => setShowCharacterPicker(true)}
-                    className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg text-sm"
-                  >
-                    Pick a Character
-                  </button>
-                  <button
                     onClick={() => setShowCharacterGenerator(true)}
                     className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg text-sm flex items-center gap-2"
                   >
                     <SparklesIcon className="w-4 h-4" />
-                    Generate Character
+                    Generate More Characters
                   </button>
                 </div>
                  {characterAndStyle.trim() && (
                     <div className="text-sm p-2 bg-green-900/50 border border-green-700 rounded-lg">
                         <p className="text-green-300">
-                        <strong>✨ Auto-generated:</strong> Character and style created by AI based on your story topic. You can edit this if needed!
+                        <strong>✨ Auto-generated:</strong> Character and style created by AI based on your story content. Characters were automatically analyzed and set from your story!
                         </p>
+                        {characterRefs.length > 0 && (
+                          <p className="text-green-400 mt-1">
+                            <strong>🎭 Character References:</strong> {characterRefs.length} reference image(s) generated
+                          </p>
+                        )}
                     </div>
                 )}
 
                 {/* Character Passport (Reference Images) */}
                 <div className="mt-4">
-                  <label className="text-sm font-semibold text-gray-300 block mb-2">Character Passport (up to 3 reference images)</label>
+                  <label className="text-sm font-semibold text-gray-300 block mb-2" title="Add up to 3 reference photos to keep characters consistent across scenes">Character Passport (up to 3 reference images)</label>
                   <div className="flex flex-wrap items-center gap-3">
                     {characterRefs.map((url, idx) => (
                       <div key={idx} className="relative w-20 h-20 rounded-md overflow-hidden border border-gray-600">
@@ -1099,8 +1573,8 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                 </div>
                 
                 <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200">
-                      <span>Mode</span>
+                    <div className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200" title="Draft: 3 frames (faster, cheaper). Final: 5 frames (higher quality).">
+                      <span title="Choose image frame count for each scene">Mode</span>
                       <select
                         value={renderMode}
                         onChange={(e) => setRenderMode(e.target.value as 'draft' | 'final')}
@@ -1163,7 +1637,175 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                     </button>
                 </div>
               </div>
-              
+
+              {/* Timeline View */}
+              {scenes.length > 0 && (
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-semibold text-gray-300">Timeline</h3>
+                    <div className="text-xs text-gray-400">Tap a scene to focus</div>
+                  </div>
+                  <div
+                    ref={timelineRef}
+                    onScroll={() => setShowSwipeHint(false)}
+                    className="flex overflow-x-auto gap-2 pb-1 no-scrollbar snap-x relative"
+                  >
+                    {/* Mobile swipe hint */}
+                    {showSwipeHint && (
+                      <div className="absolute inset-0 md:hidden pointer-events-none flex items-center justify-end pr-2">
+                        <div className="bg-black/50 text-white text-[10px] px-2 py-1 rounded-full">Swipe scenes →</div>
+                      </div>
+                    )}
+                    {scenes.map((s, i) => (
+                      <div
+                        key={s.id}
+                        role="button"
+                        tabIndex={0}
+                        onPointerDown={(e) => {
+                          // Long-press to open menu (mobile-friendly)
+                          if ((e as any).pointerType === 'touch' || (e as any).pointerType === 'pen') {
+                            // Use a timer to detect long press (550ms)
+                            const anyWindow = window as any;
+                            if (!anyWindow.__rb_lp_timer) anyWindow.__rb_lp_timer = null;
+                            if (anyWindow.__rb_lp_timer) clearTimeout(anyWindow.__rb_lp_timer);
+                            anyWindow.__rb_lp_timer = setTimeout(() => {
+                              setTimelineMenuFor(s.id);
+                            }, 550);
+                          }
+                        }}
+                        onPointerUp={(e) => {
+                          const anyWindow = window as any;
+                          if (anyWindow.__rb_lp_timer) { clearTimeout(anyWindow.__rb_lp_timer); anyWindow.__rb_lp_timer = null; }
+                        }}
+                        onPointerCancel={() => {
+                          const anyWindow = window as any;
+                          if (anyWindow.__rb_lp_timer) { clearTimeout(anyWindow.__rb_lp_timer); anyWindow.__rb_lp_timer = null; }
+                        }}
+                        onPointerMove={() => {
+                          const anyWindow = window as any;
+                          if (anyWindow.__rb_lp_timer) { clearTimeout(anyWindow.__rb_lp_timer); anyWindow.__rb_lp_timer = null; }
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTimelineMenuFor(null);
+                          setActiveSceneId(s.id);
+                          const el = document.getElementById(`scene-${s.id}`);
+                          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }}
+                        className={[
+                          'relative flex-shrink-0 w-28 rounded-md border overflow-hidden snap-start transition-colors hover:border-gray-500',
+                          activeSceneId === s.id ? 'border-blue-500' : 'border-gray-700'
+                        ].join(' ')}
+                        title={s.prompt}
+                      >
+                        <div className="relative w-full h-16 bg-gray-800">
+                          {s.imageUrls && s.imageUrls.length > 0 ? (
+                            <img src={s.imageUrls[0]} alt={`Scene ${i+1}`} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No image</div>
+                          )}
+                          <div className="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1 rounded">{i+1}</div>
+                          {/* Status chip */}
+                          {s.status !== 'idle' && (
+                            <div className={`absolute bottom-1 right-1 text-[10px] px-1 rounded ${
+                              s.status === 'success' ? 'bg-green-600 text-white' : s.status === 'generating' ? 'bg-amber-600 text-black' : 'bg-red-600 text-white'
+                            }`}>
+                              {s.status === 'success' ? 'ok' : s.status === 'generating' ? 'gen' : 'err'}
+                            </div>
+                          )}
+                          {/* Quick action: Generate if idle/error */}
+                          {(s.status === 'idle' || s.status === 'error') && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setTimelineMenuFor(null); handleGenerateImageSequence(s.id, s.prompt); }}
+                              className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 transition-opacity text-white text-[10px] flex items-center justify-center"
+                              title="Generate sequence"
+                            >
+                              <span className="bg-amber-600 text-black px-2 py-0.5 rounded">Generate</span>
+                            </button>
+                          )}
+                          {/* Context menu trigger */}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setTimelineMenuFor(prev => prev === s.id ? null : s.id); }}
+                            className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded flex items-center justify-center"
+                            title="More actions"
+                          >
+                            ⋯
+                          </button>
+                          {timelineMenuFor === s.id && (
+                            <div className="absolute top-6 right-1 bg-gray-900 border border-gray-700 rounded shadow-lg z-10 text-xs transition transform origin-top-right"
+                                 onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => { setTimelineMenuFor(null); handleInsertScene(s.id, 'before'); }}
+                                className="block w-full text-left px-3 py-1 hover:bg-gray-800 text-gray-200"
+                              >Insert Before</button>
+                              <button
+                                onClick={() => { setTimelineMenuFor(null); handleMoveScene(s.id, 'left'); }}
+                                className="block w-full text-left px-3 py-1 hover:bg-gray-800 text-gray-200"
+                                disabled={i === 0}
+                                title={i === 0 ? 'Already first' : 'Move left'}
+                              >Move Left</button>
+                              <button
+                                onClick={() => { setTimelineMenuFor(null); handleDuplicateScene(s.id); }}
+                                className="block w-full text-left px-3 py-1 hover:bg-gray-800 text-gray-200"
+                              >Duplicate</button>
+                              <button
+                                onClick={() => { setTimelineMenuFor(null); handleDuplicateToEnd(s.id); }}
+                                className="block w-full text-left px-3 py-1 hover:bg-gray-800 text-gray-200"
+                              >Duplicate to End</button>
+                              <button
+                                onClick={() => { setTimelineMenuFor(null); handleGenerateImageSequence(s.id, s.prompt); }}
+                                className="block w-full text-left px-3 py-1 hover:bg-gray-800 text-gray-200"
+                              >Regenerate</button>
+                              <button
+                                onClick={() => { setTimelineMenuFor(null); handleMoveScene(s.id, 'right'); }}
+                                className="block w-full text-left px-3 py-1 hover:bg-gray-800 text-gray-200"
+                                disabled={i === scenes.length - 1}
+                                title={i === scenes.length - 1 ? 'Already last' : 'Move right'}
+                              >Move Right</button>
+                              <button
+                                onClick={() => { setTimelineMenuFor(null); handleInsertScene(s.id, 'after'); }}
+                                className="block w-full text-left px-3 py-1 hover:bg-gray-800 text-gray-200"
+                              >Insert After</button>
+                              <button
+                                onClick={() => { setTimelineMenuFor(null); handleDeleteScene(s.id); }}
+                                className="block w-full text-left px-3 py-1 hover:bg-red-900 text-red-300"
+                              >Delete</button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* What’s Next Callout */}
+              {scenes.length > 0 && !hasGeneratedImages && (
+                <div className="mb-4 p-3 bg-blue-900/30 border border-blue-700 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-blue-100">
+                      <strong className="text-blue-300">What’s next:</strong> Generate images for your scenes to preview the story.
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleGenerateAllImages}
+                        disabled={isGeneratingAll || !canGenerateAll}
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded disabled:opacity-50"
+                        title="Generate images for all scenes"
+                      >
+                        {isGeneratingAll ? 'Working…' : 'Generate All'}
+                      </button>
+                      <button
+                        onClick={handleAddScene}
+                        className="bg-gray-700 hover:bg-gray-600 text-white text-xs font-bold px-3 py-1.5 rounded"
+                        title="Add another scene"
+                      >
+                        Add Scene
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Total Cost Display */}
               {scenes.length > 0 && (
                 <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-gray-700">
@@ -1269,6 +1911,11 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                 onGenerateVideo={handleGenerateVideo}
                 onUpdateScene={handleUpdateScene}
                 onUpdateSequence={handleUpdateSequence}
+                activeSceneId={activeSceneId}
+                onFocusScene={(id) => setActiveSceneId(id)}
+                onOpenComments={(id) => { setActiveSceneId(id); setShowComments(true); }}
+                // @ts-ignore pass comment counts via prop injection
+                commentCounts={commentCounts}
               />
 
               <div className="text-center">
@@ -1319,40 +1966,28 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                 )}
               </div>
           <TemplatesModal open={showTemplatePicker} onClose={() => setShowTemplatePicker(false)} onPick={handleLoadTemplate} />
-          <CharacterPicker
-            topic={topic || 'an adventurous banana'}
-            open={showCharacterPicker}
-            onClose={() => setShowCharacterPicker(false)}
-            currentDescription={characterAndStyle}
-            currentImages={characterRefs}
-            onPick={(opt) => {
-              setCharacterAndStyle(opt.description);
-              setCharacterRefs(opt.images);
-              setShowCharacterPicker(false);
-              setSaveStatus('idle');
-              // Persist to project if available
-              if (projectId) {
-                try {
-                  const updateData: any = { 
-                    topic, 
-                    characterAndStyle: opt.description, 
-                    scenes 
-                  };
-                  // Only add characterRefs if opt.images exists and is not empty
-                  if (opt.images && opt.images.length > 0) {
-                    updateData.characterRefs = opt.images;
-                  }
-                  updateProject(projectId, updateData);
-                } catch (error) {
-                  console.error('Error updating project with character selection:', error);
-                }
+          <HistoryPanel projectId={projectId} open={showHistory} onClose={() => setShowHistory(false)} />
+          <HistoryPanel
+            projectId={projectId}
+            open={showHistory}
+            onClose={() => setShowHistory(false)}
+            onJumpScene={(idx) => {
+              const s = scenes[idx];
+              if (s) {
+                setActiveSceneId(s.id);
+                const el = document.getElementById(`scene-${s.id}`);
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
               }
             }}
           />
+          <CommentsPanel projectId={projectId} sceneId={activeSceneId || undefined} open={showComments} onClose={() => setShowComments(false)} />
           <CharacterGenerator
             topic={topic || 'an adventurous character'}
             open={showCharacterGenerator}
             onClose={() => setShowCharacterGenerator(false)}
+            storyContent={scenes.length > 0 ? scenes.map(scene => 
+              `Scene: ${scene.prompt}\nNarration: ${scene.narration}`
+            ).join('\n\n') : undefined}
             onGenerate={(characters) => {
               if (characters.length > 0) {
                 setCharacterAndStyle(characters[0].description);
@@ -1380,6 +2015,52 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         </>
       )}
 
+      {/* Sticky Batch Progress Bar */}
+      {batchState.active && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
+          <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-xl w-[92vw] max-w-2xl p-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm text-white font-semibold">
+                Generating images: {batchState.done + batchState.failed}/{batchState.total}
+                {batchState.inProgress ? (
+                  <span className="text-gray-400 font-normal"> • {batchState.inProgress.slice(0, 64)}{batchState.inProgress.length > 64 ? '…' : ''}</span>
+                ) : null}
+              </div>
+              <div className="text-xs text-gray-400">
+                {(() => {
+                  if (!batchState.startedAt || batchState.total === 0) return 'ETA —';
+                  const elapsed = (Date.now() - batchState.startedAt) / 1000;
+                  const completed = batchState.done + batchState.failed;
+                  if (completed === 0) return 'ETA —';
+                  const perScene = elapsed / completed;
+                  const remaining = Math.max(0, batchState.total - completed);
+                  const eta = Math.max(1, Math.round(perScene * remaining));
+                  return `ETA ~ ${eta}s`;
+                })()}
+              </div>
+            </div>
+            {(() => {
+              const completed = batchState.done + batchState.failed;
+              const pct = Math.min(100, Math.round((completed / Math.max(1, batchState.total)) * 100));
+              return (
+                <div className="w-full h-2 bg-gray-700 rounded overflow-hidden">
+                  <div className="h-full bg-amber-500 transition-all" style={{ width: `${pct}%` }} />
+                </div>
+              );
+            })()}
+            <div className="mt-2 flex items-center justify-between">
+              <div className="text-xs text-gray-400">Succeeded: {batchState.done} • Failed: {batchState.failed}</div>
+              <button
+                onClick={() => setBatchCancel(true)}
+                className="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded"
+              >
+                {batchCancel ? 'Cancelling…' : 'Cancel' }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Credit Purchase Modal */}
       <CreditPurchaseModal
         isOpen={showCreditPurchase}
@@ -1390,6 +2071,15 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         }}
       />
       </div>
+      {isMobile && (
+        <MobileNavBar
+          onScrollScenes={() => { try { document.querySelector('[data-anchor=scenes]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch {} }}
+          onScrollCharacter={() => { try { document.getElementById('character-style-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch {} }}
+          onGenerateAll={canGenerateAll ? handleGenerateAllImages : undefined}
+          onOpenComments={() => setShowComments(true)}
+          onOpenHistory={() => setShowHistory(true)}
+        />
+      )}
     </div>
   );
 };

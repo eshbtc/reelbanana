@@ -20,9 +20,11 @@ interface SceneCardProps {
   onUpdateScene: (id: string, updates: Partial<Pick<Scene, 'prompt' | 'narration' | 'camera' | 'transition' | 'duration' | 'backgroundImage' | 'stylePreset' | 'variantImageUrls' | 'voiceId' | 'voiceName' | 'videoModel' | 'sceneDirection' | 'location' | 'props' | 'costumes' | 'videoUrl' | 'videoStatus'>>) => void;
   onUpdateSequence: (id: string, newImageUrls: string[]) => void;
   framesPerScene?: number;
+  onOpenComments?: (id: string) => void;
+  commentCount?: number;
 }
 
-const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerateImage, onGenerateVariant, onGenerateVideo, onUpdateScene, onUpdateSequence, framesPerScene = 5 }) => {
+const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerateImage, onGenerateVariant, onGenerateVideo, onUpdateScene, onUpdateSequence, framesPerScene = 5, onOpenComments, commentCount }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedPrompt, setEditedPrompt] = useState(scene.prompt);
   const [editedNarration, setEditedNarration] = useState(scene.narration);
@@ -158,6 +160,7 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
                   src={scene.imageUrls[currentImageIndex]} 
                   alt={`${scene.prompt} - frame ${currentImageIndex + 1}`} 
                   className="w-full h-full object-cover transition-opacity duration-300" 
+                  loading="lazy"
               />
             </div>
         );
@@ -220,6 +223,21 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
             <div className="absolute top-2 right-2 bg-black/60 text-white text-[10px] font-bold px-2 py-1 rounded">
               Style: {scene.stylePreset.replace('-', ' ')}
             </div>
+          )}
+          {typeof commentCount === 'number' && commentCount > 0 && (
+            <div className="absolute top-2 left-14 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full" title={`${commentCount} comments`}>
+              💬 {commentCount}
+            </div>
+          )}
+          {/* Comments badge/button */}
+          {onOpenComments && (
+            <button
+              onClick={() => onOpenComments(scene.id)}
+              className="absolute top-2 right-20 bg-black/60 hover:bg-black/80 text-white text-[10px] font-bold px-2 py-1 rounded"
+              title="Open comments for this scene"
+            >
+              💬 Comment
+            </button>
           )}
           {scene.backgroundImage && (
             <div className="absolute top-2 left-24 bg-black/60 text-white text-[10px] font-bold px-2 py-1 rounded">
@@ -314,7 +332,7 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
           {/* Director Controls */}
           {scene.status === 'success' && (
             <div className="mt-4 p-3 bg-gray-900/50 rounded-lg border border-gray-600">
-              <h4 className="text-xs font-bold text-amber-400 mb-3 flex items-center gap-2">
+              <h4 className="text-xs font-bold text-amber-400 mb-3 flex items-center gap-2" title="Fine-tune camera, transitions, voice, and scene details for better results">
                 🎬 Director Controls
               </h4>
               <div className="grid grid-cols-2 gap-3">

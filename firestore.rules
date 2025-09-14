@@ -62,10 +62,97 @@ service cloud.firestore {
     
     // Usage records - users can only access their own records (collection name is 'usage')
     match /usage/{recordId} {
-      allow read, write: if request.auth != null && 
-        request.auth.uid == resource.data.userId;
+      allow read: if request.auth != null && 
+        (resource == null || request.auth.uid == resource.data.userId);
+      allow write: if request.auth != null && 
+        (resource == null || request.auth.uid == resource.data.userId);
       allow create: if request.auth != null && 
         request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Usage events for credit operations - users can only access their own events
+    match /usage_events/{eventId} {
+      allow read: if request.auth != null && 
+        (resource == null || request.auth.uid == resource.data.userId);
+      allow write: if request.auth != null && 
+        (resource == null || request.auth.uid == resource.data.userId);
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Wizard metrics for analytics - users can only create their own metrics
+    match /wizard_metrics/{metricId} {
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId;
+      allow read, write: if false; // Only allow creation, not reading/writing existing metrics
+    }
+
+    // Job progress (read-only for clients; writes are server-side Admin SDK)
+    match /job_progress/{jobId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Brand Kits (Pro/Studio feature) - owner-only access
+    match /brandKits/{brandKitId} {
+      allow create: if request.auth != null &&
+        request.resource.data.userId == request.auth.uid;
+      allow read, update, delete: if request.auth != null &&
+        request.auth.uid == resource.data.userId;
+    }
+
+    // Review Links - public read for active links; owner manages
+    match /reviewLinks/{reviewLinkId} {
+      // Owner can create/update/delete
+      allow create: if request.auth != null &&
+        request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if request.auth != null &&
+        request.auth.uid == resource.data.createdBy;
+
+      // Public read for active links (security by unguessable token)
+      allow read: if resource != null && resource.data.status == 'active';
+    }
+
+    // Review Comments - public read for active links; public create if comments allowed
+    match /reviewComments/{commentId} {
+      function link() {
+        return get(/databases/$(database)/documents/reviewLinks/$(request.resource.data.reviewLinkId));
+      }
+      function linkByResource() {
+        return get(/databases/$(database)/documents/reviewLinks/$(resource.data.reviewLinkId));
+      }
+
+      // Read: allowed if linked review link is active
+      allow read: if resource != null && linkByResource().data.status == 'active';
+
+      // Create: allowed if linked review link is active and allows comments
+      allow create: if link().data.status == 'active' && 
+        'comment' in link().data.permissions;
+
+      // Update/Delete: only owner (project owner) may modify comments
+      allow update, delete: if request.auth != null && 
+        linkByResource().data.createdBy == request.auth.uid;
+    }
+
+    // Review Approvals - public read for active links; public create if approvals allowed
+    match /reviewApprovals/{approvalId} {
+      function link() {
+        return get(/databases/$(database)/documents/reviewLinks/$(request.resource.data.reviewLinkId));
+      }
+      function linkByResource() {
+        return get(/databases/$(database)/documents/reviewLinks/$(resource.data.reviewLinkId));
+      }
+
+      // Read: allowed if linked review link is active
+      allow read: if resource != null && linkByResource().data.status == 'active';
+
+      // Create: allowed if linked review link is active and allows approvals
+      allow create: if link().data.status == 'active' && 
+        'approve' in link().data.permissions;
+
+      // Update/Delete: only owner (project owner) may modify approvals
+      allow update, delete: if request.auth != null && 
+        linkByResource().data.createdBy == request.auth.uid;
     }
   }
 }

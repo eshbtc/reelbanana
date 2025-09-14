@@ -7,6 +7,7 @@ import RenderingScreen from './RenderingScreen';
 import MovieWizard from './components/MovieWizard';
 import MoviePlayer from './components/MoviePlayer';
 import PublicGallery from './components/PublicGallery';
+import { PublicReviewPage } from './components/PublicReviewPage';
 import DemoWizardHelpModal from './components/DemoWizardHelpModal';
 import MyProjectsPage from './components/MyProjectsPage';
 import AdBlockerWarning from './components/AdBlockerWarning';
@@ -20,7 +21,7 @@ import { API_ENDPOINTS } from './config/apiConfig';
 import { authFetch } from './lib/authFetch';
 // Removed auto-publish; handled in MoviePlayer for one-click publish UX
 
-type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'projects' | 'admin' | 'writeup' | 'settings' | 'templates';
+type View = 'editor' | 'rendering' | 'player' | 'gallery' | 'projects' | 'admin' | 'writeup' | 'settings' | 'templates' | 'publicReview';
 
 const App: React.FC = () => {
   // Defensive context usage to prevent null context errors
@@ -36,6 +37,7 @@ const App: React.FC = () => {
   // Initialize view based on URL path
   const getInitialView = (): View => {
     const path = window.location.pathname;
+    if (path.startsWith('/review/')) return 'publicReview';
     if (path === '/projects') return 'projects';
     if (path === '/gallery') return 'gallery';
     if (path === '/admin') return 'admin';
@@ -48,6 +50,7 @@ const App: React.FC = () => {
   const [view, setView] = useState<View>(getInitialView());
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [publicReviewId, setPublicReviewId] = useState<string | null>(null);
   const [videoUrlOriginal, setVideoUrlOriginal] = useState<string | null>(null);
   const [videoUrlPolished, setVideoUrlPolished] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -141,6 +144,15 @@ const App: React.FC = () => {
       const urlParams = new URLSearchParams(window.location.search);
       const projectIdParam = urlParams.get('projectId');
       const viewParam = urlParams.get('view');
+      const path = window.location.pathname;
+      if (path.startsWith('/review/')) {
+        const id = path.split('/review/')[1] || '';
+        if (id) {
+          setPublicReviewId(id);
+          setView('publicReview');
+          return;
+        }
+      }
       
       if (projectIdParam && viewParam === 'player') {
         try {
@@ -214,7 +226,12 @@ const App: React.FC = () => {
   useEffect(() => {
     const onPopState = () => {
       const path = window.location.pathname;
-      if (path === '/projects') setView('projects');
+      if (path.startsWith('/review/')) {
+        setView('publicReview');
+        const id = path.split('/review/')[1] || '';
+        setPublicReviewId(id || null);
+      }
+      else if (path === '/projects') setView('projects');
       else if (path === '/gallery') setView('gallery');
       else if (path === '/settings') setView('settings');
       else if (path === '/templates') setView('templates');
@@ -226,6 +243,10 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (view) {
+      case 'publicReview':
+        return publicReviewId ? <PublicReviewPage token={publicReviewId} /> : (
+          <div className="text-gray-400">Invalid review link</div>
+        );
       case 'rendering':
         if (useWizardMode) {
           return <MovieWizard 
@@ -286,7 +307,7 @@ const App: React.FC = () => {
                 {showPolish && (
                   <div className="ml-4 flex items-center gap-2">
                     <input id="proPolish" type="checkbox" checked={proPolish} onChange={(e) => setProPolish(e.target.checked)} />
-                    <label htmlFor="proPolish" className="text-sm text-gray-300">
+                    <label htmlFor="proPolish" className="text-sm text-gray-300" title="Upscale + frame interpolation for smoother, sharper video. Uses your FAL credits if connected.">
                       Pro Polish (Upscale + Interpolate)
                       {hasFalApiKey && <span className="text-orange-400 ml-1">• Using your FAL credits</span>}
                     </label>

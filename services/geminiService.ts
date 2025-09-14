@@ -178,9 +178,10 @@ type StoryScene = {
 /**
  * Generates character and style description for a story topic
  * @param topic The topic of the story
+ * @param storyContent Optional story content to base character/style on
  * @returns A character and style description
  */
-export const generateCharacterAndStyle = async (topic: string, forceUseApiKey?: boolean): Promise<string> => {
+export const generateCharacterAndStyle = async (topic: string, forceUseApiKey?: boolean, storyContent?: string): Promise<string> => {
     try {
         const currentUser = getCurrentUser();
         if (!currentUser) {
@@ -209,8 +210,31 @@ export const generateCharacterAndStyle = async (topic: string, forceUseApiKey?: 
                 });
                 
                 console.log('Generating character and style with Firebase AI Logic...');
-                result = await model.generateContent(
-                    `Create a character and visual style description for a creative short film about "${topic}". 
+                
+                let prompt;
+                if (storyContent) {
+                    // Use the actual story content to generate consistent character and style
+                    prompt = `Based on this story content, create a character and visual style description that matches the story:
+
+STORY CONTENT:
+${storyContent}
+
+Create a character and visual style description that:
+- Matches the main character described in the story
+- Uses the visual style and mood established in the story
+- Maintains consistency with the story's tone and setting
+- Keeps the same character appearance, personality, and visual aesthetic
+
+Include:
+- Main character description (appearance, personality, age if human)
+- Visual style (art style, color palette, mood, lighting)
+- Keep it concise (2-3 sentences)
+- Make it consistent with the story's established character and style
+
+The character and style should feel like it belongs to this specific story, not a generic interpretation.`;
+                } else {
+                    // Fallback to topic-based generation
+                    prompt = `Create a character and visual style description for a creative short film about "${topic}". 
                     Be creative and diverse! Consider:
                     - Different character types (humans, animals, objects, fantasy creatures, etc.)
                     - Various visual styles (realistic, stylized, noir, colorful, minimalist, documentary, etc.)
@@ -226,8 +250,10 @@ export const generateCharacterAndStyle = async (topic: string, forceUseApiKey?: 
                     Examples:
                     - "A young photographer in their 20s with a vintage camera, curious and artistic, in realistic urban photography style with natural lighting and documentary feel."
                     - "A delivery driver in their 30s, determined and observant, in noir thriller style with dramatic shadows and urban night setting."
-                    - "A scientist in their 40s with a futuristic device, brilliant but reckless, in sci-fi style with blue lighting and technological atmosphere."`
-                );
+                    - "A scientist in their 40s with a futuristic device, brilliant but reckless, in sci-fi style with blue lighting and technological atmosphere."`;
+                }
+                
+                result = await model.generateContent(prompt);
             } catch (firebaseError: any) {
                 console.log('❌ Firebase AI Logic failed:', firebaseError.message);
                 // Check if user has API key for automatic fallback
@@ -1197,10 +1223,124 @@ export const charOptionsCacheKey = (topic: string, count: number, styleHint?: st
   return `opt_${Math.abs(h).toString(36)}`;
 };
 
+/**
+ * Analyze story content to extract character information
+ */
+export const analyzeStoryCharacters = async (storyContent: string): Promise<{
+  characters: Array<{name: string, description: string, role: string}>;
+  suggestedCount: number;
+}> => {
+  try {
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+      throw new Error("Please sign in to analyze story characters.");
+    }
+
+    // Determine which AI service to use
+    let aiService = await getAIService();
+    if (!aiService) {
+      throw new Error("No credits remaining and no API key configured.");
+    }
+
+    let result;
+    
+    if (aiService === 'firebase') {
+      const model = getGenerativeModel(ai, { 
+        model: "gemini-2.5-flash",
+        generationConfig: {
+          responseMimeType: "application/json",
+        }
+      });
+      
+      const prompt = `Analyze this story content and extract character information. Return ONLY valid JSON in this exact format:
+
+{
+  "characters": [
+    {
+      "name": "Character Name",
+      "description": "Brief description of appearance and personality",
+      "role": "Their role in the story (protagonist, antagonist, supporting, etc.)"
+    }
+  ],
+  "suggestedCount": 3
+}
+
+STORY CONTENT:
+${storyContent}
+
+Rules:
+- Extract ALL characters mentioned in the story
+- Include main characters, supporting characters, and any named characters
+- Provide brief but descriptive character descriptions
+- Set suggestedCount to the number of characters found (1-6)
+- If no characters are clearly defined, suggest 2-3 generic characters that would fit the story
+- Focus on characters that would be important for visual generation`;
+
+      result = await model.generateContent(prompt);
+    } else {
+      // Fallback to custom API key
+      const response = await fetch(`${API_ENDPOINTS.gemini.generate}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `Analyze this story content and extract character information. Return ONLY valid JSON in this exact format:
+
+{
+  "characters": [
+    {
+      "name": "Character Name", 
+      "description": "Brief description of appearance and personality",
+      "role": "Their role in the story (protagonist, antagonist, supporting, etc.)"
+    }
+  ],
+  "suggestedCount": 3
+}
+
+STORY CONTENT:
+${storyContent}
+
+Rules:
+- Extract ALL characters mentioned in the story
+- Include main characters, supporting characters, and any named characters
+- Provide brief but descriptive character descriptions
+- Set suggestedCount to the number of characters found (1-6)
+- If no characters are clearly defined, suggest 2-3 generic characters that would fit the story
+- Focus on characters that would be important for visual generation`,
+          model: "gemini-2.5-flash"
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.statusText}`);
+      }
+      result = await response.json();
+    }
+
+    const responseText = result.response?.text() || result.text || '';
+    const analysis = JSON.parse(responseText);
+    
+    return {
+      characters: analysis.characters || [],
+      suggestedCount: Math.min(Math.max(analysis.suggestedCount || 2, 1), 6)
+    };
+  } catch (error) {
+    console.error('Error analyzing story characters:', error);
+    // Fallback to generic analysis
+    return {
+      characters: [
+        { name: "Main Character", description: "The protagonist of the story", role: "protagonist" },
+        { name: "Supporting Character", description: "A character who helps the main character", role: "supporting" }
+      ],
+      suggestedCount: 2
+    };
+  }
+};
+
 export const generateCharacterOptions = async (
   topic: string,
   count: number = 4,
-  styleHint?: string
+  styleHint?: string,
+  storyContent?: string
 ): Promise<CharacterOption[]> => {
   const options: CharacterOption[] = [];
   const currentUser = getCurrentUser();
@@ -1226,11 +1366,38 @@ export const generateCharacterOptions = async (
 
   // 1) Generate character descriptors (Firebase AI Logic with fallback to custom API key)
   let list: any[] = [];
-  const prompt = `Return ONLY JSON as {"characters":[{"name":"...","description":"..."}]}.
+  let prompt: string;
+  
+  if (storyContent) {
+    // Use story analysis to generate characters based on actual story content
+    const analysis = await analyzeStoryCharacters(storyContent);
+    const actualCount = Math.min(count, analysis.suggestedCount);
+    
+    prompt = `Return ONLY JSON as {"characters":[{"name":"...","description":"..."}]}.
+Based on this story content, create ${actualCount} characters that match the story:
+
+STORY CONTENT:
+${storyContent}
+
+EXTRACTED CHARACTERS:
+${analysis.characters.map(char => `- ${char.name}: ${char.description} (${char.role})`).join('\n')}
+
+Create character descriptions that:
+- Match the characters identified in the story
+- Maintain consistency with the story's tone and setting
+- Include appearance + personality + visual art style (1-2 sentences)
+- Stay true to the established character roles and relationships
+${styleHint ? `Bias visual styles toward: ${styleHint}.` : ''}
+
+Example description: "Elias Thorne, a meticulous horologist with worn spectacles and gaunt features, rendered in sepia-toned painterly style with velvety shadows."`;
+  } else {
+    // Fallback to topic-based generation
+    prompt = `Return ONLY JSON as {"characters":[{"name":"...","description":"..."}]}.
 Create ${count} distinct, kid-friendly characters that could star in a short story about "${topic}".
 Each description must combine appearance + personality + visual art style (1-2 sentences).
 ${styleHint ? `Bias styles toward: ${styleHint}.` : ''}
 Example description: "A brave banana with a tiny red cape and bright eyes, painted in warm watercolor with soft edges."`;
+  }
 
   let usedCustom = false;
   try {

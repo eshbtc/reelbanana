@@ -19,12 +19,16 @@ import { getStorage, ref, listAll, getDownloadURL } from 'firebase/storage';
 import { Scene } from '../types';
 import { firebaseApp } from '../lib/firebase';
 import { getCurrentUser } from './authService';
+import { computeProjectDiff, isMeaningfulDiff } from '../utils/diff';
 
 // Use centralized Firebase app for consistency and App Check
 const db = getFirestore(firebaseApp);
 const storage = getStorage(firebaseApp);
 
 const PROJECTS_COLLECTION = 'projects';
+const VERSIONS_SUBCOLLECTION = 'versions';
+const PRESENCE_COLLECTION = 'presence';
+const COMMENTS_SUBCOLLECTION = 'comments';
 
 interface ProjectData {
     topic: string;
@@ -70,6 +74,112 @@ export const createProject = async (data: ProjectData): Promise<string> => {
         console.error("Error creating project in Firestore:", error);
         throw new Error("Could not create a new project.");
     }
+};
+
+export type ProjectVersion = {
+    id?: string;
+    createdAt: any;
+    authorId: string;
+    snapshot: Partial<ProjectData>;
+    diff?: any;
+    reason?: string;
+};
+
+export const recordProjectVersion = async (
+  projectId: string,
+  prev: Partial<ProjectData>,
+  curr: Partial<ProjectData>,
+  reason: string = 'autosave'
+): Promise<string | null> => {
+  try {
+    const currentUser = getCurrentUser();
+    if (!currentUser) return null;
+    const cleanPrev = { topic: prev.topic || '', characterAndStyle: prev.characterAndStyle || '', scenes: prev.scenes || [], characterRefs: (prev as any).characterRefs } as any;
+    const cleanCurr = { topic: curr.topic || '', characterAndStyle: curr.characterAndStyle || '', scenes: curr.scenes || [], characterRefs: (curr as any).characterRefs } as any;
+    const diff = computeProjectDiff(cleanPrev, cleanCurr);
+    if (!isMeaningfulDiff(diff)) return null;
+
+    const db = getFirestore(firebaseApp);
+    const vcol = collection(db, PROJECTS_COLLECTION, projectId, VERSIONS_SUBCOLLECTION);
+    const ref = await addDoc(vcol, {
+      createdAt: serverTimestamp(),
+      authorId: currentUser.uid,
+      snapshot: cleanCurr,
+      diff,
+      reason
+    });
+    return ref.id;
+  } catch (e) {
+    console.warn('recordProjectVersion failed:', (e as any)?.message || e);
+    return null;
+  }
+};
+
+export const listProjectVersions = async (projectId: string, limitCount: number = 20): Promise<ProjectVersion[]> => {
+  const db = getFirestore(firebaseApp);
+  const vcol = collection(db, PROJECTS_COLLECTION, projectId, VERSIONS_SUBCOLLECTION);
+  const q = query(vcol, orderBy('createdAt','desc'), fsLimit(limitCount));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+};
+
+export const rollbackProjectToVersion = async (projectId: string, versionId: string): Promise<void> => {
+  const db = getFirestore(firebaseApp);
+  const vref = doc(db, PROJECTS_COLLECTION, projectId, VERSIONS_SUBCOLLECTION, versionId);
+  const vsnap = await getDoc(vref);
+  if (!vsnap.exists()) throw new Error('Version not found');
+  const vdata = vsnap.data() as any;
+  const snapshot = vdata.snapshot as Partial<ProjectData>;
+  await updateProject(projectId, { topic: snapshot.topic || '', characterAndStyle: snapshot.characterAndStyle || '', scenes: snapshot.scenes || [] } as any);
+};
+
+export const createProjectFromSnapshot = async (snapshot: Partial<ProjectData>, topicOverride?: string): Promise<string> => {
+  const data: ProjectData = {
+    topic: (topicOverride || snapshot.topic || 'Restored Project') as string,
+    characterAndStyle: (snapshot.characterAndStyle || '') as string,
+    scenes: (snapshot.scenes || []) as Scene[],
+    characterRefs: (snapshot as any).characterRefs || [],
+  } as any;
+  return await createProject(data);
+};
+
+// Presence API
+export const updatePresence = async (projectId: string, activeSceneId?: string | null) => {
+  const db = getFirestore(firebaseApp);
+  const user = getCurrentUser();
+  if (!user) return;
+  const pref = doc(db, PRESENCE_COLLECTION, `${projectId}__${user.uid}`);
+  await setDoc(pref, { projectId, userId: user.uid, activeSceneId: activeSceneId || null, lastSeen: serverTimestamp() }, { merge: true });
+};
+
+// Comments API
+export type Comment = {
+  id?: string;
+  projectId: string;
+  sceneId?: string;
+  userId: string;
+  authorName?: string;
+  content: string;
+  createdAt: any;
+};
+
+export const addComment = async (projectId: string, sceneId: string | undefined, content: string): Promise<string> => {
+  const db = getFirestore(firebaseApp);
+  const user = getCurrentUser();
+  if (!user) throw new Error('Not authenticated');
+  const col = collection(db, PROJECTS_COLLECTION, projectId, COMMENTS_SUBCOLLECTION);
+  const ref = await addDoc(col, { projectId, sceneId: sceneId || null, userId: user.uid, content, createdAt: serverTimestamp() });
+  return ref.id;
+};
+
+export const listComments = async (projectId: string, sceneId?: string): Promise<Comment[]> => {
+  const db = getFirestore(firebaseApp);
+  const colRef = collection(db, PROJECTS_COLLECTION, projectId, COMMENTS_SUBCOLLECTION);
+  let qref: any = query(colRef, orderBy('createdAt','desc'), fsLimit(50));
+  // Simple scene filter will be done client-side if needed
+  const snap = await getDocs(qref);
+  const all = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+  return sceneId ? all.filter(c => (c.sceneId || null) === sceneId) : all;
 };
 
 /**

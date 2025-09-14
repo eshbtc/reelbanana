@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { getStripeConfig, createSubscription, initializeStripePayment, confirmSubscriptionPayment, getSubscriptionStatus } from '../services/stripeService';
-import { SubscriptionPlan } from '../services/stripeService';
+import { getStripeConfig, getSubscriptionStatus } from '../services/stripeService';
+import SubscriptionModal from './SubscriptionModal';
+import { type PlanTier } from '../lib/planMapper';
+import PlanComparisonModal from './PlanComparisonModal';
 
 const PricingPage: React.FC = () => {
   const [stripeConfig, setStripeConfig] = useState<any>(null);
   const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<PlanTier | null>(null);
+  const [showSubscribe, setShowSubscribe] = useState<false | 'plus' | 'pro'>(false);
+  const [showCompare, setShowCompare] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -39,20 +42,10 @@ const PricingPage: React.FC = () => {
       return;
     }
 
-    setSelectedPlan(planId);
-    setIsProcessing(true);
-
-    try {
-      // This would integrate with Stripe Elements for payment
-      // For now, we'll show a placeholder
-      alert(`Upgrade to ${planId} plan - Stripe integration coming soon!`);
-    } catch (error) {
-      console.error('Failed to process upgrade:', error);
-      alert('Failed to process upgrade. Please try again.');
-    } finally {
-      setIsProcessing(false);
-      setSelectedPlan(null);
-    }
+    // Show subscription modal for Plus/Pro
+    const t = planId as 'plus' | 'pro';
+    setSelectedPlan(t);
+    setShowSubscribe(t);
   };
 
   const plans = [
@@ -163,12 +156,20 @@ const PricingPage: React.FC = () => {
             <h1 className="text-2xl font-bold">Pricing</h1>
             <p className="text-gray-400 mt-1">Choose the perfect plan for your storytelling needs</p>
           </div>
-          <button
-            onClick={() => window.location.href = '/'}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors duration-200"
-          >
-            ← Back to Home
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowCompare(true)}
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors duration-200"
+            >
+              Compare Plans
+            </button>
+            <button
+              onClick={() => window.location.href = '/'}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors duration-200"
+            >
+              ← Back to Home
+            </button>
+          </div>
         </div>
       </div>
 
@@ -235,22 +236,14 @@ const PricingPage: React.FC = () => {
                     : plan.name === 'Free'
                     ? 'bg-gray-700 hover:bg-gray-600 text-white'
                     : 'bg-gray-700 hover:bg-gray-600 text-white'
-                } ${isProcessing && selectedPlan === plan.name.toLowerCase() ? 'opacity-50 cursor-not-allowed' : ''}`}
+                }`}
                 onClick={() => handleUpgrade(plan.name.toLowerCase())}
-                disabled={isProcessing && selectedPlan === plan.name.toLowerCase()}
               >
-                {isProcessing && selectedPlan === plan.name.toLowerCase() ? (
-                  <span className="flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Processing...
-                  </span>
-                ) : (
-                  <>
-                    {plan.name === 'Free' ? 'Get Started' : 
-                     plan.name === 'Studio' ? 'Contact Sales' : 
-                     'Upgrade Now'}
-                  </>
-                )}
+                <>
+                  {plan.name === 'Free' ? 'Get Started' : 
+                    plan.name === 'Studio' ? 'Contact Sales' : 
+                    'Upgrade Now'}
+                </>
               </button>
             </div>
           ))}
@@ -313,6 +306,25 @@ const PricingPage: React.FC = () => {
           </div>
         </div>
       </div>
+      {showSubscribe && (
+        <SubscriptionModal
+          open={!!showSubscribe}
+          plan={showSubscribe}
+          onClose={() => setShowSubscribe(false)}
+          onSuccess={async () => {
+            try {
+              const status = await getSubscriptionStatus();
+              setSubscriptionStatus(status);
+            } catch {}
+          }}
+        />
+      )}
+      {showCompare && (
+        <PlanComparisonModal
+          open={showCompare}
+          onClose={() => setShowCompare(false)}
+        />
+      )}
     </div>
   );
 };

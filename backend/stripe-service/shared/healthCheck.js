@@ -102,3 +102,4 @@ function createHealthEndpoints(app, serviceName) {
 module.exports = {
   createHealthEndpoints
 };
+

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Scene } from './types';
+import { Scene, AspectRatio, ExportPreset } from './types';
 import AnimatedLoader from './components/AnimatedLoader';
 import { getCurrentUser } from './services/authService';
+import { getAspectRatioConfig, getExportPresetConfig, clampResolutionToPlan } from './lib/exportPresets';
+import { useUserPlan } from './hooks/useUserPlan';
 
 // Define the structure of the props
 interface RenderingScreenProps {
@@ -10,6 +12,8 @@ interface RenderingScreenProps {
   proPolish?: boolean;
   projectId?: string;
   demoMode?: boolean;
+  aspectRatio?: AspectRatio;
+  exportPreset?: ExportPreset;
   onRenderComplete: (url: string, projectId?: string) => void;
   onRenderFail: (errorMessage: string) => void;
 }
@@ -52,12 +56,27 @@ const cachedMessages: Record<RenderStage, string> = {
 
 import { API_ENDPOINTS, apiCall } from './config/apiConfig';
 import { uploadImage, narrate, alignCaptions, composeMusic, renderVideo, polishVideo } from './services/pipelineService';
+import JobProgress from './components/JobProgress';
 import { useToast } from './components/ToastProvider';
 
-const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'neutral', proPolish = false, projectId: providedProjectId, demoMode = false, onRenderComplete, onRenderFail }) => {
+const RenderingScreen: React.FC<RenderingScreenProps> = ({ 
+  scenes, 
+  emotion = 'neutral', 
+  proPolish = false, 
+  projectId: providedProjectId, 
+  demoMode = false,
+  aspectRatio = '16:9',
+  exportPreset = 'youtube',
+  onRenderComplete, 
+  onRenderFail 
+}) => {
   const [stage, setStage] = useState<RenderStage>('idle');
+  
+  // Use real plan detection hook
+  const { planTier: userPlan, planConfig, isLoading: planLoading, error: planError } = useUserPlan();
   const [progress, setProgress] = useState(0); // For uploads, 0 to 100
   const [useCachedMessage, setUseCachedMessage] = useState(false);
+  const [renderJobId, setRenderJobId] = useState<string | null>(null);
   // Defensive context usage to prevent null context errors
   let toast: any = null;
   
@@ -193,7 +212,7 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
         setStage('narrating');
         setUseCachedMessage(false); // Reset for new stage
         const narrationScript = scenes.map(s => s.narration).join(' ');
-        const narrationResponse = await narrate({ projectId, narrationScript, emotion });
+        const narrationResponse = await narrate({ projectId, narrationScript, emotion, jobId: `narrate-${projectId}-${Date.now()}` });
         const { gsAudioPath } = narrationResponse;
         
         // Show cached message if response indicates cached result
@@ -233,8 +252,40 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
             transition: scene.transition || 'fade',
             duration: scene.duration || 3,
         }));
+        // Get resolution from selected aspect ratio and export preset
+        const aspectRatioConfig = getAspectRatioConfig(aspectRatio);
+        const exportPresetConfig = getExportPresetConfig(exportPreset);
+        
+        // Use export preset resolution if available, otherwise use aspect ratio resolution
+        let targetW = aspectRatioConfig?.width || 1920;
+        let targetH = aspectRatioConfig?.height || 1080;
+        
+        if (exportPresetConfig) {
+          targetW = exportPresetConfig.resolution.width;
+          targetH = exportPresetConfig.resolution.height;
+        }
+        
+        // Clamp to user plan limits
+        const clampedResolution = clampResolutionToPlan(targetW, targetH, userPlan);
+
         // Assemble with per‑scene motion clips (auto‑generated server‑side), precise captions, and audio
-        const renderResponse = await renderVideo({ projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: false, force: true });
+        const jobId = `render-${projectId}-${Date.now()}`;
+        setRenderJobId(jobId);
+        const renderResponse = await renderVideo({ 
+          projectId, 
+          scenes: sceneDataForRender, 
+          gsAudioPath, 
+          srtPath, 
+          gsMusicPath, 
+          useFal: false, 
+          force: true,
+          jobId,
+          // New aspect ratio and export preset parameters
+          targetW: clampedResolution.width,
+          targetH: clampedResolution.height,
+          aspectRatio: aspectRatio,
+          exportPreset: exportPreset
+        });
         const { videoUrl } = renderResponse;
         
         if (renderResponse.cached) {
@@ -313,6 +364,11 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({ scenes, emotion = 'ne
       </h1>
       {stage === 'uploading' && <p className="text-gray-400 mt-2">{progress}% complete</p>}
       {renderProgressIndicator()}
+      {stage === 'rendering' && renderJobId && (
+        <div className="w-full max-w-2xl mx-auto mt-4">
+          <JobProgress jobId={renderJobId} endpoint={API_ENDPOINTS.progressStream} />
+        </div>
+      )}
       <p className="text-gray-500 mt-12 max-w-lg">
         This can take a few minutes, especially for longer videos. Please don't close this window. We're busy directing, editing, and adding special effects to your masterpiece!
       </p>

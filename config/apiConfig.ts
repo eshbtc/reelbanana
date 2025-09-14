@@ -187,6 +187,7 @@ export const API_ENDPOINTS = {
   narrate: `${apiConfig.baseUrls.narrate}/narrate`,
   align: `${apiConfig.baseUrls.align}/align`,
   render: `${apiConfig.baseUrls.render}/render`,
+  progressStream: `${apiConfig.baseUrls.render}/progress-stream`,
   generateClip: `${apiConfig.baseUrls.render}/generate-clip`,
   compose: `${apiConfig.baseUrls.compose}/compose-music`,
   polish: `${apiConfig.baseUrls.polish}/polish`,

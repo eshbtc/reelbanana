@@ -35,6 +35,49 @@ if (!admin.apps.length) {
   });
 }
 
+// Simple SSE progress (best-effort)
+const progressStore = new Map();
+const sseClients = new Map();
+const progressWriteTs = new Map();
+async function pushProgress(jobId, update) {
+  if (!jobId) return;
+  const prev = progressStore.get(jobId) || {};
+  const next = { progress: typeof update.progress==='number'?Math.max(0,Math.min(100,update.progress)):(prev.progress||0), stage: update.stage||prev.stage||'', message: update.message||prev.message||'', etaSeconds: typeof update.etaSeconds==='number'?update.etaSeconds:prev.etaSeconds, done: !!update.done, error: update.error||null, ts: Date.now() };
+  progressStore.set(jobId, next);
+  const set = sseClients.get(jobId);
+  if (set) { const payload = `data: ${JSON.stringify({ jobId, ...next })}\n\n`; for (const res of set) { try { res.write(payload); } catch {} } }
+  try {
+    const now = Date.now();
+    const last = progressWriteTs.get(jobId) || 0;
+    if (now - last > 900 || next.done || next.error) {
+      progressWriteTs.set(jobId, now);
+      const db = admin.firestore();
+      await db.collection('job_progress').doc(jobId).set({ jobId, service: 'align', progress: next.progress, stage: next.stage, message: next.message, etaSeconds: next.etaSeconds||null, done: next.done, error: next.error||null, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    }
+  } catch {}
+}
+
+app.get('/progress-stream', appCheckVerification, (req, res) => {
+  const jobId = (req.query.jobId||'').toString();
+  if (!jobId) return sendError(req,res,400,'INVALID_ARGUMENT','Missing jobId');
+  res.setHeader('Content-Type','text/event-stream'); res.setHeader('Cache-Control','no-cache'); res.setHeader('Connection','keep-alive'); res.flushHeaders&&res.flushHeaders();
+  const snap = progressStore.get(jobId); if (snap) res.write(`data: ${JSON.stringify({ jobId, ...snap })}\n\n`);
+  else {
+    try {
+      const db = admin.firestore();
+      db.collection('job_progress').doc(jobId).get().then(doc => {
+        if (doc.exists) {
+          const data = doc.data() || {};
+          const payload = `data: ${JSON.stringify({ jobId, progress: data.progress||0, stage: data.stage||'', message: data.message||'', etaSeconds: data.etaSeconds||null, done: !!data.done, error: data.error||null })}\n\n`;
+          try { res.write(payload); } catch {}
+        }
+      });
+    } catch {}
+  }
+  if (!sseClients.has(jobId)) sseClients.set(jobId, new Set()); sseClients.get(jobId).add(res);
+  req.on('close', ()=>{ const set=sseClients.get(jobId); if (set) set.delete(res); });
+});
+
 // Observability & Error helpers
 const { randomUUID } = require('crypto');
 app.use((req, res, next) => {
@@ -178,7 +221,8 @@ app.post('/align',
   ...createExpensiveOperationLimiter('align'), 
   appCheckVerification, 
   async (req, res) => {
-    const { projectId, gsAudioPath } = req.body;
+    const { projectId, gsAudioPath, jobId: providedJobId } = req.body;
+    const jobId = (providedJobId && String(providedJobId)) || `align-${projectId}-${Date.now()}`;
 
     if (!projectId || !gsAudioPath) {
         return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required fields: projectId and gsAudioPath');
@@ -196,6 +240,7 @@ app.post('/align',
         if (exists) {
             const gcsPath = `gs://${bucketName}/${fileName}`;
             console.log(`Captions already exist for ${projectId} at ${gcsPath}, skipping Speech-to-Text processing`);
+            try { pushProgress(jobId, { progress: 100, stage: 'aligning', message: 'Cached captions', done: true }); } catch {}
             // Complete credit operation
             if (req.creditDeduction?.idempotencyKey) {
                 await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
@@ -254,6 +299,7 @@ app.post('/align',
         };
 
         // 1. Transcribe audio using Google Speech-to-Text
+        pushProgress(jobId, { progress: 10, stage: 'aligning', message: 'Transcribing…' });
         const [response] = await speechClient.recognize(request);
         const words = response.results.flatMap(result => result.alternatives[0].words);
 
@@ -262,11 +308,12 @@ app.post('/align',
         }
         
         // 2. Convert transcription to SRT format
+        pushProgress(jobId, { progress: 60, stage: 'aligning', message: 'Formatting captions…' });
         const srtContent = convertToSrt(words);
         
         // 3. Upload SRT file to Google Cloud Storage
         // Reuse bucket, fileName, and file variables from the cache check above
-        
+        pushProgress(jobId, { progress: 85, stage: 'aligning', message: 'Saving SRT…' });
         await file.save(srtContent, { metadata: { contentType: 'text/plain' } });
 
         // Save to global cache
@@ -288,6 +335,7 @@ app.post('/align',
             await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
         }
         
+        try { pushProgress(jobId, { progress: 100, stage: 'aligning', message: 'Captions ready', done: true }); } catch {}
         res.status(200).json({ srtPath: gcsPath, requestId: req.requestId });
 
     } catch (error) {

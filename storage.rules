@@ -1,0 +1,28 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Brand kit logos: allow owner to upload small image files; allow public read
+    match /brand-kits/{userId}/{brandKitId}/{fileName=**} {
+      // Public read so logos can render on shared/public pages
+      allow read: if true;
+
+      // Only the authenticated owner can write; restrict size and content type
+      allow write: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Public assets (if any) under /public are readable by everyone
+    match /public/{path=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

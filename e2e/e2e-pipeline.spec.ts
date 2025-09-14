@@ -55,7 +55,7 @@ async function getAppCheckAndIdToken(debugSecret: string | undefined) {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   await page.addInitScript((secret) => {
-    (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = secret;
+    (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = '0F5620AB-13C3-4881-8BF2-1C9F89C0372B';
   }, debugSecret);
   await page.goto('https://reel-banana-35a54.web.app', { waitUntil: 'load' });
 
@@ -284,7 +284,7 @@ test('E2E pipeline (upload → narrate → align → compose → render → poli
   // 7) Cloud Functions onCall check via browser context (secureDataHandler)
   await test.step('secureDataHandler (callable)', async () => {
     await page.addInitScript((secret) => {
-      (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = secret;
+      (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = '0F5620AB-13C3-4881-8BF2-1C9F89C0372B';
     }, process.env.APPCHECK_DEBUG_SECRET);
     await page.goto('https://reel-banana-35a54.web.app', { waitUntil: 'load' });
     const data = await page.evaluate(async (cfg) => {

@@ -37,6 +37,76 @@ if (!admin.apps.length) {
   });
 }
 
+// Simple in-memory progress store for SSE (best-effort)
+const progressStore = new Map(); // jobId -> { progress, stage, message, etaSeconds, done, error, ts }
+const sseClients = new Map();    // jobId -> Set(res)
+const progressWriteTs = new Map();
+async function pushProgress(jobId, update) {
+  if (!jobId) return;
+  const prev = progressStore.get(jobId) || {};
+  const next = {
+    progress: typeof update.progress === 'number' ? Math.max(0, Math.min(100, update.progress)) : (prev.progress || 0),
+    stage: update.stage || prev.stage || '',
+    message: update.message || prev.message || '',
+    etaSeconds: (typeof update.etaSeconds === 'number' ? update.etaSeconds : prev.etaSeconds),
+    done: !!update.done,
+    error: update.error || null,
+    ts: Date.now(),
+  };
+  progressStore.set(jobId, next);
+  const clients = sseClients.get(jobId);
+  if (clients && clients.size) {
+    const payload = `data: ${JSON.stringify({ jobId, ...next })}\n\n`;
+    for (const res of clients) { try { res.write(payload); } catch {} }
+  }
+  try {
+    const now = Date.now();
+    const last = progressWriteTs.get(jobId) || 0;
+    if (now - last > 900 || next.done || next.error) {
+      progressWriteTs.set(jobId, now);
+      const db = admin.firestore();
+      await db.collection('job_progress').doc(jobId).set({
+        jobId,
+        service: 'narrate',
+        progress: next.progress,
+        stage: next.stage,
+        message: next.message,
+        etaSeconds: next.etaSeconds || null,
+        done: next.done,
+        error: next.error || null,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+  } catch {}
+}
+
+// SSE endpoint
+app.get('/progress-stream', appCheckVerification, (req, res) => {
+  const jobId = (req.query.jobId || '').toString();
+  if (!jobId) return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing jobId');
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders && res.flushHeaders();
+  const snap = progressStore.get(jobId);
+  if (snap) res.write(`data: ${JSON.stringify({ jobId, ...snap })}\n\n`);
+  else {
+    try {
+      const db = admin.firestore();
+      db.collection('job_progress').doc(jobId).get().then(doc => {
+        if (doc.exists) {
+          const data = doc.data() || {};
+          const payload = `data: ${JSON.stringify({ jobId, progress: data.progress||0, stage: data.stage||'', message: data.message||'', etaSeconds: data.etaSeconds||null, done: !!data.done, error: data.error||null })}\n\n`;
+          try { res.write(payload); } catch {}
+        }
+      });
+    } catch {}
+  }
+  if (!sseClients.has(jobId)) sseClients.set(jobId, new Set());
+  sseClients.get(jobId).add(res);
+  req.on('close', () => { const set = sseClients.get(jobId); if (set) set.delete(res); });
+});
+
 // Observability & Error helpers
 const { randomUUID } = require('crypto');
 app.use((req, res, next) => {
@@ -93,6 +163,43 @@ const elevenlabs = new ElevenLabsClient({
 });
 const storage = new Storage();
 const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
+
+// Function to get user's ElevenLabs API key if available
+async function getUserElevenLabsKey(userId) {
+  try {
+    const db = admin.firestore();
+    const keyDoc = await db.collection('user_api_keys').doc(userId).get();
+    
+    if (!keyDoc.exists) {
+      return null;
+    }
+    
+    const keyData = keyDoc.data();
+    if (!keyData.hasApiKey_elevenlabs || !keyData.encryptedApiKey_elevenlabs) {
+      return null;
+    }
+    
+    // Decrypt the API key (using the same KMS setup as api-key-service)
+    const { KeyManagementServiceClient } = require('@google-cloud/kms');
+    const kmsClient = new KeyManagementServiceClient();
+    const projectId = 'reel-banana-35a54';
+    const locationId = 'global';
+    const keyRingId = 'api-keys';
+    const keyId = 'user-api-keys';
+    
+    const name = kmsClient.cryptoKeyPath(projectId, locationId, keyRingId, keyId);
+    const [result] = await kmsClient.decrypt({
+      name: name,
+      ciphertext: Buffer.from(keyData.encryptedApiKey_elevenlabs, 'base64'),
+      additionalAuthenticatedData: Buffer.from(userId)
+    });
+    
+    return result.plaintext.toString();
+  } catch (error) {
+    console.warn('Failed to get user ElevenLabs key:', error);
+    return null;
+  }
+}
 
 // Normalize scripts for cache matching (punctuation/spacing/quotes)
 function normalizeScriptForCache(text) {
@@ -158,18 +265,42 @@ app.post('/narrate',
   ...createExpensiveOperationLimiter('narrate'), 
   appCheckVerification, 
   async (req, res) => {
-  const { projectId, narrationScript, emotion } = req.body;
+  const { projectId, narrationScript, emotion, jobId: providedJobId } = req.body;
+  const jobId = (providedJobId && String(providedJobId)) || `narrate-${projectId}-${Date.now()}`;
 
   if (!projectId || !narrationScript) {
     return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required fields: projectId and narrationScript');
   }
-
-  if (!process.env.ELEVENLABS_API_KEY) {
-    console.error('ELEVENLABS_API_KEY environment variable not set.');
-    return sendError(req, res, 500, 'CONFIG', 'Missing ELEVENLABS_API_KEY environment variable');
-  }
   
   console.log(`Received narration request for projectId: ${projectId}`);
+
+  // Get user ID from token for BYO ElevenLabs key check
+  let userId = null;
+  let userElevenLabsKey = null;
+  try {
+    const authHeader = req.headers.authorization || '';
+    if (authHeader.startsWith('Bearer ')) {
+      const idToken = authHeader.split('Bearer ')[1];
+      const decoded = await admin.auth().verifyIdToken(idToken);
+      userId = decoded.uid;
+      
+      // Try to get user's ElevenLabs API key
+      userElevenLabsKey = await getUserElevenLabsKey(userId);
+      if (userElevenLabsKey) {
+        console.log(`Using user's ElevenLabs API key for user: ${userId}`);
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to get user ID or ElevenLabs key:', error);
+  }
+
+  // Use user's key if available, otherwise fall back to platform key
+  const elevenLabsApiKey = userElevenLabsKey || process.env.ELEVENLABS_API_KEY;
+  
+  if (!elevenLabsApiKey) {
+    console.error('No ElevenLabs API key available (neither user key nor platform key)');
+    return sendError(req, res, 500, 'CONFIG', 'No ElevenLabs API key available');
+  }
 
   try {
     // Check if narration file already exists to avoid re-generating
@@ -181,6 +312,7 @@ app.post('/narrate',
     if (exists) {
       const gcsPath = `gs://${bucketName}/${fileName}`;
       console.log(`Narration already exists for ${projectId} at ${gcsPath}, skipping ElevenLabs API call`);
+      try { pushProgress(jobId, { progress: 100, stage: 'narrating', message: 'Cached narration', done: true }); } catch {}
       return res.status(200).json({ 
         gsAudioPath: gcsPath,
         cached: true 
@@ -214,13 +346,14 @@ app.post('/narrate',
 
     // 1. Generate audio stream from ElevenLabs using direct API call
     console.log(`Starting ElevenLabs TTS for ${projectId}, text length: ${narrationScript.length} chars`);
+    pushProgress(jobId, { progress: 10, stage: 'narrating', message: 'Calling TTS provider…' });
     
-    const response = await fetch('https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM', {
+    let response = await fetch('https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM', {
       method: 'POST',
       headers: {
         'Accept': 'audio/mpeg',
         'Content-Type': 'application/json',
-        'xi-api-key': process.env.ELEVENLABS_API_KEY
+        'xi-api-key': elevenLabsApiKey
       },
       body: JSON.stringify({
         text: narrationScript,
@@ -229,11 +362,34 @@ app.post('/narrate',
       })
     });
 
+    let providerUsed = userElevenLabsKey ? 'user' : 'platform';
+    
+    // If user key fails with 401/403, fallback to platform key
+    if (!response.ok && (response.status === 401 || response.status === 403) && userElevenLabsKey && process.env.ELEVENLABS_API_KEY) {
+      console.warn(`User ElevenLabs key failed (${response.status}), falling back to platform key`);
+      response = await fetch('https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM', {
+        method: 'POST',
+        headers: {
+          'Accept': 'audio/mpeg',
+          'Content-Type': 'application/json',
+          'xi-api-key': process.env.ELEVENLABS_API_KEY
+        },
+        body: JSON.stringify({
+          text: narrationScript,
+          model_id: "eleven_multilingual_v2",
+          voice_settings
+        })
+      });
+      providerUsed = 'platform';
+    }
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`ElevenLabs API error: ${response.status} ${response.statusText} - ${errorText}`);
-      throw new Error(`ElevenLabs API error: ${response.status} ${response.statusText}`);
+      console.error(`ElevenLabs API error: ${response.status} ${response.statusText} - ${errorText} (provider: ${providerUsed})`);
+      throw new Error(`ElevenLabs API error: ${response.status} ${response.statusText} (provider: ${providerUsed})`);
     }
+    
+    console.log(`ElevenLabs TTS completed successfully using ${providerUsed} key`);
 
     console.log(`ElevenLabs TTS stream created successfully for ${projectId}`);
 
@@ -271,6 +427,7 @@ app.post('/narrate',
           reject(new Error('Stream timeout after 60 seconds'));
         }, 60000);
         
+        audioStream.on('readable', () => { try { pushProgress(jobId, { progress: 50, stage: 'narrating', message: 'Streaming audio…' }); } catch {} });
         audioStream.pipe(writeStream);
       });
     });
@@ -295,6 +452,7 @@ app.post('/narrate',
       await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
     }
 
+    try { pushProgress(jobId, { progress: 100, stage: 'narrating', message: 'Narration ready', done: true }); } catch {}
     res.status(200).json({ gsAudioPath: gcsPath });
 
   } catch (error) {

@@ -21,6 +21,7 @@ export interface NarrateRequest {
   emotion?: string;
   voiceId?: string;
   voiceName?: string;
+  jobId?: string;
 }
 export interface NarrateResponse {
   gsAudioPath: string;
@@ -31,13 +32,13 @@ export const narrate = (req: NarrateRequest) =>
   apiCall(API_ENDPOINTS.narrate, req, 'Failed to generate narration') as Promise<NarrateResponse>;
 
 // Alignment
-export interface AlignRequest { projectId: string; gsAudioPath: string }
+export interface AlignRequest { projectId: string; gsAudioPath: string; jobId?: string }
 export interface AlignResponse { srtPath: string; cached?: boolean }
 export const alignCaptions = (req: AlignRequest) =>
   apiCall(API_ENDPOINTS.align, req, 'Failed to align captions') as Promise<AlignResponse>;
 
 // Music
-export interface ComposeRequest { projectId: string; narrationScript: string }
+export interface ComposeRequest { projectId: string; narrationScript: string; jobId?: string }
 export interface ComposeResponse { gsMusicPath?: string; cached?: boolean }
 export const composeMusic = (req: ComposeRequest) =>
   apiCall(API_ENDPOINTS.compose, req, 'Failed to compose music') as Promise<ComposeResponse>;
@@ -64,6 +65,12 @@ export interface RenderRequest {
   clipConcurrency?: number;
   clipModel?: string;
   published?: boolean;
+  jobId?: string;
+  // New aspect ratio and export preset support
+  targetW?: number;
+  targetH?: number;
+  aspectRatio?: string;
+  exportPreset?: string;
 }
 export interface RenderResponse {
   videoUrl: string;
@@ -91,4 +98,3 @@ export interface PlaybackEventRequest {
 }
 export const trackPlayback = (req: PlaybackEventRequest) =>
   apiCall(API_ENDPOINTS.playbackTracking, req, 'Failed to track playback') as Promise<{ ok?: boolean }>;
-

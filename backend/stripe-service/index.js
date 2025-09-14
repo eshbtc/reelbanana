@@ -10,9 +10,24 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Initialize Firebase Admin if not already initialized
+// Initialize Firebase Admin if not already initialized (support local dev)
 if (!admin.apps.length) {
-  admin.initializeApp();
+  try {
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction) {
+      admin.initializeApp();
+    } else {
+      // Local/dev: use ADC and ensure project is set for App Check verification
+      const projectId = process.env.GOOGLE_CLOUD_PROJECT || 'reel-banana-35a54';
+      admin.initializeApp({
+        credential: admin.credential.applicationDefault(),
+        projectId,
+      });
+    }
+  } catch (e) {
+    // Fallback to default init if ADC not available
+    admin.initializeApp();
+  }
 }
 
 const db = admin.firestore();
@@ -94,12 +109,20 @@ const getUserFromToken = async (req) => {
 // GET /config - Get Stripe publishable key and subscription plans
 app.get('/config', appCheckVerification, async (req, res) => {
   try {
+    // Map friendly IDs to actual Stripe price IDs
+    const priceIdMap = {
+      'plus': process.env.STRIPE_PRICE_PLUS || 'price_1S5lYGRzeYtFeoSRJILOOPu0',
+      'pro': process.env.STRIPE_PRICE_PRO || 'price_1S5lYZRzeYtFeoSRT2XRyQSx',
+      'studio': process.env.STRIPE_PRICE_STUDIO || 'price_studio_placeholder'
+    };
+
     const plans = [
       {
         id: 'free',
         name: 'Free',
         price: 0,
         interval: 'month',
+        priceId: null,
         features: [
           '50 free credits',
           '480p render',
@@ -117,6 +140,7 @@ app.get('/config', appCheckVerification, async (req, res) => {
         name: 'Plus',
         price: 9,
         interval: 'month',
+        priceId: priceIdMap.plus,
         features: [
           '500 credits/month',
           '720p render',
@@ -135,6 +159,7 @@ app.get('/config', appCheckVerification, async (req, res) => {
         name: 'Pro',
         price: 29,
         interval: 'month',
+        priceId: priceIdMap.pro,
         features: [
           '2000 credits/month',
           '1080p render',
@@ -147,6 +172,28 @@ app.get('/config', appCheckVerification, async (req, res) => {
           dailyRenders: 200,
           maxScenes: 15,
           resolution: '1080p'
+        }
+      },
+      {
+        id: 'studio',
+        name: 'Studio',
+        price: 99,
+        interval: 'month',
+        priceId: priceIdMap.studio,
+        features: [
+          '10000 credits/month',
+          '4K render',
+          'Team seats',
+          'Full API access',
+          'White-label solution',
+          'Custom integrations',
+          'Dedicated support',
+          'SLA guarantee'
+        ],
+        limits: {
+          dailyRenders: 1000,
+          maxScenes: 50,
+          resolution: '4K'
         }
       }
     ];
@@ -391,9 +438,9 @@ async function handlePaymentFailure(invoice) {
 // Get credits for plan
 function getCreditsForPlan(planId) {
   const creditMap = {
-    'price_plus': 500,
-    'price_pro': 2000,
-    'price_studio': 10000
+    'price_1S5lYGRzeYtFeoSRJILOOPu0': 500, // Plus plan
+    'price_1S5lYZRzeYtFeoSRT2XRyQSx': 2000, // Pro plan
+    'price_studio': 10000 // Studio plan (placeholder)
   };
   return creditMap[planId] || 0;
 }

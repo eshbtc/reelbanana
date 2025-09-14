@@ -9,13 +9,15 @@ interface CharacterGeneratorProps {
   open: boolean;
   onClose: () => void;
   onGenerate: (characters: CharacterOption[]) => void;
+  storyContent?: string; // Optional story content for character analysis
 }
 
 const CharacterGenerator: React.FC<CharacterGeneratorProps> = ({ 
   topic, 
   open, 
   onClose, 
-  onGenerate 
+  onGenerate,
+  storyContent
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationMode, setGenerationMode] = useState<'ai' | 'manual'>('ai');
@@ -44,7 +46,7 @@ const CharacterGenerator: React.FC<CharacterGeneratorProps> = ({
 
     setIsGenerating(true);
     try {
-      const characters = await generateCharacterOptions(topic, characterCount, styleHint || undefined);
+      const characters = await generateCharacterOptions(topic, characterCount, styleHint || undefined, storyContent);
       onGenerate(characters);
       toast.success(`Generated ${characters.length} characters successfully!`);
       onClose();
@@ -99,7 +101,17 @@ const CharacterGenerator: React.FC<CharacterGeneratorProps> = ({
       <div className="bg-gray-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-white">Generate Characters</h2>
+            <div>
+              <h2 className="text-2xl font-bold text-white">Generate Additional Characters</h2>
+              {storyContent && (
+                <p className="text-sm text-green-400 mt-1">
+                  ✨ Story-aware: Will analyze your story to generate matching characters
+                </p>
+              )}
+              <p className="text-sm text-gray-400 mt-1">
+                Characters are automatically generated when you create a story. Use this to generate more character options.
+              </p>
+            </div>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-white transition-colors"

@@ -349,7 +349,7 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
                   // Try to detect audio by checking if the video has audio tracks
                   // Some browsers don't populate audioTracks until the video is ready to play
                   if (video.audioTracks && video.audioTracks.length > 0) {
-                    console.log('🎬 MoviePlayer: Audio tracks detected:', video.audioTracks.length);
+                    console.log('🎬 MoviePlayer: Audio tracks detected:', video.audioTracks?.length || 0);
                   } else {
                     console.log('🎬 MoviePlayer: No audio tracks detected, but video may still have audio');
                     // Force a brief unmute/mute cycle to help browser detect audio

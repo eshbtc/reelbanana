@@ -61,7 +61,7 @@ export const generateImageSequence = async (
     projectId?: string;
     forceUseApiKey?: boolean;
     sceneIndex?: number;
-    onInfo?: (info: { cached?: boolean }) => void;
+    onInfo?: (info: { cached?: boolean; retrying?: number }) => void;
     location?: string;
     props?: string[];
     costumes?: string[];
@@ -90,13 +90,29 @@ export const generateImageSequence = async (
       throw new Error(reserveResult.error || 'Failed to reserve credits');
     }
 
-    // Execute the original function
-    const result = await originalGenerateImageSequence(prompt, characterAndStyle, opts);
+    // Execute with simple retry (up to 2 retries)
+    let lastError: any = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const result = await originalGenerateImageSequence(prompt, characterAndStyle, opts);
+        // Mark as completed
+        await completeCreditOperation(reserveResult.idempotencyKey, 'completed');
+        return result;
+      } catch (err) {
+        lastError = err;
+        if (attempt < 3) {
+          try { opts?.onInfo?.({ retrying: attempt }); } catch {}
+          // Backoff: 600ms, then 1200ms
+          const delay = 600 * Math.pow(2, attempt - 1);
+          await new Promise(res => setTimeout(res, delay));
+          continue;
+        }
+      }
+    }
     
-    // Mark as completed
-    await completeCreditOperation(reserveResult.idempotencyKey, 'completed');
-    
-    return result;
+    // If we reach here, all attempts failed
+    await completeCreditOperation(idempotencyKey, 'failed', lastError instanceof Error ? lastError.message : 'Unknown error');
+    throw lastError || new Error('Image generation failed after retries');
   } catch (error) {
     // Mark as failed and refund credits
     await completeCreditOperation(idempotencyKey, 'failed', error instanceof Error ? error.message : 'Unknown error');
