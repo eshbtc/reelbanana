@@ -33,6 +33,17 @@ async function getUserQuotaLimits(userId, userPlan = null) {
       const userDoc = await db.collection('users').doc(userId).get();
       if (userDoc.exists) {
         const userData = userDoc.data();
+        // Admins get effectively unlimited quotas
+        if (userData && userData.isAdmin === true) {
+          return {
+            narrate: { daily: 1000000, hourly: 100000 },
+            align: { daily: 1000000, hourly: 100000 },
+            compose: { daily: 1000000, hourly: 100000 },
+            render: { daily: 1000000, hourly: 100000 },
+            polish: { daily: 1000000, hourly: 100000 },
+            upload: { daily: 1000000, hourly: 100000 }
+          };
+        }
         userPlan = userData.plan || userData.subscription?.plan || 'free';
       } else {
         userPlan = 'free'; // Default for new users

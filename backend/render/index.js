@@ -1233,6 +1233,18 @@ app.get('/cache-status', appCheckOrAdmin, (req, res) => {
   });
 });
 
+// Debug: whoami (admin-bypass protected)
+app.get('/whoami', verifyToken, appCheckOrAdmin, async (req, res) => {
+  try {
+    const uid = req.user?.uid || null;
+    let isAdmin = false;
+    if (uid) {
+      try { const doc = await admin.firestore().collection('users').doc(uid).get(); isAdmin = !!(doc.exists && doc.data().isAdmin === true); } catch (_) {}
+    }
+    res.json({ uid, isAdmin, hasAppCheck: !!req.appCheckClaims });
+  } catch (e) { res.status(500).json({ error: 'whoami_failed' }); }
+});
+
 // Admin-only (DEV_MODE) cache clear endpoint
 app.post('/cache-clear', appCheckVerification, async (req, res) => {
   try {

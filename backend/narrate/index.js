@@ -107,6 +107,18 @@ app.get('/progress-stream', appCheckVerification, (req, res) => {
   req.on('close', () => { const set = sseClients.get(jobId); if (set) set.delete(res); });
 });
 
+// Debug: whoami (admin-bypass protected)
+app.get('/whoami', verifyToken, appCheckOrAdmin, async (req, res) => {
+  try {
+    const uid = req.user?.uid || null;
+    let isAdmin = false;
+    if (uid) {
+      try { const doc = await admin.firestore().collection('users').doc(uid).get(); isAdmin = !!(doc.exists && doc.data().isAdmin === true); } catch (_) {}
+    }
+    res.json({ uid, isAdmin, hasAppCheck: !!req.appCheckClaims });
+  } catch (e) { res.status(500).json({ error: 'whoami_failed' }); }
+});
+
 // Observability & Error helpers
 const { randomUUID } = require('crypto');
 app.use((req, res, next) => {

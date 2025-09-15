@@ -59,6 +59,18 @@ app.use((req, res, next) => {
   res.setHeader('X-Request-Id', req.requestId);
   next();
 });
+
+// Debug: whoami (admin-bypass protected)
+app.get('/whoami', verifyToken, appCheckOrAdmin, async (req, res) => {
+  try {
+    const uid = req.user?.uid || null;
+    let isAdmin = false;
+    if (uid) {
+      try { const doc = await admin.firestore().collection('users').doc(uid).get(); isAdmin = !!(doc.exists && doc.data().isAdmin === true); } catch (_) {}
+    }
+    res.json({ uid, isAdmin, hasAppCheck: !!req.appCheckClaims });
+  } catch (e) { res.status(500).json({ error: 'whoami_failed' }); }
+});
 app.use((req, res, next) => {
   res.on('finish', () => {
     const durationMs = Date.now() - (req.startTime || Date.now());
