@@ -122,6 +122,11 @@ const DragGrid: React.FC<{
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
   const [overIndex, setOverIndex] = React.useState<number | null>(null);
 
+  // Safety check for undefined scenes
+  if (!scenes || !Array.isArray(scenes)) {
+    return <div className="text-gray-400">No scenes available</div>;
+  }
+
   const handleDragStart = (index: number) => setDragIndex(index);
   const handleDragOver = (index: number, e: React.DragEvent) => {
     e.preventDefault();
@@ -219,10 +224,10 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
 
   // Default focus to first scene when scenes change
   useEffect(() => {
-    if (scenes.length > 0 && !activeSceneId) {
+    if (scenes && Array.isArray(scenes) && scenes.length > 0 && !activeSceneId) {
       setActiveSceneId(scenes[0].id);
     }
-    if (scenes.length > 0) {
+    if (scenes && Array.isArray(scenes) && scenes.length > 0) {
       setShowSwipeHint(true);
       const t = setTimeout(() => setShowSwipeHint(false), 4000);
       return () => clearTimeout(t);
@@ -232,7 +237,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   // Keyboard navigation for timeline focus
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!scenes.length) return;
+      if (!scenes || !Array.isArray(scenes) || !scenes.length) return;
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         const idx = activeSceneId ? scenes.findIndex(s => s.id === activeSceneId) : 0;
         if (idx === -1) return;
@@ -371,7 +376,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
 
   // Demo mode: automatically load simple demo content
   useEffect(() => {
-    if (demoMode && scenes.length === 0) {
+    if (demoMode && (!scenes || !Array.isArray(scenes) || scenes.length === 0)) {
       const demoScenes = [
         {
           id: '1',
@@ -655,7 +660,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   }, [projectId, topic, characterAndStyle, scenes]);
 
   const handleSaveAsTemplate = useCallback(async () => {
-    if (!topic || !scenes.length) {
+    if (!topic || !scenes || !Array.isArray(scenes) || !scenes.length) {
       toast.error('Please add a topic and at least one scene before saving as template');
       return;
     }
@@ -747,7 +752,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
   };
 
   const handleRegenerateCharacterStyle = useCallback(async () => {
-    if (!projectId || !topic.trim() || !scenes.length) {
+    if (!projectId || !topic.trim() || !scenes || !Array.isArray(scenes) || !scenes.length) {
       toast.error('Please ensure you have a story with scenes before regenerating character & style');
       return;
     }
@@ -959,6 +964,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         return;
     }
     // Prepare list of scenes to generate
+    if (!scenes || !Array.isArray(scenes)) return;
     const targets = scenes.filter(s => s.status === 'idle' || s.status === 'error');
     if (targets.length === 0) return;
 
@@ -1143,9 +1149,9 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       );
   }
 
-  const hasGeneratedImages = scenes.some(s => s.status === 'success' && s.imageUrls && s.imageUrls.length > 0);
-  const hasAnyImages = scenes.some(s => Array.isArray(s.imageUrls) && s.imageUrls.length > 0);
-  const canGenerateAll = scenes.some(s => s.status === 'idle' || s.status === 'error');
+  const hasGeneratedImages = scenes && Array.isArray(scenes) ? scenes.some(s => s.status === 'success' && s.imageUrls && s.imageUrls.length > 0) : false;
+  const hasAnyImages = scenes && Array.isArray(scenes) ? scenes.some(s => Array.isArray(s.imageUrls) && s.imageUrls.length > 0) : false;
+  const canGenerateAll = scenes && Array.isArray(scenes) ? scenes.some(s => s.status === 'idle' || s.status === 'error') : false;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
@@ -1414,7 +1420,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         )}
 
         {/* Cost Estimation */}
-        {scenes.length > 0 && (
+        {scenes && Array.isArray(scenes) && scenes.length > 0 && (
           <div className="mb-6">
             <CostEstimator scenes={scenes} showPerScene={scenes.length > 1} />
           </div>
@@ -1639,7 +1645,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
               </div>
 
               {/* Timeline View */}
-              {scenes.length > 0 && (
+              {scenes && Array.isArray(scenes) && scenes.length > 0 && (
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-sm font-semibold text-gray-300">Timeline</h3>
@@ -1778,8 +1784,8 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                   </div>
                 </div>
               )}
-              {/* What’s Next Callout */}
-              {scenes.length > 0 && !hasGeneratedImages && (
+              {/* What's Next Callout */}
+              {scenes && Array.isArray(scenes) && scenes.length > 0 && !hasGeneratedImages && (
                 <div className="mb-4 p-3 bg-blue-900/30 border border-blue-700 rounded-lg">
                   <div className="flex items-center justify-between">
                     <div className="text-sm text-blue-100">
