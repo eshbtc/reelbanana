@@ -205,7 +205,7 @@ const restoreImagesFromGCS = async (projectId: string, scenes: Scene[]): Promise
         const publicUrl = (sceneIdx: number, imgIdx: number, ext: string) =>
           `https://storage.googleapis.com/${bucket}/${projectId}/scene-${sceneIdx}-${imgIdx}.${ext}`;
 
-        const restoredScenes = scenes.map((scene, index) => {
+        const restoredScenes = (scenes && Array.isArray(scenes) ? scenes : []).map((scene, index) => {
             if (Array.isArray(scene.imageUrls) && scene.imageUrls.length > 0) return scene;
             const urls: string[] = [];
             for (let i = 0; i < 3; i++) {
@@ -434,7 +434,7 @@ export const updateProject = async (projectId: string, data: ProjectData): Promi
         
         // For scenes, we'll store a lightweight version to avoid size limits in the main doc
         // Store only essential scene data, not full image URLs
-        if (data.scenes && data.scenes.length > 0) {
+        if (data.scenes && Array.isArray(data.scenes) && data.scenes.length > 0) {
             rawData.scenes = data.scenes.map(scene => {
                 const s: any = {};
                 if (scene.id) s.id = scene.id;
@@ -457,7 +457,7 @@ export const updateProject = async (projectId: string, data: ProjectData): Promi
 
             // Also write full scenes to subcollection for full carousel restore (up to 3 images per scene)
             const scenesCol = collection(db, PROJECTS_COLLECTION, projectId, 'scenes');
-            const writes = data.scenes.map((scene, index) => {
+            const writes = (data.scenes && Array.isArray(data.scenes) ? data.scenes : []).map((scene, index) => {
                 const s: any = {
                     index,
                     id: scene.id || String(index),
@@ -572,7 +572,7 @@ export const listMyProjects = async (userId: string, limit: number = 20): Promis
                 } catch (error) {
                     console.warn(`Failed to restore images for project ${projectId} in listing:`, error);
                     // Fallback to stored thumbnails
-                    for (let i = 0; i < data.scenes.length && thumbs.length < 3; i++) {
+                    for (let i = 0; i < (data.scenes && Array.isArray(data.scenes) ? data.scenes.length : 0) && thumbs.length < 3; i++) {
                         const s = data.scenes[i];
                         if (s?.imageUrls?.[0]) thumbs.push(s.imageUrls[0]);
                     }

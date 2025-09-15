@@ -498,6 +498,11 @@ export const generateStory = async (topic: string, forceUseApiKey?: boolean): Pr
                 const arr: any[] = Array.isArray(obj.scenes) ? obj.scenes : [];
                 const out: StoryScene[] = [];
                 for (const item of arr) {
+                    // Safety check for undefined item
+                    if (!item || typeof item !== 'object') {
+                        console.warn('Skipping invalid scene item:', item);
+                        continue;
+                    }
                     const prompt = item?.prompt || item?.description || item?.scene || item?.text;
                     const narration = item?.narration || item?.caption || item?.voiceover || item?.text;
                     if (typeof prompt === 'string' && typeof narration === 'string') {
@@ -571,6 +576,11 @@ export const generateStory = async (topic: string, forceUseApiKey?: boolean): Pr
             console.log('Scenes array:', arr);
             const out: StoryScene[] = [];
             for (const item of arr) {
+                // Safety check for undefined item
+                if (!item || typeof item !== 'object') {
+                    console.warn('Skipping invalid scene item:', item);
+                    continue;
+                }
                 const prompt = item?.prompt || item?.description || item?.scene || item?.text;
                 const narration = item?.narration || item?.caption || item?.voiceover || item?.text;
                 console.log('Processing scene item:', { item, prompt, narration });
