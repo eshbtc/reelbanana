@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import StripeCard from './StripeCard';
-import { getStripeConfig, initializeStripePayment, createSubscription, confirmSubscriptionPayment } from '../services/stripeService';
+import { getStripeConfig, initializeStripePaymentWithInstance, createSubscription, confirmSubscriptionPaymentWithInstance } from '../services/stripeService';
 import { type PlanTier } from '../lib/planMapper';
 import { getCurrentUser } from '../services/authService';
 
@@ -57,7 +57,7 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ open, plan, onClo
     setError(null);
     try {
       // 1) Create PaymentMethod
-      const { paymentMethod, error } = await initializeStripePayment(publishableKey, ctx.elements, ctx.card);
+      const { paymentMethod, error } = await initializeStripePaymentWithInstance(ctx.stripe, ctx.card);
       if (error || !paymentMethod?.id) {
         throw new Error(error?.message || 'Failed to create payment method');
       }
@@ -69,7 +69,7 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ open, plan, onClo
       }
 
       // 3) Confirm payment
-      const { error: confirmError } = await confirmSubscriptionPayment(publishableKey, res.clientSecret);
+      const { error: confirmError } = await confirmSubscriptionPaymentWithInstance(ctx.stripe, res.clientSecret);
       if (confirmError) {
         throw new Error(confirmError.message || 'Payment confirmation failed');
       }
@@ -132,4 +132,3 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ open, plan, onClo
 };
 
 export default SubscriptionModal;
-

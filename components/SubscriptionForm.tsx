@@ -114,8 +114,9 @@ const SubscriptionForm: React.FC<SubscriptionFormProps> = ({
       );
 
       // Confirm payment
-      const { subscription, error: confirmError } = await confirmSubscriptionPayment(
-        publishableKey,
+      const { confirmSubscriptionPaymentWithInstance } = await import('../services/stripeService');
+      const { subscription, error: confirmError } = await confirmSubscriptionPaymentWithInstance(
+        stripeInstance,
         clientSecret
       );
 

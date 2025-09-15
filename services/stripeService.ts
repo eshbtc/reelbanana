@@ -140,23 +140,13 @@ export const getSubscriptionStatus = async (): Promise<SubscriptionStatus> => {
 /**
  * Initialize Stripe and create payment method
  */
-export const initializeStripePayment = async (
-  publishableKey: string,
-  elements: any,
+export const initializeStripePaymentWithInstance = async (
+  stripe: any,
   cardElement: any
 ): Promise<{ paymentMethod: any; error: any }> => {
   try {
-    const stripe = await loadStripe(publishableKey);
-    
-    if (!stripe) {
-      throw new Error('Failed to load Stripe');
-    }
-    
-    const { error, paymentMethod } = await stripe.createPaymentMethod({
-      type: 'card',
-      card: cardElement,
-    });
-    
+    if (!stripe) throw new Error('Stripe not initialized');
+    const { error, paymentMethod } = await stripe.createPaymentMethod({ type: 'card', card: cardElement });
     return { paymentMethod, error };
   } catch (error) {
     console.error('Error creating payment method:', error);
@@ -164,27 +154,41 @@ export const initializeStripePayment = async (
   }
 };
 
+// Backward-compatible wrapper (may cause instance mismatch if Elements came from a different instance)
+export const initializeStripePayment = async (
+  publishableKey: string,
+  _elements: any,
+  cardElement: any
+): Promise<{ paymentMethod: any; error: any }> => {
+  const stripe = await loadStripe(publishableKey);
+  return initializeStripePaymentWithInstance(stripe, cardElement);
+};
+
 /**
  * Confirm payment for subscription
  */
+export const confirmSubscriptionPaymentWithInstance = async (
+  stripe: any,
+  clientSecret: string
+): Promise<{ subscription: any; error: any }> => {
+  try {
+    if (!stripe) throw new Error('Stripe not initialized');
+    const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret);
+    // Normalize to { subscription } shape for callers expecting it
+    return { subscription: paymentIntent, error } as any;
+  } catch (error) {
+    console.error('Error confirming payment:', error);
+    return { subscription: null, error } as any;
+  }
+};
+
+// Backward-compatible wrapper
 export const confirmSubscriptionPayment = async (
   publishableKey: string,
   clientSecret: string
 ): Promise<{ subscription: any; error: any }> => {
-  try {
-    const stripe = await loadStripe(publishableKey);
-    
-    if (!stripe) {
-      throw new Error('Failed to load Stripe');
-    }
-    
-    const { error, subscription } = await stripe.confirmCardPayment(clientSecret);
-    
-    return { subscription, error };
-  } catch (error) {
-    console.error('Error confirming payment:', error);
-    return { subscription: null, error };
-  }
+  const stripe = await loadStripe(publishableKey);
+  return confirmSubscriptionPaymentWithInstance(stripe, clientSecret);
 };
 
 /**
