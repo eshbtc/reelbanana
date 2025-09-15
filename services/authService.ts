@@ -247,19 +247,19 @@ export const recordUsage = async (
     
     await setDoc(usageRef, usageRecord);
     
-    // Update user's total usage and free credits
+    // Update user's total usage and, if applicable, free credits
     const userRef = doc(db, 'users', userId);
     const userSnap = await getDoc(userRef);
-    
     if (userSnap.exists()) {
       const userData = userSnap.data() as UserProfile;
-      const newTotalUsage = userData.totalUsage + (success ? cost : 0);
-      const newFreeCredits = Math.max(0, userData.freeCredits - (success ? cost : 0));
-      
-      await updateDoc(userRef, {
-        totalUsage: newTotalUsage,
-        freeCredits: newFreeCredits,
-      });
+      const isAdmin = !!userData.isAdmin;
+      const newTotalUsage = (userData.totalUsage || 0) + (success ? cost : 0);
+      const updates: any = { totalUsage: newTotalUsage };
+      // Do not decrement credits for admins; transactional credit flows handle deduction separately
+      if (!isAdmin && success && typeof userData.freeCredits === 'number') {
+        updates.freeCredits = Math.max(0, userData.freeCredits - cost);
+      }
+      await updateDoc(userRef, updates);
     }
   } catch (error) {
     console.error('Error recording usage:', error);
@@ -274,8 +274,9 @@ export const checkUserCredits = async (userId: string, requiredCredits: number):
   try {
     const userProfile = await getUserProfile(userId);
     if (!userProfile) return false;
-    
-    return userProfile.freeCredits >= requiredCredits;
+    // Admins bypass credit limits
+    if (userProfile.isAdmin) return true;
+    return (userProfile.freeCredits || 0) >= requiredCredits;
   } catch (error) {
     console.error('Error checking credits:', error);
     
