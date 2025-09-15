@@ -913,7 +913,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         characterRefs,
         backgroundImage: bg,
         frames: demoMode ? 3 : (renderMode === 'draft' ? 3 : 5),
-        projectId: overrideProjectId || projectId || undefined,
+        projectId: projectId || undefined,
         sceneIndex,
         location: sceneObj.location,
         props: sceneObj.props,
@@ -991,7 +991,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
     // reuse same options but nudge prompt for variation
     const sceneObj = scenes.find(s => s.id === id);
     if (!sceneObj) return;
-    const effectiveCAS = (overrideCharacterAndStyle ?? characterAndStyle) || '';
+    const effectiveCAS = characterAndStyle || '';
     if (!effectiveCAS.trim()) {
       alert('Please describe your character and style before generating images.');
       return;
@@ -1016,7 +1016,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         characterRefs,
         backgroundImage: bg,
         frames: demoMode ? 3 : (renderMode === 'draft' ? 3 : 5),
-        projectId: overrideProjectId || projectId || undefined,
+        projectId: projectId || undefined,
         sceneIndex,
         location: sceneObj.location,
         props: sceneObj.props,

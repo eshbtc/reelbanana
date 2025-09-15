@@ -30,7 +30,7 @@ const VERSIONS_SUBCOLLECTION = 'versions';
 const PRESENCE_COLLECTION = 'presence';
 const COMMENTS_SUBCOLLECTION = 'comments';
 
-interface ProjectData {
+export interface ProjectData {
     topic: string;
     characterAndStyle: string;
     scenes: Scene[];

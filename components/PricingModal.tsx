@@ -1,5 +1,5 @@
 import React from 'react';
-import { PlanComparisonModal } from './PlanComparisonModal';
+import PlanComparisonModal from './PlanComparisonModal';
 
 interface PricingModalProps {
   open: boolean;

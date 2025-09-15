@@ -1,6 +1,7 @@
 import React from 'react';
 import { AspectRatio, AspectRatioConfig } from '../types';
 import { ASPECT_RATIOS, isAspectRatioAvailable } from '../lib/exportPresets';
+import { PlanTier } from '../lib/planMapper';
 
 interface AspectRatioSelectorProps {
   selectedAspectRatio: AspectRatio;
@@ -33,7 +34,7 @@ const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
       <div className="grid grid-cols-3 gap-2">
         {ASPECT_RATIOS.map((ratio) => {
           const isSelected = ratio.id === selectedAspectRatio;
-          const isAvailable = isAspectRatioAvailable(ratio, userPlan);
+          const isAvailable = isAspectRatioAvailable(ratio, userPlan as PlanTier);
           const isDisabled = disabled || !isAvailable;
           
           return (

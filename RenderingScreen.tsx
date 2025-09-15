@@ -253,8 +253,8 @@ const RenderingScreen: React.FC<RenderingScreenProps> = ({
             duration: scene.duration || 3,
         }));
         // Get resolution from selected aspect ratio and export preset
-        const aspectRatioConfig = getAspectRatioConfig(aspectRatio);
-        const exportPresetConfig = getExportPresetConfig(exportPreset);
+        const aspectRatioConfig = aspectRatio ? getAspectRatioConfig(aspectRatio as AspectRatio) : undefined;
+        const exportPresetConfig = exportPreset ? getExportPresetConfig(exportPreset as ExportPreset) : undefined;
         
         // Use export preset resolution if available, otherwise use aspect ratio resolution
         let targetW = aspectRatioConfig?.width || 1920;

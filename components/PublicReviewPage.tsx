@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ReviewLink, ReviewComment } from '../types';
-import { getReviewLink, addReviewComment, isAuthorizedReviewer } from '../services/reviewLinkService';
+import { getReviewLinkByToken, addReviewComment } from '../services/reviewLinkService';
 import { getProject } from '../services/firebaseService';
 import { ProjectData } from '../services/firebaseService';
 import { MessageSquare, Send, CheckCircle, XCircle, Clock, Users } from 'lucide-react';
@@ -27,10 +27,12 @@ export const PublicReviewPage: React.FC<PublicReviewPageProps> = ({ reviewLinkId
     const loadReviewData = async () => {
         try {
             setIsLoading(true);
-            const [link, projectData] = await Promise.all([
-                getReviewLink(reviewLinkId),
-                getProject(reviewLinkId) // This might need adjustment based on your data structure
-            ]);
+            const link = await getReviewLinkByToken(reviewLinkId);
+            if (!link) {
+                setError('Review link not found or has expired');
+                return;
+            }
+            const projectData = await getProject(link.projectId);
 
             if (!link) {
                 setError('Review link not found or has expired');
@@ -50,7 +52,7 @@ export const PublicReviewPage: React.FC<PublicReviewPageProps> = ({ reviewLinkId
     const handleEmailSubmit = () => {
         if (!reviewLink || !reviewerEmail.trim()) return;
 
-        const authorized = isAuthorizedReviewer(reviewLink, reviewerEmail.trim());
+        const authorized = reviewLink.reviewers.includes(reviewerEmail.trim());
         setIsAuthorized(authorized);
 
         if (!authorized) {
@@ -63,11 +65,12 @@ export const PublicReviewPage: React.FC<PublicReviewPageProps> = ({ reviewLinkId
 
         try {
             setIsSubmitting(true);
-            await addReviewComment(reviewLinkId, {
-                reviewerEmail: reviewerEmail.trim(),
-                reviewerName: reviewerName.trim() || undefined,
+            await addReviewComment({
+                reviewLinkId,
+                authorEmail: reviewerEmail.trim(),
+                authorName: reviewerName.trim() || 'Anonymous',
                 content: newComment.trim(),
-                resolved: false
+                status: 'pending'
             });
 
             setNewComment('');
@@ -89,11 +92,12 @@ export const PublicReviewPage: React.FC<PublicReviewPageProps> = ({ reviewLinkId
                 '✅ Approved this project' : 
                 '❌ Requested changes to this project';
             
-            await addReviewComment(reviewLinkId, {
-                reviewerEmail: reviewerEmail.trim(),
-                reviewerName: reviewerName.trim() || undefined,
+            await addReviewComment({
+                reviewLinkId,
+                authorEmail: reviewerEmail.trim(),
+                authorName: reviewerName.trim() || 'Anonymous',
                 content: comment,
-                resolved: false
+                status: 'pending'
             });
 
             await loadReviewData();

@@ -1279,7 +1279,9 @@ Rules:
       result = await model.generateContent(prompt);
     } else {
       // Fallback to custom API key
-      const response = await fetch(`${API_ENDPOINTS.gemini.generate}`, {
+      // TODO: Implement custom API key support for character extraction
+      throw new Error('Character extraction requires Firebase AI Logic credits');
+      /*const response = await fetch(`${API_ENDPOINTS.gemini.generate}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1313,7 +1315,7 @@ Rules:
       if (!response.ok) {
         throw new Error(`API request failed: ${response.statusText}`);
       }
-      result = await response.json();
+      result = await response.json();*/
     }
 
     const responseText = result.response?.text() || result.text || '';

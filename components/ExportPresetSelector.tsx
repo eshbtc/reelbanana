@@ -1,6 +1,7 @@
 import React from 'react';
 import { ExportPreset, ExportPresetConfig } from '../types';
 import { EXPORT_PRESETS, isExportPresetAvailable } from '../lib/exportPresets';
+import { PlanTier } from '../lib/planMapper';
 
 interface ExportPresetSelectorProps {
   selectedPreset: ExportPreset;
@@ -42,7 +43,7 @@ const ExportPresetSelector: React.FC<ExportPresetSelectorProps> = ({
       <div className="grid grid-cols-2 gap-2">
         {EXPORT_PRESETS.map((preset) => {
           const isSelected = preset.id === selectedPreset;
-          const isAvailable = isExportPresetAvailable(preset, userPlan);
+          const isAvailable = isExportPresetAvailable(preset, userPlan as PlanTier);
           const isDisabled = disabled || !isAvailable;
           
           return (

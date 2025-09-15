@@ -266,6 +266,8 @@ const App: React.FC = () => {
             proPolish={proPolish} 
             projectId={projectId || undefined} 
             demoMode={false}
+            aspectRatio="16:9"
+            exportPreset="web"
             onRenderComplete={handleRenderComplete} 
             onRenderFail={handleRenderFail} 
           />;

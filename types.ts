@@ -111,6 +111,7 @@ export interface ReviewLink {
 
 export interface ReviewComment {
   id: string;
+  reviewLinkId: string; // Reference to the review link
   authorEmail?: string;
   authorName: string;
   content: string;
@@ -121,4 +122,16 @@ export interface ReviewComment {
   sceneId?: string; // If comment is scene-specific
   parentId?: string; // For threaded comments
   position?: { x: number; y: number }; // Optional position overlay
+}
+
+export interface ReviewApproval {
+  id: string;
+  reviewLinkId: string;
+  reviewerEmail: string;
+  reviewerName: string;
+  approved: boolean;
+  comments?: string;
+  timestamp: Date;
+  status?: string;
+  feedback?: string;
 }

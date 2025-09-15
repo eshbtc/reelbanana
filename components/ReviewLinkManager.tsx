@@ -112,7 +112,10 @@ export const ReviewLinkManager: React.FC<ReviewLinkManagerProps> = ({
                 status: 'active' as const
             };
 
-            const linkId = await createReviewLink(reviewLinkData);
+            const linkId = await createReviewLink({
+                ...reviewLinkData,
+                reviewers: []
+            });
             
             // Get the created link to display
             const newLink = await getProjectReviewLinks(projectId);

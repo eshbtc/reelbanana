@@ -22,8 +22,10 @@ export const initializeStripeElements = async (): Promise<StripeElementsConfig> 
       throw new Error('Failed to load Stripe');
     }
 
-    const { loadStripeElements } = await import('@stripe/react-stripe-js');
-    const elements = loadStripeElements(stripe, {
+    const { Elements } = await import('@stripe/react-stripe-js');
+    // Note: Elements is a React component, not a function that returns elements
+    // The actual elements instance is created via stripe.elements()
+    const elements = stripe.elements({
       appearance: {
         theme: 'night',
         variables: {
