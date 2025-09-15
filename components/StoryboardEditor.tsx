@@ -66,14 +66,17 @@ const inspirationCategories = [
 ];
 
 // Templates Modal (inline for simplicity)
-const TemplatesModal: React.FC<{ open: boolean; onClose: () => void; onPick: (id: string) => void }> = ({ open, onClose, onPick }) => {
-  console.log('📝 TemplatesModal render: open =', open);
-  console.log('📝 TemplatesModal TEMPLATES available:', TEMPLATES?.length || 0);
+const TemplatesModal: React.FC<{ open: boolean; onClose: () => void; onPick: (id: string) => void }> = React.memo(({ open, onClose, onPick }) => {
+  // Only log when actually opening/closing to reduce noise
+  React.useEffect(() => {
+    if (open) {
+      console.log('📝 TemplatesModal opened with', TEMPLATES?.length || 0, 'templates');
+    }
+  }, [open]);
+  
   if (!open) {
-    console.log('📝 TemplatesModal not rendering - open is false');
     return null;
   }
-  console.log('📝 TemplatesModal rendering modal UI');
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[9999]">
       <div className="bg-gray-900 border border-gray-700 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
@@ -102,7 +105,7 @@ const TemplatesModal: React.FC<{ open: boolean; onClose: () => void; onPick: (id
       </div>
     </div>
   );
-};
+});
 
 // Lightweight drag-and-drop grid without extra deps
 const DragGrid: React.FC<{

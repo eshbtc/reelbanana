@@ -9,6 +9,30 @@ import { API_ENDPOINTS, apiCall } from '../config/apiConfig';
 import { purchaseCreditsApi, type PurchaseCreditsResponse } from './billingService';
 import { handleBillingError, retryOperation, getUserErrorMessage } from './billingErrorHandler';
 
+// Helper function to clean metadata by removing undefined values
+const cleanMetadata = (obj: any): any => {
+  if (obj === null || obj === undefined) {
+    return undefined;
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(cleanMetadata).filter(item => item !== undefined);
+  }
+  
+  if (typeof obj === 'object') {
+    const cleaned: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      const cleanedValue = cleanMetadata(value);
+      if (cleanedValue !== undefined) {
+        cleaned[key] = cleanedValue;
+      }
+    }
+    return Object.keys(cleaned).length > 0 ? cleaned : undefined;
+  }
+  
+  return obj;
+};
+
 // Types for credit operations
 export interface UsageEvent {
   id: string; // unique idempotency key
@@ -141,7 +165,7 @@ export const reserveCredits = async (
         creditsUsed: requiredCredits,
         timestamp: new Date(),
         status: 'pending',
-        metadata,
+        metadata: metadata ? cleanMetadata(metadata) : undefined,
       };
 
       transaction.set(doc(db, 'usage_events', idempotencyKey), usageEvent);
