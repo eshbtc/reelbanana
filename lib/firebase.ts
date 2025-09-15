@@ -26,9 +26,6 @@ const forceLongPolling = (import.meta.env.VITE_FIRESTORE_FORCE_LONG_POLLING || '
 initializeFirestore(firebaseApp, {
   experimentalAutoDetectLongPolling: true,
   experimentalForceLongPolling: forceLongPolling,
-  // When forcing long polling, disable fetch streams for maximum compatibility
-  // (kept enabled otherwise to preserve performance)
-  useFetchStreams: !forceLongPolling,
 });
 
 // Export the app for use in other files

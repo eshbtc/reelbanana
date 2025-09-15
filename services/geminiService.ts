@@ -966,43 +966,6 @@ Return ONLY a JSON object with this exact format:
                         console.warn(`Firebase AI image gen not configured and no API key available. Skipping frame. Error: ${firebaseError.message}`);
                     }
                 }
-                } catch (firebaseError: any) {
-                    console.warn('⚠️ Firebase AI Logic image generation failed:', firebaseError.message);
-                    // Check if user has API key for automatic fallback
-                    const hasGoogleApiKey = await hasUserApiKey(currentUser.uid, 'google');
-                    const hasFalApiKey = await hasUserApiKey(currentUser.uid, 'fal');
-                    const hasApiKey = hasGoogleApiKey || hasFalApiKey;
-                    
-                    if (hasApiKey) {
-                        console.log('🔄 Auto-falling back to custom API key for image generation due to Firebase error');
-                        // Use custom API key path
-                        const imageInputs: string[] = [];
-                        if (opts?.characterRefs && opts.characterRefs.length) imageInputs.push(...opts.characterRefs);
-                        if (opts?.backgroundImage) imageInputs.push(opts.backgroundImage);
-                        const resp = await authFetch(API_ENDPOINTS.apiKey.use, {
-                            method: 'POST',
-                            body: { model: 'gemini-2.5-flash-image-preview', prompt: finalPrompt, imageInputs }
-                        });
-                        if (!resp.ok) throw new Error(`Custom image gen fallback failed: HTTP ${resp.status}`);
-                        const json = await resp.json();
-                        const candidates = json?.candidates || [];
-                        let pushed = false;
-                        for (const c of candidates) {
-                            const parts = c?.content?.parts || [];
-                            for (const part of parts) {
-                                if (part.inlineData && part.inlineData.data) {
-                                    base64Images.push(`data:${part.inlineData.mimeType || 'image/jpeg'};base64,${part.inlineData.data}`);
-                                    pushed = true;
-                                    break;
-                                }
-                            }
-                            if (pushed) break;
-                        }
-                        if (!pushed) console.warn(`No image generated via API key fallback for prompt: "${prompt}"`);
-                    } else {
-                        console.warn(`Firebase AI Logic not configured and no API key available. Skipping frame. Error: ${firebaseError.message}`);
-                    }
-                }
             }
         }
         }
