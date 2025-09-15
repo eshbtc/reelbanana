@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import StripeCard from './StripeCard';
 import { getStripeConfig, initializeStripePayment, createSubscription, confirmSubscriptionPayment } from '../services/stripeService';
 import { type PlanTier } from '../lib/planMapper';
+import { getCurrentUser } from '../services/authService';
 
 interface SubscriptionModalProps {
   open: boolean;
@@ -30,6 +31,14 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ open, plan, onClo
       setIsLoading(true);
       setError(null);
       try {
+        // Check if user is authenticated before loading Stripe config
+        const user = getCurrentUser();
+        if (!user) {
+          setError('Please sign in to access billing features');
+          setIsLoading(false);
+          return;
+        }
+
         const cfg = await getStripeConfig();
         setPublishableKey(cfg.publishableKey);
         setStripeConfig(cfg);

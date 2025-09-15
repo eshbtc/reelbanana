@@ -3,6 +3,7 @@ import { getStripeConfig, getSubscriptionStatus } from '../services/stripeServic
 import SubscriptionModal from './SubscriptionModal';
 import { type PlanTier } from '../lib/planMapper';
 import PlanComparisonModal from './PlanComparisonModal';
+import { getCurrentUser } from '../services/authService';
 
 const PricingPage: React.FC = () => {
   const [stripeConfig, setStripeConfig] = useState<any>(null);
@@ -15,6 +16,14 @@ const PricingPage: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
+        // Check if user is authenticated before loading billing data
+        const user = getCurrentUser();
+        if (!user) {
+          console.log('User not authenticated, skipping billing data load');
+          setIsLoading(false);
+          return;
+        }
+
         const [config, status] = await Promise.all([
           getStripeConfig(),
           getSubscriptionStatus()

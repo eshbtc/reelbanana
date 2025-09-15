@@ -49,6 +49,13 @@ const loadStripe = async (publishableKey: string) => {
  */
 export const getStripeConfig = async (): Promise<StripeConfig> => {
   try {
+    // Check if user is authenticated first
+    const { getCurrentUser } = await import('./authService');
+    const user = getCurrentUser();
+    if (!user) {
+      throw new Error('User must be authenticated to access billing information');
+    }
+
     const response = await authFetch(API_ENDPOINTS.stripe.config, {
       method: 'GET'
     });

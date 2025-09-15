@@ -8,7 +8,6 @@ export type AuthFetchOptions = {
 };
 
 export const authFetch = async (url: string, options: AuthFetchOptions = {}) => {
-  console.log('🔐 authFetch called for:', url);
   const method = options.method || 'GET';
   const headers: Record<string, string> = {
     ...(options.headers || {}),
@@ -20,12 +19,9 @@ export const authFetch = async (url: string, options: AuthFetchOptions = {}) => 
     const token = await getAppCheckToken();
     if (token) {
       headers['X-Firebase-AppCheck'] = token;
-      console.log('🔐 App Check token attached');
-    } else {
-      console.warn('🔐 No App Check token available');
     }
   } catch (e) {
-    console.warn('🔐 Failed to get App Check token:', e);
+    // Silently fail for App Check token
   }
 
   // Attach Firebase ID token
@@ -33,12 +29,10 @@ export const authFetch = async (url: string, options: AuthFetchOptions = {}) => 
   const auth = getAuth(firebaseApp);
   const currentUser = auth.currentUser;
   if (!currentUser) {
-    console.error('🔐 No current user for authentication');
     throw new Error('User not authenticated');
   }
   const idToken = await currentUser.getIdToken();
   headers['Authorization'] = `Bearer ${idToken}`;
-  console.log('🔐 Firebase ID token attached');
 
   // JSON body support
   let body: BodyInit | undefined;
@@ -47,9 +41,7 @@ export const authFetch = async (url: string, options: AuthFetchOptions = {}) => 
     body = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
   }
 
-  console.log('🔐 Making fetch request:', { method, url, headers: Object.keys(headers) });
   const response = await fetch(url, { method, headers, body });
-  console.log('🔐 Fetch response:', response.status, response.statusText);
   return response;
 };
 

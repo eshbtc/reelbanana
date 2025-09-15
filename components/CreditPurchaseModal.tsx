@@ -6,6 +6,7 @@ import { purchaseCredits } from '../services/creditService';
 import { useUserCredits } from '../hooks/useUserCredits';
 import { getStripeConfig, initializeStripePayment } from '../services/stripeService';
 import StripeCard from './StripeCard';
+import { getCurrentUser } from '../services/authService';
 
 interface CreditPurchaseModalProps {
   isOpen: boolean;
@@ -28,6 +29,13 @@ export const CreditPurchaseModal: React.FC<CreditPurchaseModalProps> = ({
   useEffect(() => {
     (async () => {
       try {
+        // Check if user is authenticated before loading Stripe config
+        const user = getCurrentUser();
+        if (!user) {
+          console.log('User not authenticated, skipping Stripe config load');
+          return;
+        }
+
         const cfg = await getStripeConfig();
         setPublishableKey(cfg.publishableKey);
       } catch (e) {
