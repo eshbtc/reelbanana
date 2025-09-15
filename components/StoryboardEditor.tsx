@@ -538,7 +538,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         characterStyle = 'Professional product showcase with modern UI, clean design, and cinematic presentation';
       } else {
         // Optimized mode: Generate story and character analysis in parallel
-        const [storyScenes, characterAnalysis] = await Promise.all([
+        const [scenesResult, characterAnalysis] = await Promise.all([
           generateStory(storyTopic, forceUseApiKey),
           // Analyze topic for characters first (faster than analyzing full story)
           (async () => {
@@ -556,6 +556,9 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         setStorySteps(prev => ({ ...prev, story: 'done', characters: 'processing' }));
         setStoryProgress(60);
         setStoryProgressStage('Analyzing characters...');
+        // Assign results to outer-scoped variable to avoid shadowing bugs
+        storyScenes = scenesResult;
+
         // Create story content string from scenes for character generation
         const storyContent = (storyScenes && Array.isArray(storyScenes) ? storyScenes : []).map(scene => 
           `Scene: ${scene.prompt}\nNarration: ${scene.narration}`
