@@ -844,45 +844,130 @@ Return ONLY a JSON object with this exact format:
                         generationConfig: { responseModalities: [ResponseModality.TEXT, ResponseModality.IMAGE] }
                     });
                     // Build parts: optional character refs and background image, then prompt text
-                    const parts: any[] = [];
-                    if (opts?.characterRefs && opts.characterRefs.length > 0) {
-                        for (const ref of opts.characterRefs) {
-                            try { parts.push(fileToGenerativePart(ref)); } catch (e) { console.warn('Invalid character ref image skipped'); }
-                        }
-                    }
-                    if (opts?.backgroundImage) {
-                        try { parts.push(fileToGenerativePart(opts.backgroundImage)); } catch (e) { console.warn('Invalid background image skipped'); }
-                    }
-                    parts.push({ text: finalPrompt });
-                    const response = await imagenModel.generateContent(parts);
-                const tokenUsage = extractTokenUsage(response, 'gemini-2.5-flash-image-preview');
-                if (tokenUsage) perImageTokenUsages.push(tokenUsage);
-                try {
-                    const inlineDataParts = response.response.inlineDataParts();
-                    if (inlineDataParts?.[0]) {
-                        const image = inlineDataParts[0].inlineData;
-                        base64Images.push(`data:${image.mimeType};base64,${image.data}`);
-                    } else {
-                        const candidates = response.response.candidates;
-                        if (candidates?.[0]?.content?.parts) {
-                            for (const part of candidates[0].content.parts) {
-                                if (part.inlineData) {
-                                    const image = part.inlineData;
-                                    base64Images.push(`data:${image.mimeType};base64,${image.data}`);
-                                    break;
-                                }
+                    const buildParts = () => {
+                        const parts: any[] = [];
+                        if (opts?.characterRefs && opts.characterRefs.length > 0) {
+                            for (const ref of opts.characterRefs) {
+                                try { parts.push(fileToGenerativePart(ref)); } catch (e) { console.warn('Invalid character ref image skipped'); }
                             }
                         }
-                        if (base64Images.length === 0) {
-                            throw new Error(`No image generated for prompt: "${prompt}"`);
+                        if (opts?.backgroundImage) {
+                            try { parts.push(fileToGenerativePart(opts.backgroundImage)); } catch (e) { console.warn('Invalid background image skipped'); }
+                        }
+                        parts.push({ text: finalPrompt });
+                        return parts;
+                    };
+
+                    // Attempt up to 2 times on Firebase path before falling back
+                    let produced = false;
+                    for (let attempt = 1; attempt <= 2 && !produced; attempt++) {
+                        try {
+                            const response = await imagenModel.generateContent(buildParts());
+                            const tokenUsage = extractTokenUsage(response, 'gemini-2.5-flash-image-preview');
+                            if (tokenUsage) perImageTokenUsages.push(tokenUsage);
+                            const inlineDataParts = response.response.inlineDataParts?.();
+                            if (inlineDataParts?.[0]?.inlineData) {
+                                const image = inlineDataParts[0].inlineData;
+                                base64Images.push(`data:${image.mimeType};base64,${image.data}`);
+                                produced = true;
+                                break;
+                            }
+                            const candidates = (response.response as any)?.candidates;
+                            if (candidates?.[0]?.content?.parts) {
+                                for (const part of candidates[0].content.parts) {
+                                    if ((part as any).inlineData) {
+                                        const image = (part as any).inlineData;
+                                        base64Images.push(`data:${image.mimeType};base64,${image.data}`);
+                                        produced = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!produced) {
+                                console.warn(`No image content returned on attempt ${attempt} for prompt: "${prompt}"`);
+                            }
+                        } catch (e) {
+                            console.warn(`Firebase image generation attempt ${attempt} failed:`, (e as any)?.message || e);
                         }
                     }
-                } catch (err) {
-                    console.error('Image generation failed:', err);
-                throw new Error(`An image in the sequence failed to generate for prompt: "${prompt}"`);
+
+                    if (!produced) {
+                        // Fall back to custom API key path (no throw to avoid scary stack traces)
+                        const hasGoogleApiKey = await hasUserApiKey(currentUser.uid, 'google');
+                        const hasFalApiKey = await hasUserApiKey(currentUser.uid, 'fal');
+                        const hasApiKey = hasGoogleApiKey || hasFalApiKey;
+                        if (hasApiKey) {
+                            console.log('🔄 Auto-falling back to custom API key for image generation due to Firebase miss');
+                            const imageInputs: string[] = [];
+                            if (opts?.characterRefs && opts.characterRefs.length) imageInputs.push(...opts.characterRefs);
+                            if (opts?.backgroundImage) imageInputs.push(opts.backgroundImage);
+                            const resp = await authFetch(API_ENDPOINTS.apiKey.use, {
+                                method: 'POST',
+                                body: { model: 'gemini-2.5-flash-image-preview', prompt: finalPrompt, imageInputs }
+                            });
+                            if (resp.ok) {
+                                const json = await resp.json();
+                                let pushed = false;
+                                for (const c of json?.candidates || []) {
+                                    for (const part of (c?.content?.parts || [])) {
+                                        if ((part as any)?.inlineData?.data) {
+                                            base64Images.push(`data:${(part as any).inlineData.mimeType || 'image/jpeg'};base64,${(part as any).inlineData.data}`);
+                                            pushed = true;
+                                            break;
+                                        }
+                                    }
+                                    if (pushed) break;
+                                }
+                                if (!pushed) console.warn(`API key fallback produced no image for prompt: "${prompt}"`);
+                            } else {
+                                console.warn(`Custom image gen fallback failed: HTTP ${resp.status}`);
+                            }
+                        } else {
+                            console.warn('No API key available for fallback; skipping frame');
+                        }
+                    }
+                } catch (firebaseError: any) {
+                    console.warn('⚠️ Firebase AI Logic image generation failed:', firebaseError.message);
+                    // Check if user has API key for automatic fallback
+                    const hasGoogleApiKey = await hasUserApiKey(currentUser.uid, 'google');
+                    const hasFalApiKey = await hasUserApiKey(currentUser.uid, 'fal');
+                    const hasApiKey = hasGoogleApiKey || hasFalApiKey;
+                    
+                    if (hasApiKey) {
+                        console.log('🔄 Auto-falling back to custom API key for image generation due to Firebase error');
+                        // Use custom API key path
+                        const imageInputs: string[] = [];
+                        if (opts?.characterRefs && opts.characterRefs.length) imageInputs.push(...opts.characterRefs);
+                        if (opts?.backgroundImage) imageInputs.push(opts.backgroundImage);
+                        const resp = await authFetch(API_ENDPOINTS.apiKey.use, {
+                            method: 'POST',
+                            body: { model: 'gemini-2.5-flash-image-preview', prompt: finalPrompt, imageInputs }
+                        });
+                        if (!resp.ok) {
+                            console.warn(`Custom image gen fallback failed: HTTP ${resp.status}`);
+                        } else {
+                            const json = await resp.json();
+                            const candidates = json?.candidates || [];
+                            let pushed = false;
+                            for (const c of candidates) {
+                                const parts = c?.content?.parts || [];
+                                for (const part of parts) {
+                                    if (part.inlineData && part.inlineData.data) {
+                                        base64Images.push(`data:${part.inlineData.mimeType || 'image/jpeg'};base64,${part.inlineData.data}`);
+                                        pushed = true;
+                                        break;
+                                    }
+                                }
+                                if (pushed) break;
+                            }
+                            if (!pushed) console.warn(`No image generated via API key fallback for prompt: "${prompt}"`);
+                        }
+                    } else {
+                        console.warn(`Firebase AI image gen not configured and no API key available. Skipping frame. Error: ${firebaseError.message}`);
+                    }
                 }
                 } catch (firebaseError: any) {
-                    console.log('❌ Firebase AI Logic image generation failed:', firebaseError.message);
+                    console.warn('⚠️ Firebase AI Logic image generation failed:', firebaseError.message);
                     // Check if user has API key for automatic fallback
                     const hasGoogleApiKey = await hasUserApiKey(currentUser.uid, 'google');
                     const hasFalApiKey = await hasUserApiKey(currentUser.uid, 'fal');
@@ -913,9 +998,9 @@ Return ONLY a JSON object with this exact format:
                             }
                             if (pushed) break;
                         }
-                        if (!pushed) throw new Error(`No image generated via API key fallback for prompt: "${prompt}"`);
+                        if (!pushed) console.warn(`No image generated via API key fallback for prompt: "${prompt}"`);
                     } else {
-                        throw new Error(`Firebase AI Logic is not configured for image generation and no API key available. Please add your Gemini API key in the Dashboard. Error: ${firebaseError.message}`);
+                        console.warn(`Firebase AI Logic not configured and no API key available. Skipping frame. Error: ${firebaseError.message}`);
                     }
                 }
             }
@@ -980,7 +1065,7 @@ Return ONLY a JSON object with this exact format:
             await recordUsage(
                 currentUser.uid, 
                 'image_generation', 
-                desired, // credits equal to frames generated
+                httpsUrls.length, // charge only for frames successfully produced
                 true, 
                 totalTokenUsage,
                 aiService

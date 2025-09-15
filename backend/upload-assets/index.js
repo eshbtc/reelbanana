@@ -34,6 +34,23 @@ if (!admin.apps.length) {
   });
 }
 
+// Middleware to verify Firebase ID token and attach req.user
+const verifyToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    if (!authHeader.startsWith('Bearer ')) {
+      return sendError(req, res, 401, 'AUTH_REQUIRED', 'Missing or invalid Authorization header');
+    }
+    const idToken = authHeader.split('Bearer ')[1];
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    req.user = decoded;
+    return next();
+  } catch (err) {
+    console.error('ID token verification failed:', err);
+    return sendError(req, res, 401, 'AUTH_INVALID', 'Invalid authentication token');
+  }
+};
+
 // Observability & Error helpers
 const { randomUUID } = require('crypto');
 app.use((req, res, next) => {
@@ -150,6 +167,7 @@ validateBucket().catch(error => {
  * }
  */
 app.post('/upload-image', 
+  verifyToken,
   requireCredits('uploadAsset'),
   deductCreditsAfter('uploadAsset'),
   ...createExpensiveOperationLimiter('upload'), 
