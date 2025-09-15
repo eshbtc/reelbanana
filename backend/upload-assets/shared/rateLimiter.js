@@ -195,21 +195,21 @@ function createOperationRateLimiter(operation, options = {}) {
 }
 
 /**
- * Create IP-based rate limiter for anonymous users
+ * Create IP-based rate limiter for anonymous users, with admin bypass
  */
 function createIPRateLimiter(options = {}) {
   // DEV_MODE: Disable IP rate limiting for testing
   if (process.env.DEV_MODE === 'true') {
     return (req, res, next) => next(); // No-op middleware
   }
-  
+
   const {
     windowMs = 15 * 60 * 1000, // 15 minutes
     max = 50, // requests per window
     message = 'Too many requests from this IP'
   } = options;
-  
-  return rateLimit({
+
+  const baseLimiter = rateLimit({
     windowMs,
     max,
     message: {
@@ -236,6 +236,26 @@ function createIPRateLimiter(options = {}) {
       res.status(429).json(payload);
     }
   });
+
+  // Wrapper to bypass for admins
+  return async (req, res, next) => {
+    try {
+      // If request has a verified Firebase user and that user is admin, bypass IP rate limit
+      const uid = req.user && req.user.uid;
+      if (uid) {
+        try {
+          const db = admin.firestore();
+          const userDoc = await db.collection('users').doc(uid).get();
+          if (userDoc.exists && userDoc.data().isAdmin === true) {
+            return next();
+          }
+        } catch (e) {
+          // If lookup fails, fall through to rate limit
+        }
+      }
+    } catch (_) {}
+    return baseLimiter(req, res, next);
+  };
 }
 
 /**
@@ -246,7 +266,8 @@ function createExpensiveOperationLimiter(operation) {
     // IP-based limiting for anonymous users
     createIPRateLimiter({
       windowMs: 15 * 60 * 1000,
-      max: 10, // More restrictive for expensive operations
+      // Allow higher burst for uploads; moderate for others
+      max: operation === 'upload' ? 60 : 20,
       message: `Too many ${operation} requests from this IP`
     }),
     // User-based quota limiting

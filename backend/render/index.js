@@ -202,6 +202,23 @@ const appCheckVerification = async (req, res, next) => {
   }
 };
 
+// Verify Firebase ID token and attach req.user
+const verifyToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    if (!authHeader.startsWith('Bearer ')) {
+      return sendError(req, res, 401, 'AUTH_REQUIRED', 'Missing or invalid Authorization header');
+    }
+    const idToken = authHeader.split('Bearer ')[1];
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    console.error('Token verification failed:', error);
+    return sendError(req, res, 401, 'AUTH_INVALID', 'Invalid authentication token');
+  }
+};
+
 const storage = new Storage();
 const inputBucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 const outputBucketName = process.env.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
@@ -309,6 +326,7 @@ app.post('/generate-clip', appCheckVerification, async (req, res) => {
     if (!remote.ok) return sendError(req, res, 500, 'FAL_DOWNLOAD_FAILED', `HTTP ${remote.status}`);
     const buf = Buffer.from(await remote.arrayBuffer());
     await file.save(buf, { metadata: { contentType: 'video/mp4' } });
+    try { await file.makePublic(); } catch (e) { console.warn('makePublic failed for generate-clip', clipPath, e?.message || e); }
     const [signedClipUrl] = await file.getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 7*24*60*60*1000 });
     res.json({ ok: true, model: usedModel, clipPath, clipUrl: signedClipUrl });
   } catch (e) {
@@ -334,6 +352,7 @@ app.post('/generate-clip', appCheckVerification, async (req, res) => {
  * }
  */
 app.post('/render', 
+  verifyToken,
   requireCredits('videoRendering', (req) => ({ sceneCount: req.body.scenes?.length || 0 })),
   deductCreditsAfter('videoRendering', (req) => ({ sceneCount: req.body.scenes?.length || 0 })),
   ...createExpensiveOperationLimiter('render'), 
@@ -464,7 +483,8 @@ app.post('/render',
                     await existingClip.save(Buffer.from(clipBuffer), { 
                         metadata: { contentType: 'video/mp4' }
                     });
-                    console.log(`💾 Cached clip for scene ${i}: ${clipFileName}`);
+                    try { await existingClip.makePublic(); } catch (e) { console.warn('makePublic failed for cached clip', clipFileName, e?.message || e); }
+                    console.log(`💾 Cached clip for scene ${i}: ${clipFileName} (public)`);
                     
                     // Use the cached clip URL
                     const [signedClipUrl] = await existingClip.getSignedUrl({ 
@@ -939,8 +959,10 @@ app.post('/render',
                 if (!fetchRes.ok) throw new Error(`download ${fetchRes.status}`);
                 const buff = Buffer.from(await fetchRes.arrayBuffer());
                 await fs.writeFile(localClip, buff);
-                await outBucket.upload(localClip, { destination: `${projectId}/clips/scene-${i}.mp4`, metadata: { contentType: 'video/mp4' } });
-                console.log(`Saved clip for scene ${i} (${secs}s)`);
+                const clipDest = `${projectId}/clips/scene-${i}.mp4`;
+                await outBucket.upload(localClip, { destination: clipDest, metadata: { contentType: 'video/mp4' } });
+                try { await outBucket.file(clipDest).makePublic(); } catch (e) { console.warn('makePublic failed for clip', clipDest, e?.message || e); }
+                console.log(`Saved clip for scene ${i} (${secs}s) and made public`);
               } catch (e) {
                 console.warn(`auto-clips: failed for scene ${i}:`, e?.message || e);
               }

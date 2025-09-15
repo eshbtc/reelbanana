@@ -156,6 +156,23 @@ const appCheckVerification = async (req, res, next) => {
   }
 };
 
+// Verify Firebase ID token and attach req.user
+const verifyToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing or invalid authorization header' });
+    }
+    const idToken = authHeader.split('Bearer ')[1];
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    console.error('Token verification failed:', error);
+    return res.status(401).json({ error: 'Invalid authentication token' });
+  }
+};
+
 // --- CLIENT INITIALIZATION ---
 // IMPORTANT: Set ELEVENLABS_API_KEY as an environment variable in your Cloud Run service
 const elevenlabs = new ElevenLabsClient({
@@ -260,6 +277,7 @@ async function retryWithBackoff(operation, maxRetries = 3, baseDelay = 1000) {
  * }
  */
 app.post('/narrate', 
+  verifyToken,
   requireCredits('narration', (req) => ({ textLength: req.body.narrationScript?.length || 0 })),
   deductCreditsAfter('narration', (req) => ({ textLength: req.body.narrationScript?.length || 0 })),
   ...createExpensiveOperationLimiter('narrate'), 

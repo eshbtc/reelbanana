@@ -415,7 +415,40 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       return { message: 'No images to upload (using persisted images)', cached: true };
     }
 
-    await Promise.all(imagesToUpload.map(image => uploadImage({ projectId, ...image })));
+    // Upload with limited concurrency and retry/backoff on 429
+    const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+    const uploadWithRetry = async (image: { base64Image: string; fileName: string }, idx: number) => {
+      const maxAttempts = 5;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          return await uploadImage({ projectId, ...image });
+        } catch (err: any) {
+          const msg = String(err?.message || err || '');
+          const is429 = msg.includes('RATE_LIMIT_EXCEEDED') || msg.includes('HTTP_429');
+          if (is429 && attempt < maxAttempts) {
+            const base = 400; // ms
+            const backoff = base * Math.pow(2, attempt - 1);
+            const jitter = Math.floor(Math.random() * 150);
+            const wait = backoff + jitter;
+            try { (window as any)?.rbToast?.({ type: 'info', message: `Upload throttled (retry ${attempt}/${maxAttempts - 1})…`, duration: 1500 }); } catch {}
+            await sleep(wait);
+            continue;
+          }
+          throw err;
+        }
+      }
+    };
+    const concurrency = 3;
+    let cursor = 0;
+    const results: any[] = [];
+    await Promise.all(Array.from({ length: concurrency }).map(async () => {
+      while (cursor < imagesToUpload.length) {
+        const i = cursor++;
+        const img = imagesToUpload[i];
+        const r = await uploadWithRetry(img, i);
+        results[i] = r;
+      }
+    }));
     return { message: `Uploaded ${imagesToUpload.length} images` };
   };
 

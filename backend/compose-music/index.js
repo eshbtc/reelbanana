@@ -255,6 +255,7 @@ function musicCacheKey({ narrationScript, normalized = false }) {
  * }
  */
 app.post('/compose-music', 
+  verifyToken,
   requireCredits('musicGeneration'),
   deductCreditsAfter('musicGeneration'),
   ...createExpensiveOperationLimiter('compose'), 
