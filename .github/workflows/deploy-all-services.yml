@@ -160,11 +160,13 @@ jobs:
         if [ "${{ env.DEPLOYMENT_ENV }}" = "production" ]; then
           NODE_ENV="production"
           DEV_MODE="false"
+          DISABLE_RATE_LIMITS="true"
           STRIPE_SECRET_NAME="stripe-live-secret-key"
           STRIPE_PUBLISHABLE_NAME="stripe-live-publishable-key"
         else
           NODE_ENV="development"
           DEV_MODE="true"
+          DISABLE_RATE_LIMITS="true"
           STRIPE_SECRET_NAME="stripe-test-secret-key"
           STRIPE_PUBLISHABLE_NAME="stripe-test-publishable-key"
         fi
@@ -182,6 +184,7 @@ jobs:
             ENV_FLAGS="--set-env-vars=INPUT_BUCKET_NAME=${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}"
             ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
+            ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
             ;;
           "narrate")
             PORT=8080
@@ -190,6 +193,7 @@ jobs:
             ENV_FLAGS="--set-env-vars=INPUT_BUCKET_NAME=${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}"
             ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
+            ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
             ENV_FLAGS+=" --set-secrets=ELEVENLABS_API_KEY=ELEVENLABS_API_KEY_VOICE_NEW:latest"
             ;;
           "align-captions")
@@ -199,6 +203,7 @@ jobs:
             ENV_FLAGS="--set-env-vars=INPUT_BUCKET_NAME=${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}"
             ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
+            ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
             ;;
           "render")
             PORT=8082
@@ -210,6 +215,7 @@ jobs:
             ENV_FLAGS+=" --set-env-vars=RENDER_ENGINE=${{ secrets.RENDER_ENGINE || 'fal' }}"
             ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
+            ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
             ENV_FLAGS+=" --set-secrets=FAL_RENDER_API_KEY=FAL_RENDER_API_KEY:latest"
             ;;
           "compose-music")
@@ -220,6 +226,7 @@ jobs:
             ENV_FLAGS+=" --set-env-vars=INPUT_BUCKET_NAME=${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}"
             ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
+            ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
             ENV_FLAGS+=" --set-secrets=ELEVENLABS_MUSIC_API_KEY=ELEVENLABS_MUSIC_API_KEY:latest"
             ;;
           "api-key-service")
@@ -228,6 +235,7 @@ jobs:
             CPU="1"
             ENV_FLAGS="--set-env-vars=DEV_MODE=$DEV_MODE"
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
+            ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
             ENV_FLAGS+=" --set-env-vars=KMS_KEY_RING_ID=projects/reel-banana-35a54/locations/global/keyRings/api-keys"
             ;;
           "polish")
@@ -242,6 +250,7 @@ jobs:
             ENV_FLAGS+=" --set-env-vars=OUTPUT_BUCKET_NAME=${{ secrets.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}"
             ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
+            ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
             ENV_FLAGS+=" --set-secrets=FAL_POLISH_API_KEY=FAL_POLISH_API_KEY:latest"
             ;;
           "stripe-service")
@@ -251,6 +260,7 @@ jobs:
             ENV_FLAGS="--set-env-vars=NODE_ENV=$NODE_ENV"
             ENV_FLAGS+=" --set-env-vars=GOOGLE_CLOUD_PROJECT=reel-banana-35a54"
             ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
+            ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
             ENV_FLAGS+=" --set-secrets=STRIPE_SECRET_KEY=$STRIPE_SECRET_NAME:latest"
             ENV_FLAGS+=" --set-secrets=STRIPE_PUBLISHABLE_KEY=$STRIPE_PUBLISHABLE_NAME:latest"
             ENV_FLAGS+=" --set-env-vars=STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}"
