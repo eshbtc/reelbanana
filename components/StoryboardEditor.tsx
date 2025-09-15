@@ -468,6 +468,13 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
             counts[key] = (counts[key] || 0) + 1;
           });
           setCommentCounts(counts);
+        }, (err: any) => {
+          if (err?.code === 'permission-denied') {
+            console.warn('Comment listener permission denied; hiding counts for non-owner or restricted access');
+            setCommentCounts({});
+          } else {
+            console.error('Comment listener error:', err);
+          }
         });
       } catch (e) {
         console.warn('Comment count listener failed', e);

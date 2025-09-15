@@ -20,9 +20,15 @@ export const appCheck = initializeAppCheck(firebaseApp, {
 });
 
 // Firestore networking fallback for restrictive networks/ad blockers
-// This helps when websockets/streaming are blocked; SDK will detect and use long polling
+// - Auto-detect long polling by default
+// - Allow forcing long polling via env (useful to avoid WebChannel TYPE=terminate noise)
+const forceLongPolling = (import.meta.env.VITE_FIRESTORE_FORCE_LONG_POLLING || '').toString() === 'true';
 initializeFirestore(firebaseApp, {
   experimentalAutoDetectLongPolling: true,
+  experimentalForceLongPolling: forceLongPolling,
+  // When forcing long polling, disable fetch streams for maximum compatibility
+  // (kept enabled otherwise to preserve performance)
+  useFetchStreams: !forceLongPolling,
 });
 
 // Export the app for use in other files

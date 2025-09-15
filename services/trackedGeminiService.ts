@@ -24,8 +24,8 @@ export const generateStory = async (topic: string, forceUseApiKey?: boolean) => 
   const operation = 'storyGeneration';
   const requiredCredits = OPERATION_COSTS[operation];
   
-  // Generate idempotency key
-  const idempotencyKey = `${user.uid}-${operation}-${Date.now()}-${btoa(topic).slice(0, 8)}`;
+  // We'll rely on reserveCredits' idempotency key; track it after reservation
+  let reservedKey: string | null = null;
   
   try {
     // Reserve credits
@@ -33,17 +33,20 @@ export const generateStory = async (topic: string, forceUseApiKey?: boolean) => 
     if (!reserveResult.success) {
       throw new Error(reserveResult.error || 'Failed to reserve credits');
     }
+    reservedKey = reserveResult.idempotencyKey;
 
     // Execute the original function
     const result = await originalGenerateStory(topic, forceUseApiKey);
     
     // Mark as completed
-    await completeCreditOperation(reserveResult.idempotencyKey, 'completed');
+    await completeCreditOperation(reservedKey, 'completed');
     
     return result;
   } catch (error) {
-    // Mark as failed and refund credits
-    await completeCreditOperation(idempotencyKey, 'failed', error instanceof Error ? error.message : 'Unknown error');
+    // Mark as failed only if we successfully reserved
+    if (reservedKey) {
+      await completeCreditOperation(reservedKey, 'failed', error instanceof Error ? error.message : 'Unknown error');
+    }
     throw error;
   }
 };
@@ -80,8 +83,8 @@ export const generateImageSequence = async (
   const imageCount = Math.min(Math.max(opts?.frames || 5, 1), 5);
   const requiredCredits = OPERATION_COSTS[operation] * imageCount;
   
-  // Generate idempotency key
-  const idempotencyKey = `${user.uid}-${operation}-${Date.now()}-${btoa(prompt).slice(0, 8)}`;
+  // Track reserved key once reservation succeeds
+  let reservedKey: string | null = null;
   
   try {
     // Reserve credits
@@ -89,6 +92,7 @@ export const generateImageSequence = async (
     if (!reserveResult.success) {
       throw new Error(reserveResult.error || 'Failed to reserve credits');
     }
+    reservedKey = reserveResult.idempotencyKey;
 
     // Execute with simple retry (up to 2 retries)
     let lastError: any = null;
@@ -96,7 +100,7 @@ export const generateImageSequence = async (
       try {
         const result = await originalGenerateImageSequence(prompt, characterAndStyle, opts);
         // Mark as completed
-        await completeCreditOperation(reserveResult.idempotencyKey, 'completed');
+        await completeCreditOperation(reservedKey, 'completed');
         return result;
       } catch (err) {
         lastError = err;
@@ -111,11 +115,15 @@ export const generateImageSequence = async (
     }
     
     // If we reach here, all attempts failed
-    await completeCreditOperation(idempotencyKey, 'failed', lastError instanceof Error ? lastError.message : 'Unknown error');
+    if (reservedKey) {
+      await completeCreditOperation(reservedKey, 'failed', lastError instanceof Error ? lastError.message : 'Unknown error');
+    }
     throw lastError || new Error('Image generation failed after retries');
   } catch (error) {
-    // Mark as failed and refund credits
-    await completeCreditOperation(idempotencyKey, 'failed', error instanceof Error ? error.message : 'Unknown error');
+    // Mark as failed only if we successfully reserved
+    if (reservedKey) {
+      await completeCreditOperation(reservedKey, 'failed', error instanceof Error ? error.message : 'Unknown error');
+    }
     throw error;
   }
 };

@@ -80,6 +80,12 @@ export function useJobProgress(opts: { jobId?: string | null; endpoint?: string;
         if (d.error) setError(d.error);
         if (d.perScene) setPerScene(d.perScene || {});
         if (d.done) setConnected(false);
+      }, (err: any) => {
+        if (err?.code === 'permission-denied') {
+          console.warn('Job progress listener permission denied; continuing without Firestore live updates');
+        } else {
+          console.error('Job progress listener error:', err);
+        }
       });
       return () => unsub();
     } catch (_) { return; }

@@ -10,27 +10,58 @@ import { purchaseCreditsApi, type PurchaseCreditsResponse } from './billingServi
 import { handleBillingError, retryOperation, getUserErrorMessage } from './billingErrorHandler';
 
 // Helper function to clean metadata by removing undefined values
-const cleanMetadata = (obj: any): any => {
-  if (obj === null || obj === undefined) {
-    return undefined;
+// Limits to keep metadata small and Firestore-safe
+const MAX_STRING_LEN = 2048; // truncate long strings
+const MAX_ARRAY_LEN = 10;    // cap array lengths
+const MAX_DEPTH = 5;         // avoid deeply nested structures
+
+const TRUNC_SUFFIX = '… [truncated]';
+
+const cleanMetadata = (obj: any, depth: number = 0): any => {
+  // Depth guard
+  if (depth > MAX_DEPTH) return undefined;
+
+  // Drop null/undefined entirely
+  if (obj === null || obj === undefined) return undefined;
+
+  // Drop functions
+  if (typeof obj === 'function') return undefined;
+
+  // Dates (Firestore supports JS Date)
+  if (obj instanceof Date) return obj;
+
+  // Strings: truncate and omit data URIs
+  if (typeof obj === 'string') {
+    // Omit large data URIs entirely
+    if (obj.startsWith('data:') && obj.length > 128) return '[omitted data-uri]';
+    if (obj.length > MAX_STRING_LEN) return obj.slice(0, MAX_STRING_LEN) + TRUNC_SUFFIX;
+    return obj;
   }
-  
+
+  // Numbers/booleans pass through
+  if (typeof obj !== 'object') return obj;
+
+  // Arrays: clean each element, cap length
   if (Array.isArray(obj)) {
-    return obj.map(cleanMetadata).filter(item => item !== undefined);
+    const arr = obj
+      .slice(0, MAX_ARRAY_LEN)
+      .map((v) => cleanMetadata(v, depth + 1))
+      .filter((v) => v !== undefined);
+    return arr.length > 0 ? arr : undefined;
   }
-  
-  if (typeof obj === 'object') {
-    const cleaned: any = {};
-    for (const [key, value] of Object.entries(obj)) {
-      const cleanedValue = cleanMetadata(value);
-      if (cleanedValue !== undefined) {
-        cleaned[key] = cleanedValue;
-      }
-    }
-    return Object.keys(cleaned).length > 0 ? cleaned : undefined;
+
+  // Only keep plain objects; drop special objects (File, Blob, Map, etc.)
+  const proto = Object.getPrototypeOf(obj);
+  if (proto !== Object.prototype && proto !== null) return undefined;
+
+  const cleaned: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    // Explicitly skip known callback fields
+    if (key === 'onInfo') continue;
+    const v = cleanMetadata(value, depth + 1);
+    if (v !== undefined) cleaned[key] = v;
   }
-  
-  return obj;
+  return Object.keys(cleaned).length > 0 ? cleaned : undefined;
 };
 
 // Types for credit operations

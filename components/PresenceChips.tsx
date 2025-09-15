@@ -16,6 +16,13 @@ const PresenceChips: React.FC<PresenceChipsProps> = ({ projectId }) => {
       const arr: any[] = [];
       snap.forEach(d => { const x: any = d.data(); arr.push({ userId: x.userId, activeSceneId: x.activeSceneId || null }); });
       setPeople(arr);
+    }, (err: any) => {
+      if (err?.code === 'permission-denied') {
+        console.warn('Presence listener permission denied; hiding presence UI');
+        setPeople([]);
+      } else {
+        console.error('Presence listener error:', err);
+      }
     });
     return () => unsub();
   }, [projectId]);
@@ -35,4 +42,3 @@ const PresenceChips: React.FC<PresenceChipsProps> = ({ projectId }) => {
 };
 
 export default PresenceChips;
-
