@@ -516,7 +516,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
       setStoryProgress(15);
       setStoryProgressStage('Generating story...');
       
-      if (productDemoMode && productImages.length > 0) {
+      if (productDemoMode && productImages && productImages.length > 0) {
         // Product Demo Mode: Generate story based on product images
         const productPrompts = productImages.map((_, index) => 
           `Showcase product feature ${index + 1} with professional presentation and modern UI`
@@ -590,8 +590,8 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
         id: `${Date.now()}-${index}`,
         prompt: s.prompt,
         narration: s.narration,
-        status: productDemoMode && productImages[index] ? 'success' : 'idle', // Pre-populate with product images
-        imageUrls: productDemoMode && productImages[index] ? [productImages[index]] : [],
+        status: productDemoMode && productImages && productImages[index] ? 'success' : 'idle', // Pre-populate with product images
+        imageUrls: productDemoMode && productImages && productImages[index] ? [productImages[index]] : [],
       }));
 
       // Create a new project in Firestore
@@ -1202,7 +1202,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
               <div className="mt-4 p-4 bg-gray-800 rounded-lg border border-gray-600">
                 <h3 className="text-lg font-semibold text-white mb-3">Product Images</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                  {productImages.map((image, index) => (
+                  {productImages && productImages.map((image, index) => (
                     <div key={index} className="relative">
                       <img
                         src={image}
@@ -1217,7 +1217,7 @@ const StoryboardEditor: React.FC<StoryboardEditorProps> = ({ onPlayMovie, onProj
                       </button>
                     </div>
                   ))}
-                  {productImages.length < 8 && (
+                  {productImages && productImages.length < 8 && (
                     <div className="border-2 border-dashed border-gray-600 rounded-lg h-24 flex items-center justify-center cursor-pointer hover:border-blue-500 transition-colors"
                          onClick={() => {
                            const input = document.createElement('input');
