@@ -1331,8 +1331,11 @@ Rules:
     const responseText = result.response?.text() || result.text || '';
     const analysis = JSON.parse(responseText);
     
+    // Ensure characters is always an array
+    const characters = Array.isArray(analysis.characters) ? analysis.characters : [];
+    
     return {
-      characters: analysis.characters || [],
+      characters: characters,
       suggestedCount: Math.min(Math.max(analysis.suggestedCount || 2, 1), 6)
     };
   } catch (error) {
@@ -1392,7 +1395,7 @@ STORY CONTENT:
 ${storyContent}
 
 EXTRACTED CHARACTERS:
-${analysis.characters.map(char => `- ${char.name}: ${char.description} (${char.role})`).join('\n')}
+${(analysis.characters && Array.isArray(analysis.characters) ? analysis.characters : []).map(char => `- ${char.name}: ${char.description} (${char.role})`).join('\n')}
 
 Create character descriptions that:
 - Match the characters identified in the story
