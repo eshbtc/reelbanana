@@ -98,3 +98,14 @@ export interface PlaybackEventRequest {
 }
 export const trackPlayback = (req: PlaybackEventRequest) =>
   apiCall(API_ENDPOINTS.playbackTracking, req, 'Failed to track playback') as Promise<{ ok?: boolean }>;
+
+// Clips probe via signed URLs
+export interface SignedClipsResponse { projectId: string; count: number; items: Array<{ name: string; url: string; index?: number }> }
+export const getSignedClips = async (projectId: string): Promise<SignedClipsResponse> => {
+  const { authFetch } = await import('../lib/authFetch');
+  const resp = await authFetch(`${API_ENDPOINTS.signedClips}/${encodeURIComponent(projectId)}`, { method: 'GET' });
+  if (!resp.ok) {
+    throw new Error(`Failed to get signed clips: HTTP_${resp.status}`);
+  }
+  return resp.json();
+};

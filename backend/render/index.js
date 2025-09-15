@@ -219,6 +219,23 @@ const verifyToken = async (req, res, next) => {
   }
 };
 
+// App Check or admin bypass (requires verifyToken before)
+const appCheckOrAdmin = async (req, res, next) => {
+  try {
+    const uid = req.user && req.user.uid;
+    if (uid) {
+      try {
+        const db = admin.firestore();
+        const userDoc = await db.collection('users').doc(uid).get();
+        if (userDoc.exists && userDoc.data().isAdmin === true) {
+          return next();
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return appCheckVerification(req, res, next);
+};
+
 const storage = new Storage();
 const inputBucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 const outputBucketName = process.env.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
@@ -356,7 +373,7 @@ app.post('/render',
   requireCredits('videoRendering', (req) => ({ sceneCount: req.body.scenes?.length || 0 })),
   deductCreditsAfter('videoRendering', (req) => ({ sceneCount: req.body.scenes?.length || 0 })),
   ...createExpensiveOperationLimiter('render'), 
-  appCheckVerification, 
+  appCheckOrAdmin, 
   async (req, res) => {
     const renderStartTime = Date.now();
     const { projectId, scenes, gsAudioPath, srtPath, gsMusicPath, useFal, force, targetW, targetH, aspectRatio, exportPreset } = req.body;
@@ -1205,7 +1222,7 @@ app.get('/sli-dashboard', appCheckVerification, (req, res) => {
 });
 
 // Cache status (protected)
-app.get('/cache-status', appCheckVerification, (req, res) => {
+app.get('/cache-status', appCheckOrAdmin, (req, res) => {
   res.json({
     service: 'render',
     bucket: { input: inputBucketName, output: outputBucketName },
@@ -1279,7 +1296,7 @@ app.post('/playback-tracking', appCheckVerification, (req, res) => {
  * GET /cache-status/:projectId
  * Check what clips are cached for a project
  */
-app.get('/cache-status/:projectId', appCheckVerification, async (req, res) => {
+app.get('/cache-status/:projectId', appCheckOrAdmin, async (req, res) => {
     const { projectId } = req.params;
     
     try {
@@ -1306,6 +1323,33 @@ app.get('/cache-status/:projectId', appCheckVerification, async (req, res) => {
             message: error.message
         });
     }
+});
+
+/**
+ * GET /signed-clips/:projectId
+ * Returns temporary signed URLs for any existing scene clips so the client
+ * can probe availability without relying on public ACLs.
+ */
+app.get('/signed-clips/:projectId', appCheckOrAdmin, async (req, res) => {
+  const { projectId } = req.params;
+  try {
+    const inBucket = storage.bucket(inputBucketName);
+    const [files] = await inBucket.getFiles({ prefix: `${projectId}/clips/` });
+    const items = [];
+    for (const file of files) {
+      try {
+        const name = String(file.name || '');
+        const m = name.match(/clips\/scene-(\d+)\.mp4$/);
+        const index = m ? parseInt(m[1], 10) : undefined;
+        const [signedUrl] = await file.getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + 60*60*1000 });
+        items.push({ name, url: signedUrl, index });
+      } catch (_) {}
+    }
+    return res.json({ projectId, count: items.length, items });
+  } catch (error) {
+    console.error('signed-clips error:', error);
+    return sendError(req, res, 500, 'INTERNAL', 'Failed to get signed clips', error?.message || String(error));
+  }
 });
 
 /**

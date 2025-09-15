@@ -162,6 +162,22 @@ const appCheckVerification = async (req, res, next) => {
   }
 };
 
+// App Check or admin bypass (requires verifyToken before)
+const appCheckOrAdmin = async (req, res, next) => {
+  try {
+    const uid = req.user && req.user.uid;
+    if (uid) {
+      try {
+        const db = admin.firestore();
+        const userDoc = await db.collection('users').doc(uid).get();
+        if (userDoc.exists && userDoc.data().isAdmin === true) {
+          return next();
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return appCheckVerification(req, res, next);
+};
 const storage = new Storage();
 const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 
@@ -259,7 +275,7 @@ app.post('/compose-music',
   requireCredits('musicGeneration'),
   deductCreditsAfter('musicGeneration'),
   ...createExpensiveOperationLimiter('compose'), 
-  appCheckVerification, 
+  appCheckOrAdmin, 
   async (req, res) => {
   const { projectId, narrationScript, jobId: providedJobId } = req.body;
   const jobId = (providedJobId && String(providedJobId)) || `compose-${projectId}-${Date.now()}`;

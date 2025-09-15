@@ -224,13 +224,31 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
     let timer: any;
     let attempts = 0;
     const MAX_ATTEMPTS = 10; // ~30s total at 3s interval
-    // Check main bucket first for clips (clips are private, final videos are public)
+    // Prefer signed URLs from backend to avoid relying on public ACLs
     const bucketCandidates = ['reel-banana-35a54.firebasestorage.app'];
     const checkClips = async () => {
       if (!projectId || !Array.isArray(scenes) || scenes.length === 0) return;
       const updates: Array<{ exists: boolean; url?: string }> = [];
       const maxScenes = Math.min(scenes.length, 8);
+      // Try backend-signed URLs first
+      let usedSigned = false;
+      try {
+        const { getSignedClips } = await import('../services/pipelineService');
+        const data = await getSignedClips(projectId);
+        if (data && Array.isArray(data.items)) {
+          for (const item of data.items) {
+            const idx = typeof item.index === 'number' ? item.index : undefined;
+            if (typeof idx === 'number' && idx < maxScenes) {
+              updates[idx] = { exists: true, url: item.url } as any;
+            }
+          }
+          usedSigned = data.items.length > 0;
+        }
+      } catch (_) { /* fall back to HEAD probing */ }
+
+      // Fill gaps with HEAD probing if needed
       for (let i = 0; i < maxScenes; i++) {
+        if (updates[i]?.exists) continue;
         let found = false; let url: string | undefined;
         for (const bucket of bucketCandidates) {
           const test = `https://storage.googleapis.com/${bucket}/${projectId}/clips/scene-${i}.mp4`;
@@ -455,7 +473,26 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
   const executeNarrate = async () => {
     const narrationScript = (scenes && Array.isArray(scenes) ? scenes : []).map((s: any) => s.narration).join(' ');
     const jobId = `narrate-${projectId}-${Date.now()}`;
-    const res = await narrate({ projectId, narrationScript, emotion, jobId });
+    // Retry/backoff to handle transient 401/429 or App Check hiccups
+    const maxAttempts = 4;
+    const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+    let res: any;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        res = await narrate({ projectId, narrationScript, emotion, jobId });
+        break;
+      } catch (err: any) {
+        const msg = String(err?.message || err || '');
+        const retriable = msg.includes('HTTP_429') || msg.includes('RATE_LIMIT_EXCEEDED') || msg.includes('APP_CHECK') || msg.includes('HTTP_401');
+        if (retriable && attempt < maxAttempts) {
+          const backoff = 500 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 200);
+          try { (window as any)?.rbToast?.({ type: 'info', message: `Narration retry ${attempt}/${maxAttempts - 1}…`, duration: 1200 }); } catch {}
+          await sleep(backoff);
+          continue;
+        }
+        throw err;
+      }
+    }
     // Attach jobId to result so UI can optionally stream it
     return { ...res, jobId } as any;
   };
@@ -468,8 +505,26 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
     if (!gsAudioPath) {
       throw new Error('No audio path from narration step');
     }
-    // Use a derived job id for continuity
-    const res = await alignCaptions({ projectId, gsAudioPath });
+    // Retry/backoff for transient 401/429/App Check issues
+    const maxAttempts = 4;
+    const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+    let res: any;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        res = await alignCaptions({ projectId, gsAudioPath });
+        break;
+      } catch (err: any) {
+        const msg = String(err?.message || err || '');
+        const retriable = msg.includes('HTTP_429') || msg.includes('RATE_LIMIT_EXCEEDED') || msg.includes('APP_CHECK') || msg.includes('HTTP_401');
+        if (retriable && attempt < maxAttempts) {
+          const backoff = 400 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 200);
+          try { (window as any)?.rbToast?.({ type: 'info', message: `Align retry ${attempt}/${maxAttempts - 1}…`, duration: 1000 }); } catch {}
+          await sleep(backoff);
+          continue;
+        }
+        throw err;
+      }
+    }
     return { ...res, jobId: parentJobId } as any;
   };
 
@@ -479,7 +534,25 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
     }
     const narrationScript = (scenes && Array.isArray(scenes) ? scenes : []).map((s: any) => s.narration).join(' ');
     const jobId = `compose-${projectId}-${Date.now()}`;
-    const res = await composeMusic({ projectId, narrationScript });
+    const maxAttempts = 4;
+    const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+    let res: any;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        res = await composeMusic({ projectId, narrationScript });
+        break;
+      } catch (err: any) {
+        const msg = String(err?.message || err || '');
+        const retriable = msg.includes('HTTP_429') || msg.includes('RATE_LIMIT_EXCEEDED') || msg.includes('APP_CHECK') || msg.includes('HTTP_401');
+        if (retriable && attempt < maxAttempts) {
+          const backoff = 600 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 250);
+          try { (window as any)?.rbToast?.({ type: 'info', message: `Music retry ${attempt}/${maxAttempts - 1}…`, duration: 1200 }); } catch {}
+          await sleep(backoff);
+          continue;
+        }
+        throw err;
+      }
+    }
     return { ...res, jobId } as any;
   };
 
@@ -522,41 +595,49 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
 
     const narrationScript = (scenes && Array.isArray(scenes) ? scenes : []).map((s: any) => s.narration).join(' ');
     const totalSecs = Math.max(8, Math.round((scenes && Array.isArray(scenes) ? scenes : []).reduce((s, sc) => s + (sc.duration || 3), 0)));
-    try {
-      const jobId = `render-${projectId}-${Date.now()}`;
-      const body: any = { 
-        projectId, 
-        scenes: sceneDataForRender, 
-        gsAudioPath, 
-        srtPath, 
-        gsMusicPath, 
-        useFal: true, 
-        force: true,
-        jobId,
-        // New aspect ratio and export preset parameters
-        targetW: clampedResolution.width,
-        targetH: clampedResolution.height,
-        aspectRatio: selectedAspectRatio,
-        exportPreset: selectedExportPreset
-      };
-      if (autoGenerateClips !== undefined) body.autoGenerateClips = !!autoGenerateClips;
-      if (forceClips) body.forceClips = true;
-      if (clipSeconds && typeof clipSeconds === 'number') body.clipSeconds = clipSeconds;
-      if (clipConcurrency) body.clipConcurrency = clipConcurrency;
-      if (clipModel) body.clipModel = clipModel;
-      const res = await renderVideo(body);
-      return { ...res, jobId } as any;
-    } catch (e) {
-      // Retry without force if needed
-      const bodyRetry: any = { projectId, scenes: sceneDataForRender, gsAudioPath, srtPath, gsMusicPath, useFal: true };
-      if (autoGenerateClips !== undefined) bodyRetry.autoGenerateClips = !!autoGenerateClips;
-      if (forceClips) bodyRetry.forceClips = true;
-      if (clipSeconds && typeof clipSeconds === 'number') bodyRetry.clipSeconds = clipSeconds;
-      if (clipConcurrency) bodyRetry.clipConcurrency = clipConcurrency;
-      if (clipModel) bodyRetry.clipModel = clipModel;
-      const res = await renderVideo(bodyRetry);
-      return { ...res } as any;
+    const jobId = `render-${projectId}-${Date.now()}`;
+    const baseBody: any = { 
+      projectId, 
+      scenes: sceneDataForRender, 
+      gsAudioPath, 
+      srtPath, 
+      gsMusicPath, 
+      useFal: true, 
+      jobId,
+      targetW: clampedResolution.width,
+      targetH: clampedResolution.height,
+      aspectRatio: selectedAspectRatio,
+      exportPreset: selectedExportPreset
+    };
+    if (autoGenerateClips !== undefined) baseBody.autoGenerateClips = !!autoGenerateClips;
+    if (forceClips) baseBody.forceClips = true;
+    if (clipSeconds && typeof clipSeconds === 'number') baseBody.clipSeconds = clipSeconds;
+    if (clipConcurrency) baseBody.clipConcurrency = clipConcurrency;
+    if (clipModel) baseBody.clipModel = clipModel;
+
+    const maxAttempts = 4;
+    const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+    let lastError: any = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        // First two attempts with force=true, then relax
+        const body = { ...baseBody, force: attempt <= 2 };
+        const res = await renderVideo(body);
+        return { ...res, jobId } as any;
+      } catch (err: any) {
+        lastError = err;
+        const msg = String(err?.message || err || '');
+        const retriable = msg.includes('HTTP_429') || msg.includes('RATE_LIMIT_EXCEEDED') || msg.includes('APP_CHECK') || msg.includes('HTTP_401') || msg.includes('SERVICE_UNAVAILABLE') || msg.includes('INTERNAL');
+        if (retriable && attempt < maxAttempts) {
+          const backoff = 800 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 300);
+          try { (window as any)?.rbToast?.({ type: 'info', message: `Render retry ${attempt}/${maxAttempts - 1}…`, duration: 1400 }); } catch {}
+          await sleep(backoff);
+          continue;
+        }
+        break;
+      }
     }
+    throw lastError || new Error('Render failed');
   };
 
 

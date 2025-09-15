@@ -173,6 +173,23 @@ const verifyToken = async (req, res, next) => {
   }
 };
 
+// App Check or admin bypass (requires verifyToken before)
+const appCheckOrAdmin = async (req, res, next) => {
+  try {
+    const uid = req.user && req.user.uid;
+    if (uid) {
+      try {
+        const db = admin.firestore();
+        const userDoc = await db.collection('users').doc(uid).get();
+        if (userDoc.exists && userDoc.data().isAdmin === true) {
+          return next();
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return appCheckVerification(req, res, next);
+};
+
 // --- CLIENT INITIALIZATION ---
 // IMPORTANT: Set ELEVENLABS_API_KEY as an environment variable in your Cloud Run service
 const elevenlabs = new ElevenLabsClient({
@@ -281,7 +298,7 @@ app.post('/narrate',
   requireCredits('narration', (req) => ({ textLength: req.body.narrationScript?.length || 0 })),
   deductCreditsAfter('narration', (req) => ({ textLength: req.body.narrationScript?.length || 0 })),
   ...createExpensiveOperationLimiter('narrate'), 
-  appCheckVerification, 
+  appCheckOrAdmin, 
   async (req, res) => {
   const { projectId, narrationScript, emotion, jobId: providedJobId } = req.body;
   const jobId = (providedJobId && String(providedJobId)) || `narrate-${projectId}-${Date.now()}`;
