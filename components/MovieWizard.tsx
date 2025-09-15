@@ -125,7 +125,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
         }),
         checkPlanGate({
           feature: 'scene_limit',
-          currentState: { sceneCount: scenes.length }
+          currentState: { sceneCount: scenes && Array.isArray(scenes) ? scenes.length : 0 }
         }),
         checkPlanGate({
           feature: 'pro_polish',
@@ -154,10 +154,10 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
 
   // Check plan gates when configuration changes
   useEffect(() => {
-    if (!planLoading && scenes.length > 0) {
+    if (!planLoading && scenes && Array.isArray(scenes) && scenes.length > 0) {
       checkPlanGates();
     }
-  }, [selectedAspectRatio, selectedExportPreset, scenes.length, planLoading]);
+  }, [selectedAspectRatio, selectedExportPreset, scenes && Array.isArray(scenes) ? scenes.length : 0, planLoading]);
 
   // Defensive context usage to prevent null context errors
   let confirm: any = null;
@@ -397,7 +397,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
 
     // Build upload list for all frames
     const imagesToUpload: Array<{ base64Image: string; fileName: string }> = [];
-    for (let sceneIndex = 0; sceneIndex < scenes.length; sceneIndex++) {
+    for (let sceneIndex = 0; sceneIndex < (scenes && Array.isArray(scenes) ? scenes.length : 0); sceneIndex++) {
       const list = scenes[sceneIndex]?.imageUrls || [];
       for (let imageIndex = 0; imageIndex < list.length; imageIndex++) {
         const url: string = list[imageIndex];
@@ -420,7 +420,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
   };
 
   const executeNarrate = async () => {
-    const narrationScript = scenes.map((s: any) => s.narration).join(' ');
+    const narrationScript = (scenes && Array.isArray(scenes) ? scenes : []).map((s: any) => s.narration).join(' ');
     const jobId = `narrate-${projectId}-${Date.now()}`;
     const res = await narrate({ projectId, narrationScript, emotion, jobId });
     // Attach jobId to result so UI can optionally stream it
@@ -444,7 +444,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
     if (demoMode) {
       return { message: 'Compose skipped in demo mode', cached: true };
     }
-    const narrationScript = scenes.map((s: any) => s.narration).join(' ');
+    const narrationScript = (scenes && Array.isArray(scenes) ? scenes : []).map((s: any) => s.narration).join(' ');
     const jobId = `compose-${projectId}-${Date.now()}`;
     const res = await composeMusic({ projectId, narrationScript });
     return { ...res, jobId } as any;
@@ -463,7 +463,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
       throw new Error('Missing required assets for rendering');
     }
 
-    const sceneDataForRender = scenes.map(scene => ({
+    const sceneDataForRender = (scenes && Array.isArray(scenes) ? scenes : []).map(scene => ({
       narration: scene.narration,
       imageCount: scene.imageUrls?.length || 0,
       camera: scene.camera || 'static',
@@ -487,8 +487,8 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
     // Clamp to user plan limits
     const clampedResolution = clampResolutionToPlan(targetW, targetH, userPlan);
 
-    const narrationScript = scenes.map((s: any) => s.narration).join(' ');
-    const totalSecs = Math.max(8, Math.round(scenes.reduce((s, sc) => s + (sc.duration || 3), 0)));
+    const narrationScript = (scenes && Array.isArray(scenes) ? scenes : []).map((s: any) => s.narration).join(' ');
+    const totalSecs = Math.max(8, Math.round((scenes && Array.isArray(scenes) ? scenes : []).reduce((s, sc) => s + (sc.duration || 3), 0)));
     try {
       const jobId = `render-${projectId}-${Date.now()}`;
       const body: any = { 
@@ -627,7 +627,7 @@ const MovieWizard: React.FC<MovieWizardProps> = ({
         <h2 className="text-white font-semibold mb-3">Scenes</h2>
         {/* Per-scene bars use renderProgress.perScene computed above */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {scenes.map((scene, i) => {
+          {(scenes && Array.isArray(scenes) ? scenes : []).map((scene, i) => {
             const thumb = (scene.imageUrls && scene.imageUrls[0]) || null;
             const clip = clipStatus[i];
             const perScenePct = (perSceneMap && (perSceneMap[String(i)] ?? perSceneMap[i])) ?? null;
