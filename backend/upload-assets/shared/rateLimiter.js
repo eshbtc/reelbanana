@@ -273,6 +273,9 @@ function createIPRateLimiter(options = {}) {
  * Create comprehensive rate limiter for expensive operations
  */
 function createExpensiveOperationLimiter(operation) {
+  if (process.env.DISABLE_RATE_LIMITS === 'true') {
+    return [ (req, res, next) => next() ];
+  }
   return [
     // IP-based limiting for anonymous users
     createIPRateLimiter({
