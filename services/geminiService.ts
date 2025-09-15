@@ -60,6 +60,28 @@ const calculateCost = (totalTokens: number, model: string): number => {
   return (totalTokens / 1000000) * rate;
 };
 
+// Helper: parse JSON from model text that may include Markdown code fences
+const parseJsonFromText = (rawInput: string): any => {
+  let raw = (rawInput || '').trim();
+  try {
+    // Strip Markdown code fences if present
+    if (raw.startsWith('```')) {
+      raw = raw.replace(/^```[a-zA-Z0-9_-]*\s*/,'');
+      // Drop trailing fence
+      const fenceIdx = raw.lastIndexOf('```');
+      if (fenceIdx !== -1) raw = raw.substring(0, fenceIdx).trim();
+    }
+    // Direct parse
+    if (raw.startsWith('{')) return JSON.parse(raw);
+    // Extract first JSON object substring
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (m) return JSON.parse(m[0]);
+  } catch (_) {
+    // fallthrough to throw below
+  }
+  throw new Error('Model returned non-JSON text');
+};
+
 // Helper function to determine which AI service to use
 const getAIService = async (forceUseApiKey?: boolean): Promise<'firebase' | 'custom' | null> => {
   const currentUser = getCurrentUser();
@@ -1470,7 +1492,7 @@ Example description: "A brave banana with a tiny red cape and bright eyes, paint
     });
     const result = await model.generateContent(prompt);
     const raw = result.response.text().trim();
-    const json = JSON.parse(raw);
+    const json = parseJsonFromText(raw);
     list = Array.isArray(json.characters) ? json.characters.slice(0, count) : [];
   } catch (firebaseError: any) {
     console.log('❌ Firebase AI Logic failed for character options:', firebaseError?.message || firebaseError);
@@ -1496,7 +1518,7 @@ Example description: "A brave banana with a tiny red cape and bright eyes, paint
     const parts = apiResult?.candidates?.[0]?.content?.parts || [];
     const textPart = parts.find((p: any) => typeof p?.text === 'string')?.text || '';
     const raw = (textPart || '').trim();
-    const json = JSON.parse(raw);
+    const json = parseJsonFromText(raw);
     list = Array.isArray(json.characters) ? json.characters.slice(0, count) : [];
   }
 
