@@ -185,6 +185,7 @@ jobs:
             ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
             ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
+            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app"
             ;;
           "narrate")
             PORT=8080
@@ -195,6 +196,7 @@ jobs:
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
             ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
             ENV_FLAGS+=" --set-secrets=ELEVENLABS_API_KEY=ELEVENLABS_API_KEY_VOICE_NEW:latest"
+            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app"
             ;;
           "align-captions")
             PORT=8081
@@ -204,6 +206,7 @@ jobs:
             ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
             ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
+            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app"
             ;;
           "render")
             PORT=8082
@@ -229,6 +232,7 @@ jobs:
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
             ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
             ENV_FLAGS+=" --set-secrets=ELEVENLABS_MUSIC_API_KEY=ELEVENLABS_MUSIC_API_KEY:latest"
+            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app"
             ;;
           "api-key-service")
             PORT=8085
@@ -238,6 +242,7 @@ jobs:
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
             ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
             ENV_FLAGS+=" --set-env-vars=KMS_KEY_RING_ID=projects/reel-banana-35a54/locations/global/keyRings/api-keys"
+            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app"
             ;;
           "polish")
             PORT=8086
@@ -265,6 +270,7 @@ jobs:
             ENV_FLAGS+=" --set-secrets=STRIPE_SECRET_KEY=$STRIPE_SECRET_NAME:latest"
             ENV_FLAGS+=" --set-secrets=STRIPE_PUBLISHABLE_KEY=$STRIPE_PUBLISHABLE_NAME:latest"
             ENV_FLAGS+=" --set-env-vars=STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}"
+            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app"
             ;;
           *)
             echo "Unknown service: ${{ matrix.service }}"

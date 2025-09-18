@@ -16,14 +16,31 @@ app.set('trust proxy', true);
 
 // Security middleware
 app.use(helmet());
+// Dynamic CORS allowlist; allow no-origin for server-to-server calls
+const defaultOrigins = [
+  'https://reel-banana-35a54.web.app',
+  'https://reelbanana.ai',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || defaultOrigins.join(',')).split(',').map(s => s.trim()).filter(Boolean);
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Vary', 'Origin');
+  }
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Firebase-AppCheck');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 app.use(cors({
-  origin: [
-    'https://reel-banana-35a54.web.app',
-    'https://reelbanana.ai',
-    'http://localhost:3000',
-    'http://localhost:5173'
-  ],
-  credentials: true
+  origin: (origin, cb) => { if (!origin) return cb(null, true); return cb(null, allowedOrigins.includes(origin)); },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Firebase-AppCheck']
 }));
 
 // Rate limiting
