@@ -210,12 +210,13 @@ jobs:
             MEMORY="2Gi"
             CPU="2"
             ENV_FLAGS="--set-env-vars=INPUT_BUCKET_NAME=${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}"
-            ENV_FLAGS+=" --set-env-vars=OUTPUT_BUCKET_NAME=${{ secrets.OUTPUT_BUCKET_NAME || 'reel-banana-videos-public' }}"
+            ENV_FLAGS+=" --set-env-vars=OUTPUT_BUCKET_NAME=${{ secrets.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}"
             ENV_FLAGS+=" --set-env-vars=FAL_RENDER_MODEL=${{ secrets.FAL_RENDER_MODEL || 'fal-ai/veo3/fast/image-to-video' }}"
             ENV_FLAGS+=" --set-env-vars=RENDER_ENGINE=${{ secrets.RENDER_ENGINE || 'fal' }}"
             ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
             ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
+            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app"
             ENV_FLAGS+=" --set-secrets=FAL_RENDER_API_KEY=FAL_RENDER_API_KEY:latest"
             ;;
           "compose-music")
