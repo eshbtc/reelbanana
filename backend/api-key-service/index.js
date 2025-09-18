@@ -9,7 +9,7 @@ const { getUserQuotaStatus } = require('./shared/rateLimiter');
 const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 8085;
 
 // Trust proxy for Cloud Run (fixes X-Forwarded-For header issue)
 app.set('trust proxy', true);

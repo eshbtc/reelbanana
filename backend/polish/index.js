@@ -408,7 +408,7 @@ createHealthEndpoints(app, 'polish',
   }
 );
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 8086;
 app.listen(PORT, () => {
   console.log(`Polish service listening on port ${PORT}`);
 });

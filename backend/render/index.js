@@ -1505,7 +1505,7 @@ app.get('/admin/stats', appCheckVerification, async (req, res) => {
 });
 
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 8082;
 app.listen(PORT, () => {
   console.log(`Render service listening on port ${PORT}`);
 });

@@ -52,6 +52,41 @@ if (!admin.apps.length) {
   });
 }
 
+// App Check verification middleware
+const appCheckVerification = async (req, res, next) => {
+  const appCheckToken = req.header('X-Firebase-AppCheck');
+
+  if (!appCheckToken) {
+    return sendError(req, res, 401, 'APP_CHECK_REQUIRED', 'App Check token required');
+  }
+
+  try {
+    const appCheckClaims = await admin.appCheck().verifyToken(appCheckToken);
+    req.appCheckClaims = appCheckClaims;
+    return next();
+  } catch (err) {
+    console.error('App Check verification failed:', err);
+    return sendError(req, res, 401, 'APP_CHECK_INVALID', 'Invalid App Check token');
+  }
+};
+
+// App Check or admin bypass (requires verifyToken before)
+const appCheckOrAdmin = async (req, res, next) => {
+  try {
+    const uid = req.user && req.user.uid;
+    if (uid) {
+      try {
+        const db = admin.firestore();
+        const userDoc = await db.collection('users').doc(uid).get();
+        if (userDoc.exists && userDoc.data().isAdmin === true) {
+          return next();
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return appCheckVerification(req, res, next);
+};
+
 // Simple SSE progress for music generation
 const progressStore = new Map();
 const sseClients = new Map();
@@ -156,40 +191,6 @@ function sendError(req, res, httpStatus, code, message, details) {
   res.status(httpStatus).json(payload);
 }
 
-// App Check verification middleware
-const appCheckVerification = async (req, res, next) => {
-  const appCheckToken = req.header('X-Firebase-AppCheck');
-
-  if (!appCheckToken) {
-    return sendError(req, res, 401, 'APP_CHECK_REQUIRED', 'App Check token required');
-  }
-
-  try {
-    const appCheckClaims = await admin.appCheck().verifyToken(appCheckToken);
-    req.appCheckClaims = appCheckClaims;
-    return next();
-  } catch (err) {
-    console.error('App Check verification failed:', err);
-    return sendError(req, res, 401, 'APP_CHECK_INVALID', 'Invalid App Check token');
-  }
-};
-
-// App Check or admin bypass (requires verifyToken before)
-const appCheckOrAdmin = async (req, res, next) => {
-  try {
-    const uid = req.user && req.user.uid;
-    if (uid) {
-      try {
-        const db = admin.firestore();
-        const userDoc = await db.collection('users').doc(uid).get();
-        if (userDoc.exists && userDoc.data().isAdmin === true) {
-          return next();
-        }
-      } catch (_) {}
-    }
-  } catch (_) {}
-  return appCheckVerification(req, res, next);
-};
 const storage = new Storage();
 const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 
@@ -570,7 +571,7 @@ function createWavPlaceholderAudio(musicPrompt) {
   return buffer;
 }
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 8084;
 app.listen(PORT, () => {
   console.log(`Music composition service listening on port ${PORT}`);
 });
