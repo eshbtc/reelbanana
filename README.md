@@ -24,7 +24,7 @@ ReelBanana is a revolutionary AI-powered storytelling platform that transforms y
 - **Mood Analysis**: AI analyzes your story's emotional tone
 - **Custom Composition**: Generates orchestral scores that match your narrative
 - **Audio Mixing**: Seamlessly blends narration with background music
-- **Live Service**: [Compose Music API](https://compose-music-423229273041.us-central1.run.app)
+- **Live Service**: [Compose Music API](https://reel-banana-compose-music-423229273041.us-central1.run.app)
 
 ### 🎥 **Director-Level Controls**
 - **Camera Movements**: Zoom in, zoom out, pan left, pan right
@@ -73,6 +73,10 @@ ReelBanana is a revolutionary AI-powered storytelling platform that transforms y
   - OpenAPI specs: `docs/api/*.yaml`
   - Overview and usage: `docs/api/README.md`
   - Postman collection and environment: `docs/api/postman/`
+
+## 🧰 Developer Notes
+
+- Large media files are configured for Git LFS. See `docs/LFS_SETUP.md` for setup and optional history migration.
 
 ## 📚 **API Documentation**
 

@@ -27,15 +27,14 @@ export interface ApiConfig {
 // Production configuration (Google Cloud Run services)
 const PRODUCTION_CONFIG: ApiConfig = {
   baseUrls: {
-    upload: 'https://reel-banana-upload-assets-nyckt4dazq-uc.a.run.app',
-    narrate: 'https://reel-banana-narrate-nyckt4dazq-uc.a.run.app',
-    align: 'https://reel-banana-align-captions-nyckt4dazq-uc.a.run.app',
-    render: 'https://reel-banana-render-nyckt4dazq-uc.a.run.app',
-    compose: 'https://reel-banana-compose-music-nyckt4dazq-uc.a.run.app',
-    // Polish service is hosted separately in production
-    polish: 'https://reel-banana-polish-223097908182.us-central1.run.app',
-    apiKey: 'https://reel-banana-api-key-service-nyckt4dazq-uc.a.run.app',
-    stripe: 'https://reel-banana-stripe-service-223097908182.us-central1.run.app',
+    upload: 'https://reel-banana-upload-assets-423229273041.us-central1.run.app',
+    narrate: 'https://reel-banana-narrate-423229273041.us-central1.run.app',
+    align: 'https://reel-banana-align-captions-423229273041.us-central1.run.app',
+    render: 'https://reel-banana-render-423229273041.us-central1.run.app',
+    compose: 'https://reel-banana-compose-music-423229273041.us-central1.run.app',
+    polish: 'https://reel-banana-polish-423229273041.us-central1.run.app',
+    apiKey: 'https://reel-banana-api-key-service-423229273041.us-central1.run.app',
+    stripe: 'https://reel-banana-stripe-service-423229273041.us-central1.run.app',
   },
   firebase: {
     projectId: 'reel-banana-35a54', // Not sensitive
@@ -72,14 +71,14 @@ const DEVELOPMENT_CONFIG: ApiConfig = {
 // AI Studio configuration (for deployment on AI Studio)
 const AI_STUDIO_CONFIG: ApiConfig = {
   baseUrls: {
-    upload: 'https://reel-banana-upload-assets-nyckt4dazq-uc.a.run.app',
-    narrate: 'https://reel-banana-narrate-nyckt4dazq-uc.a.run.app',
-    align: 'https://reel-banana-align-captions-nyckt4dazq-uc.a.run.app',
-    render: 'https://reel-banana-render-nyckt4dazq-uc.a.run.app',
-    compose: 'https://reel-banana-compose-music-nyckt4dazq-uc.a.run.app',
+    upload: 'https://reel-banana-upload-assets-423229273041.us-central1.run.app',
+    narrate: 'https://reel-banana-narrate-423229273041.us-central1.run.app',
+    align: 'https://reel-banana-align-captions-423229273041.us-central1.run.app',
+    render: 'https://reel-banana-render-423229273041.us-central1.run.app',
+    compose: 'https://reel-banana-compose-music-423229273041.us-central1.run.app',
     polish: 'https://reel-banana-polish-423229273041.us-central1.run.app',
-    apiKey: 'https://reel-banana-api-key-service-nyckt4dazq-uc.a.run.app',
-    stripe: 'https://reel-banana-stripe-service-223097908182.us-central1.run.app',
+    apiKey: 'https://reel-banana-api-key-service-423229273041.us-central1.run.app',
+    stripe: 'https://reel-banana-stripe-service-423229273041.us-central1.run.app',
   },
   firebase: {
     projectId: 'reel-banana-35a54',

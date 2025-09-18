@@ -35,6 +35,24 @@ if (!admin.apps.length) {
   });
 }
 
+// App Check verification middleware
+const appCheckVerification = async (req, res, next) => {
+  const appCheckToken = req.header('X-Firebase-AppCheck');
+
+  if (!appCheckToken) {
+    return sendError(req, res, 401, 'APP_CHECK_REQUIRED', 'App Check token required');
+  }
+
+  try {
+    const appCheckClaims = await admin.appCheck().verifyToken(appCheckToken);
+    req.appCheckClaims = appCheckClaims;
+    return next();
+  } catch (err) {
+    console.error('App Check verification failed:', err);
+    return sendError(req, res, 401, 'APP_CHECK_INVALID', 'Invalid App Check token');
+  }
+};
+
 // Simple SSE progress (best-effort)
 const progressStore = new Map();
 const sseClients = new Map();
@@ -108,24 +126,6 @@ function sendError(req, res, httpStatus, code, message, details) {
   payload.requestId = req.requestId || res.getHeader('X-Request-Id');
   res.status(httpStatus).json(payload);
 }
-
-// App Check verification middleware
-const appCheckVerification = async (req, res, next) => {
-  const appCheckToken = req.header('X-Firebase-AppCheck');
-
-  if (!appCheckToken) {
-    return sendError(req, res, 401, 'APP_CHECK_REQUIRED', 'App Check token required');
-  }
-
-  try {
-    const appCheckClaims = await admin.appCheck().verifyToken(appCheckToken);
-    req.appCheckClaims = appCheckClaims;
-    return next();
-  } catch (err) {
-    console.error('App Check verification failed:', err);
-    return sendError(req, res, 401, 'APP_CHECK_INVALID', 'Invalid App Check token');
-  }
-};
 
 // Cache metrics
 const cacheMetrics = { hits: 0, writes: 0 };

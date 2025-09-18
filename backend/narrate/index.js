@@ -37,6 +37,58 @@ if (!admin.apps.length) {
   });
 }
 
+// App Check verification middleware
+const appCheckVerification = async (req, res, next) => {
+  const appCheckToken = req.header('X-Firebase-AppCheck');
+
+  if (!appCheckToken) {
+    return sendError(req, res, 401, 'APP_CHECK_REQUIRED', 'App Check token required');
+  }
+
+  try {
+    const appCheckClaims = await admin.appCheck().verifyToken(appCheckToken);
+    req.appCheckClaims = appCheckClaims;
+    return next();
+  } catch (err) {
+    console.error('App Check verification failed:', err);
+    return sendError(req, res, 401, 'APP_CHECK_INVALID', 'Invalid App Check token');
+  }
+};
+
+// Verify Firebase ID token and attach req.user
+const verifyToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing or invalid authorization header' });
+    }
+    const idToken = authHeader.split('Bearer ')[1];
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    console.error('Token verification failed:', error);
+    return res.status(401).json({ error: 'Invalid authentication token' });
+  }
+};
+
+// App Check or admin bypass (requires verifyToken before)
+const appCheckOrAdmin = async (req, res, next) => {
+  try {
+    const uid = req.user && req.user.uid;
+    if (uid) {
+      try {
+        const db = admin.firestore();
+        const userDoc = await db.collection('users').doc(uid).get();
+        if (userDoc.exists && userDoc.data().isAdmin === true) {
+          return next();
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return appCheckVerification(req, res, next);
+};
+
 // Simple in-memory progress store for SSE (best-effort)
 const progressStore = new Map(); // jobId -> { progress, stage, message, etaSeconds, done, error, ts }
 const sseClients = new Map();    // jobId -> Set(res)
@@ -149,58 +201,6 @@ function sendError(req, res, httpStatus, code, message, details) {
   payload.requestId = req.requestId || res.getHeader('X-Request-Id');
   res.status(httpStatus).json(payload);
 }
-
-// App Check verification middleware
-const appCheckVerification = async (req, res, next) => {
-  const appCheckToken = req.header('X-Firebase-AppCheck');
-
-  if (!appCheckToken) {
-    return sendError(req, res, 401, 'APP_CHECK_REQUIRED', 'App Check token required');
-  }
-
-  try {
-    const appCheckClaims = await admin.appCheck().verifyToken(appCheckToken);
-    req.appCheckClaims = appCheckClaims;
-    return next();
-  } catch (err) {
-    console.error('App Check verification failed:', err);
-    return sendError(req, res, 401, 'APP_CHECK_INVALID', 'Invalid App Check token');
-  }
-};
-
-// Verify Firebase ID token and attach req.user
-const verifyToken = async (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization || '';
-    if (!authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Missing or invalid authorization header' });
-    }
-    const idToken = authHeader.split('Bearer ')[1];
-    const decoded = await admin.auth().verifyIdToken(idToken);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    console.error('Token verification failed:', error);
-    return res.status(401).json({ error: 'Invalid authentication token' });
-  }
-};
-
-// App Check or admin bypass (requires verifyToken before)
-const appCheckOrAdmin = async (req, res, next) => {
-  try {
-    const uid = req.user && req.user.uid;
-    if (uid) {
-      try {
-        const db = admin.firestore();
-        const userDoc = await db.collection('users').doc(uid).get();
-        if (userDoc.exists && userDoc.data().isAdmin === true) {
-          return next();
-        }
-      } catch (_) {}
-    }
-  } catch (_) {}
-  return appCheckVerification(req, res, next);
-};
 
 // --- CLIENT INITIALIZATION ---
 // IMPORTANT: Set ELEVENLABS_API_KEY as an environment variable in your Cloud Run service
