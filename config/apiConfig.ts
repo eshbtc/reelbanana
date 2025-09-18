@@ -91,6 +91,42 @@ const AI_STUDIO_CONFIG: ApiConfig = {
   },
 };
 
+// Optional URL override from environment (recommended to avoid hardcoded drift)
+const envBase = (import.meta as any)?.env || {};
+const ENV_OVERRIDE_CONFIG: ApiConfig | null = (() => {
+  const maybe = {
+    upload: envBase.VITE_BASE_UPLOAD,
+    narrate: envBase.VITE_BASE_NARRATE,
+    align: envBase.VITE_BASE_ALIGN,
+    render: envBase.VITE_BASE_RENDER,
+    compose: envBase.VITE_BASE_COMPOSE,
+    polish: envBase.VITE_BASE_POLISH,
+    apiKey: envBase.VITE_BASE_API_KEY,
+    stripe: envBase.VITE_BASE_STRIPE,
+  } as Record<string, string | undefined>;
+
+  // Require at least one override to activate; allow partial overrides (fall back to PRODUCTION for missing)
+  const hasAny = Object.values(maybe).some(v => typeof v === 'string' && v.startsWith('http'));
+  if (!hasAny) return null;
+
+  const baseUrls = {
+    upload: maybe.upload || PRODUCTION_CONFIG.baseUrls.upload,
+    narrate: maybe.narrate || PRODUCTION_CONFIG.baseUrls.narrate,
+    align: maybe.align || PRODUCTION_CONFIG.baseUrls.align,
+    render: maybe.render || PRODUCTION_CONFIG.baseUrls.render,
+    compose: maybe.compose || PRODUCTION_CONFIG.baseUrls.compose,
+    polish: maybe.polish || PRODUCTION_CONFIG.baseUrls.polish,
+    apiKey: maybe.apiKey || PRODUCTION_CONFIG.baseUrls.apiKey,
+    stripe: maybe.stripe || PRODUCTION_CONFIG.baseUrls.stripe,
+  };
+
+  const cfg: ApiConfig = {
+    baseUrls,
+    firebase: { ...PRODUCTION_CONFIG.firebase },
+  };
+  return cfg;
+})();
+
 // Runtime configuration validation
 const validateConfig = (config: ApiConfig, envName: string): void => {
   const errors: string[] = [];
@@ -132,8 +168,13 @@ const getConfig = (): ApiConfig => {
   let selectedConfig: ApiConfig;
   let envName: string;
   
+  // Highest precedence: explicit URL overrides via env
+  if (ENV_OVERRIDE_CONFIG) {
+    selectedConfig = ENV_OVERRIDE_CONFIG;
+    envName = 'ENV_OVERRIDE';
+  }
   // Production builds (Firebase Hosting, etc.)
-  if (import.meta.env.PROD) {
+  else if (import.meta.env.PROD) {
     selectedConfig = PRODUCTION_CONFIG;
     envName = 'PRODUCTION';
   }
