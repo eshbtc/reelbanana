@@ -5,8 +5,8 @@ const { SpeechClient } = require('@google-cloud/speech');
 const { Storage } = require('@google-cloud/storage');
 const admin = require('firebase-admin');
 const { createHash } = require('crypto');
-const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
-const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
+const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
 const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('../shared/creditService');
 
 const app = express();
@@ -169,7 +169,14 @@ const cacheMetrics = { hits: 0, writes: 0 };
 // --- CLIENT INITIALIZATION ---
 const speechClient = new SpeechClient();
 const storage = new Storage();
-const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
+function resolveBucketName(name) {
+  if (!name) return name;
+  if (name.endsWith('.firebasestorage.app')) {
+    return name.replace(/\.firebasestorage\.app$/, '.appspot.com');
+  }
+  return name;
+}
+const bucketName = resolveBucketName(process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app');
 
 // --- HELPER FUNCTIONS ---
 
@@ -442,6 +449,6 @@ app.post('/cache-clear', appCheckVerification, async (req, res) => {
 
 
 const PORT = process.env.PORT || 8081;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Align-captions service listening on port ${PORT}`);
 });

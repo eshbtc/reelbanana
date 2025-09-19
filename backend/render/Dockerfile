@@ -16,4 +16,7 @@ COPY backend/render/. .
 # Copy shared code for centralized imports (../shared/*)
 COPY backend/shared /app/backend/shared
 
+# Unify shared modules: use central shared for both ../shared and ./shared imports
+RUN rm -rf ./shared && ln -s /app/backend/shared ./shared
+
 CMD ["node", "index.js"]

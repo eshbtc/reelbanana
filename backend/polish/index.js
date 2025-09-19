@@ -3,8 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
 const { Storage } = require('@google-cloud/storage');
-const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
-const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
+const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
 const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('../shared/creditService');
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
@@ -442,6 +442,6 @@ createHealthEndpoints(app, 'polish',
 );
 
 const PORT = process.env.PORT || 8086;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Polish service listening on port ${PORT}`);
 });

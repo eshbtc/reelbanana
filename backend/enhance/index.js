@@ -45,8 +45,15 @@ if (!admin.apps.length) {
 }
 
 const storage = new Storage();
-const inputBucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
-const outputBucketName = process.env.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
+function resolveBucketName(name) {
+  if (!name) return name;
+  if (name.endsWith('.firebasestorage.app')) {
+    return name.replace(/\.firebasestorage\.app$/, '.appspot.com');
+  }
+  return name;
+}
+const inputBucketName = resolveBucketName(process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app');
+const outputBucketName = resolveBucketName(process.env.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app');
 
 // Configure multer for file uploads
 const upload = multer({
@@ -143,8 +150,8 @@ const appCheckVerification = async (req, res, next) => {
 };
 
 // Import shared modules
-const { createHealthEndpoints } = require('./shared/healthCheck');
-const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
+const { createHealthEndpoints } = require('../shared/healthCheck');
+const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
 const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('../shared/creditService');
 
 // Health check endpoints
@@ -580,7 +587,7 @@ app.get('/job-status/:jobId', (req, res) => {
 
 // Start server
 const PORT = process.env.PORT || 8088;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`✨ Enhance service running on port ${PORT}`);
   console.log(`📱 Mobile optimizations enabled`);
   console.log(`🎨 Available presets: ${Object.keys(ENHANCEMENT_MODELS).join(', ')}`);

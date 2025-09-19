@@ -12,6 +12,10 @@ RUN npm install --omit=dev
 # Copy application code
 COPY backend/stripe-service/. .
 
+# Copy central shared modules and unify as ./shared
+COPY backend/shared /app/backend/shared
+RUN rm -rf ./shared && ln -s /app/backend/shared ./shared
+
 # Create non-root user
 RUN groupadd -g 1001 nodejs && useradd -r -u 1001 -g nodejs nodejs
 

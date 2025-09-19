@@ -5,8 +5,8 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const admin = require('firebase-admin');
 const { KeyManagementServiceClient } = require('@google-cloud/kms');
-const { getUserQuotaStatus } = require('./shared/rateLimiter');
-const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
+const { getUserQuotaStatus } = require('../shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
 const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('../shared/creditService');
 
 const app = express();
@@ -429,6 +429,6 @@ createHealthEndpoints(app, 'api-key-service',
   }
 );
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`API Key Service running on port ${PORT}`);
 });

@@ -4,7 +4,7 @@ const cors = require('cors');
 const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
 const Stripe = require('stripe');
 const admin = require('firebase-admin');
-const { createHealthEndpoints } = require('./shared/healthCheck');
+const { createHealthEndpoints } = require('../shared/healthCheck');
 const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('../shared/creditService');
 
 const app = express();
@@ -602,6 +602,6 @@ app.get('/subscription-status', appCheckVerification, async (req, res) => {
 });
 
 const PORT = process.env.PORT || 8087;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Stripe service running on port ${PORT}`);
 });

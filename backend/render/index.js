@@ -9,11 +9,11 @@ const ffmpeg = require('fluent-ffmpeg');
 const fs = require('fs/promises');
 const path = require('path');
 const admin = require('firebase-admin');
-const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
-const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
-const { createSLIMiddleware, SLIMonitor } = require('./shared/sliMonitor');
+const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
+const { createSLIMiddleware, SLIMonitor } = require('../shared/sliMonitor');
 const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('../shared/creditService');
-const { mapPlanIdToTier, getPlanConfig } = require('./shared/planMapper');
+const { mapPlanIdToTier, getPlanConfig } = require('../shared/planMapper');
 
 const app = express();
 
@@ -289,8 +289,15 @@ const appCheckOrAdmin = async (req, res, next) => {
 };
 
 const storage = new Storage();
-const inputBucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
-const outputBucketName = process.env.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
+function resolveBucketName(name) {
+  if (!name) return name;
+  if (name.endsWith('.firebasestorage.app')) {
+    return name.replace(/\.firebasestorage\.app$/, '.appspot.com');
+  }
+  return name;
+}
+const inputBucketName = resolveBucketName(process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app');
+const outputBucketName = resolveBucketName(process.env.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app');
 const renderEngineEnv = (process.env.RENDER_ENGINE || '').toLowerCase();
 const falApiKey = process.env.FAL_RENDER_API_KEY || process.env.FAL_API_KEY || process.env.FAL_KEY || null;
 // Default to LTX Video for cost savings (96% cheaper than Veo3)
@@ -2119,6 +2126,6 @@ app.get('/admin/stats', appCheckVerification, async (req, res) => {
 
 
 const PORT = process.env.PORT || 8082;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Render service listening on port ${PORT}`);
 });

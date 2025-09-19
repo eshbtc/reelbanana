@@ -22,8 +22,8 @@ try {
 const { randomUUID } = require('crypto');
 const { ElevenLabsClient } = require('elevenlabs');
 const { createHash } = require('crypto');
-const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
-const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
+const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
 const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('../shared/creditService');
 
 const app = express();
@@ -224,7 +224,14 @@ function sendError(req, res, httpStatus, code, message, details) {
 }
 
 const storage = new Storage();
-const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
+function resolveBucketName(name) {
+  if (!name) return name;
+  if (name.endsWith('.firebasestorage.app')) {
+    return name.replace(/\.firebasestorage\.app$/, '.appspot.com');
+  }
+  return name;
+}
+const bucketName = resolveBucketName(process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app');
 
 // Initialize ElevenLabs client for music generation
 // Support both dedicated music key and fallback to general key
@@ -1057,6 +1064,6 @@ function createWavPlaceholderAudio(musicPrompt) {
 }
 
 const PORT = process.env.PORT || 8084;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Music composition service listening on port ${PORT}`);
 });

@@ -15,6 +15,10 @@ RUN npm ci --only=production
 # Copy application code
 COPY backend/api-key-service/. .
 
+# Copy central shared modules and unify as ./shared
+COPY backend/shared /app/backend/shared
+RUN rm -rf ./shared && ln -s /app/backend/shared ./shared
+
 # Expose port
 EXPOSE 8085
 

@@ -13,4 +13,8 @@ COPY backend/upload-assets/. .
 # Copy shared code for centralized imports (../shared/*)
 COPY backend/shared /app/backend/shared
 
+# Unify shared modules: use central shared for both ../shared and ./shared imports
+RUN rm -rf ./shared && ln -s /app/backend/shared ./shared
+
+EXPOSE 8083
 CMD ["node", "index.js"]

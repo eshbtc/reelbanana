@@ -7,8 +7,8 @@ const { createHash } = require('crypto');
 const { Storage } = require('@google-cloud/storage');
 // Update ElevenLabs API key - trigger redeployment
 const admin = require('firebase-admin');
-const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
-const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
+const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
 const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('../shared/creditService');
 
 const app = express();
@@ -224,7 +224,14 @@ const elevenlabs = new ElevenLabsClient({
   apiKey: process.env.ELEVENLABS_API_KEY,
 });
 const storage = new Storage();
-const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
+function resolveBucketName(name) {
+  if (!name) return name;
+  if (name.endsWith('.firebasestorage.app')) {
+    return name.replace(/\.firebasestorage\.app$/, '.appspot.com');
+  }
+  return name;
+}
+const bucketName = resolveBucketName(process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app');
 
 // Function to get user's ElevenLabs API key if available
 async function getUserElevenLabsKey(userId) {
@@ -647,6 +654,6 @@ app.post('/cache-clear', appCheckVerification, async (req, res) => {
 // Note: No music generation endpoint is included here as per the latest stable implementation.
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Narration service listening on port ${PORT}`);
 });
