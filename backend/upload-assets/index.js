@@ -4,8 +4,8 @@ const cors = require('cors');
 const { Storage } = require('@google-cloud/storage');
 // Trigger Cloud Run deployment after rendering pipeline fixes
 const admin = require('firebase-admin');
-const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
-const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
+const { createExpensiveOperationLimiter } = require('../shared/rateLimiter');
+const { createHealthEndpoints, commonDependencyChecks } = require('../shared/healthCheck');
 const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('../shared/creditService');
 
 const app = express();
@@ -145,8 +145,17 @@ function sendError(req, res, httpStatus, code, message, details) {
 }
 
 const storage = new Storage();
+// Normalize Firebase public domain to actual GCS bucket name
+function resolveBucketName(name) {
+  if (!name) return name;
+  if (name.endsWith('.firebasestorage.app')) {
+    return name.replace(/\.firebasestorage\.app$/, '.appspot.com');
+  }
+  return name;
+}
 // Use the Firebase Storage bucket for the project
-const bucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
+const rawBucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
+const bucketName = resolveBucketName(rawBucketName);
 
 // Retry utility with exponential backoff
 async function retryWithBackoff(operation, maxRetries = 3, baseDelay = 1000) {
@@ -187,11 +196,15 @@ const validateBucket = async () => {
   }
 };
 
-// Validate bucket on startup
-validateBucket().catch(error => {
-  console.error('Failed to validate bucket on startup:', error);
-  process.exit(1);
-});
+// Validate bucket on startup unless explicitly skipped
+if (process.env.SKIP_BUCKET_VALIDATION !== 'true') {
+  validateBucket().catch(error => {
+    console.error('Failed to validate bucket on startup:', error);
+    process.exit(1);
+  });
+} else {
+  console.warn('SKIP_BUCKET_VALIDATION=true — skipping bucket existence check on startup');
+}
 
 /**
  * POST /upload-image
@@ -323,6 +336,6 @@ createHealthEndpoints(app, 'upload-assets',
 );
 
 const PORT = process.env.PORT || 8083;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Upload-assets service listening on port ${PORT}`);
 });
