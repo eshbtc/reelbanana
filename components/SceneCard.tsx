@@ -47,12 +47,18 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
   const [selectedProps, setSelectedProps] = useState<string[]>(scene.props || []);
   const [selectedCostumes, setSelectedCostumes] = useState<string[]>(scene.costumes || []);
 
-  // Calculate scene cost
+  // Calculate real scene cost using actual API pricing
   const frames = scene.imageUrls?.length || framesPerScene;
-  const sceneCost = calculateSceneCost(scene, frames);
-  const creditPrice = getImageCreditPriceUSD();
-  const estUsdFromCredits = frames * creditPrice;
-  const costTier = getCostTier(estUsdFromCredits);
+  const videoDuration = scene.duration || 8; // Default 8 seconds per scene
+  const sceneCost = calculateSceneCost(scene, frames, videoDuration);
+
+  // Get cost tier for styling
+  const getCostColor = (cost: number) => {
+    if (cost < 0.5) return 'text-green-400';
+    if (cost < 2) return 'text-yellow-400';
+    return 'text-orange-400';
+  };
+  const costTier = { color: getCostColor(sceneCost.total) };
 
   useEffect(() => {
     if (scene.status === 'success' && scene.imageUrls && scene.imageUrls.length > 1) {
@@ -247,9 +253,9 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
           <div className="absolute top-2 left-2 bg-black/60 text-white text-sm font-bold px-3 py-1 rounded-full">
             Scene {index + 1}
           </div>
-          {/* Cost Badge (credits-based) */}
+          {/* Cost Badge (actual API cost) */}
           <div className={`absolute bottom-2 right-2 bg-black/80 text-white text-xs font-bold px-2 py-1 rounded ${costTier.color}`}>
-            {formatUSD(estUsdFromCredits)}
+            ${sceneCost.total.toFixed(2)}
           </div>
         </div>
         <div className="p-4 flex-grow flex flex-col">
@@ -279,23 +285,27 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, index, onDelete, onGenerat
                 <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-700">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold text-gray-400">Estimated Cost</span>
-                    <span className={`text-sm font-bold ${costTier.color}`}>
-                      {formatCost(sceneCost.total)}
+                    <span className={`text-lg font-bold ${costTier.color}`}>
+                      ${sceneCost.total.toFixed(2)}
                     </span>
                   </div>
                   <div className="space-y-1 text-xs text-gray-500">
                     <div className="flex justify-between">
-                      <span>Image Generation (5 frames):</span>
-                      <span>{formatCost(sceneCost.imageGeneration)}</span>
+                      <span>Image Generation ({frames} frames):</span>
+                      <span>${sceneCost.imageGeneration.toFixed(3)}</span>
                     </div>
                     {scene.narration && (
                       <div className="flex justify-between">
                         <span>Narration:</span>
-                        <span>{formatCost(sceneCost.narration)}</span>
+                        <span>${sceneCost.narration.toFixed(3)}</span>
                       </div>
                     )}
+                    <div className="flex justify-between font-semibold">
+                      <span>Video Generation ({videoDuration}s):</span>
+                      <span className="text-orange-400">${sceneCost.videoRendering.toFixed(2)}</span>
+                    </div>
                     <div className="text-[10px] text-gray-600 mt-2">
-                      *Costs are estimates based on token usage
+                      *Costs based on AI model pricing
                     </div>
                   </div>
                 </div>

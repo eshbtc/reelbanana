@@ -24,7 +24,7 @@ ReelBanana is a revolutionary AI-powered storytelling platform that transforms y
 - **Mood Analysis**: AI analyzes your story's emotional tone
 - **Custom Composition**: Generates orchestral scores that match your narrative
 - **Audio Mixing**: Seamlessly blends narration with background music
-- **Live Service**: [Compose Music API](https://reel-banana-compose-music-423229273041.us-central1.run.app)
+- **Live Service**: [Compose Music API](https://reel-banana-compose-music-223097908182.us-central1.run.app)
 
 ### 🎥 **Director-Level Controls**
 - **Camera Movements**: Zoom in, zoom out, pan left, pan right
@@ -59,12 +59,12 @@ ReelBanana is a revolutionary AI-powered storytelling platform that transforms y
 - Public gallery showcase
 
 ### **Backend Services**:
-- **Upload Assets**: [https://reel-banana-upload-assets-423229273041.us-central1.run.app](https://reel-banana-upload-assets-423229273041.us-central1.run.app)
-- **Narrate**: [https://reel-banana-narrate-423229273041.us-central1.run.app](https://reel-banana-narrate-423229273041.us-central1.run.app)
-- **Align Captions**: [https://reel-banana-align-captions-423229273041.us-central1.run.app](https://reel-banana-align-captions-423229273041.us-central1.run.app)
-- **Render**: [https://reel-banana-render-423229273041.us-central1.run.app](https://reel-banana-render-423229273041.us-central1.run.app)
-- **Compose Music**: [https://reel-banana-compose-music-423229273041.us-central1.run.app](https://reel-banana-compose-music-423229273041.us-central1.run.app)
-- **Polish (Fal)**: [https://reel-banana-polish-423229273041.us-central1.run.app](https://reel-banana-polish-423229273041.us-central1.run.app)
+- **Upload Assets**: [https://reel-banana-upload-assets-223097908182.us-central1.run.app](https://reel-banana-upload-assets-223097908182.us-central1.run.app)
+- **Narrate**: [https://reel-banana-narrate-223097908182.us-central1.run.app](https://reel-banana-narrate-223097908182.us-central1.run.app)
+- **Align Captions**: [https://reel-banana-align-captions-223097908182.us-central1.run.app](https://reel-banana-align-captions-223097908182.us-central1.run.app)
+- **Render**: [https://reel-banana-render-223097908182.us-central1.run.app](https://reel-banana-render-223097908182.us-central1.run.app)
+- **Compose Music**: [https://reel-banana-compose-music-223097908182.us-central1.run.app](https://reel-banana-compose-music-223097908182.us-central1.run.app)
+- **Polish (Fal)**: [https://reel-banana-polish-223097908182.us-central1.run.app](https://reel-banana-polish-223097908182.us-central1.run.app)
 - **Share Handler (CF)**: `/share/:id` (Firebase Function)
 
 ## 📖 API Documentation
@@ -88,13 +88,13 @@ ReelBanana is a revolutionary AI-powered storytelling platform that transforms y
 ### **Available Services**
 | Service | Description | OpenAPI Spec | Base URL |
 |---------|-------------|--------------|---------|
-| **Upload Assets** | Image upload to GCS | [📄 YAML](./docs/api/upload-assets.yaml) | https://reel-banana-upload-assets-423229273041.us-central1.run.app |
-| **Narrate** | Text-to-speech narration | [📄 YAML](./docs/api/narrate.yaml) | https://reel-banana-narrate-423229273041.us-central1.run.app |
-| **Align Captions** | Caption synchronization | [📄 YAML](./docs/api/align-captions.yaml) | https://reel-banana-align-captions-423229273041.us-central1.run.app |
-| **Compose Music** | AI music generation | [📄 YAML](./docs/api/compose-music.yaml) | https://reel-banana-compose-music-423229273041.us-central1.run.app |
-| **Render** | Video rendering | [📄 YAML](./docs/api/render.yaml) | https://reel-banana-render-423229273041.us-central1.run.app |
-| **Polish (Fal)** | Video upscale/interp | — | https://reel-banana-polish-423229273041.us-central1.run.app |
-| **API Key Service** | Secure key management | [📄 YAML](./docs/api/api-key-service.yaml) | https://reel-banana-api-key-service-423229273041.us-central1.run.app |
+| **Upload Assets** | Image upload to GCS | [📄 YAML](./docs/api/upload-assets.yaml) | https://reel-banana-upload-assets-223097908182.us-central1.run.app |
+| **Narrate** | Text-to-speech narration | [📄 YAML](./docs/api/narrate.yaml) | https://reel-banana-narrate-223097908182.us-central1.run.app |
+| **Align Captions** | Caption synchronization | [📄 YAML](./docs/api/align-captions.yaml) | https://reel-banana-align-captions-223097908182.us-central1.run.app |
+| **Compose Music** | AI music generation | [📄 YAML](./docs/api/compose-music.yaml) | https://reel-banana-compose-music-223097908182.us-central1.run.app |
+| **Render** | Video rendering | [📄 YAML](./docs/api/render.yaml) | https://reel-banana-render-223097908182.us-central1.run.app |
+| **Polish (Fal)** | Video upscale/interp | — | https://reel-banana-polish-223097908182.us-central1.run.app |
+| **API Key Service** | Secure key management | [📄 YAML](./docs/api/api-key-service.yaml) | https://reel-banana-api-key-service-223097908182.us-central1.run.app |
 
 ### **Quick API Test**
 ```bash

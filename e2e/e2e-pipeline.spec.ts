@@ -10,21 +10,21 @@ type ServiceUrls = {
 };
 
 const PRODUCTION: ServiceUrls = {
-  upload: 'https://reel-banana-upload-assets-423229273041.us-central1.run.app',
-  narrate: 'https://reel-banana-narrate-423229273041.us-central1.run.app',
-  align: 'https://reel-banana-align-captions-423229273041.us-central1.run.app',
-  render: 'https://reel-banana-render-423229273041.us-central1.run.app',
-  compose: 'https://reel-banana-compose-music-423229273041.us-central1.run.app',
-  polish: 'https://reel-banana-polish-423229273041.us-central1.run.app',
+  upload: 'https://reel-banana-upload-assets-223097908182.us-central1.run.app',
+  narrate: 'https://reel-banana-narrate-223097908182.us-central1.run.app',
+  align: 'https://reel-banana-align-captions-223097908182.us-central1.run.app',
+  render: 'https://reel-banana-render-223097908182.us-central1.run.app',
+  compose: 'https://reel-banana-compose-music-223097908182.us-central1.run.app',
+  polish: 'https://reel-banana-polish-223097908182.us-central1.run.app',
 };
 
 const AI_STUDIO: ServiceUrls = {
-  upload: 'https://reel-banana-upload-assets-423229273041.us-central1.run.app',
-  narrate: 'https://reel-banana-narrate-423229273041.us-central1.run.app',
-  align: 'https://reel-banana-align-captions-423229273041.us-central1.run.app',
-  render: 'https://reel-banana-render-423229273041.us-central1.run.app',
-  compose: 'https://reel-banana-compose-music-423229273041.us-central1.run.app',
-  polish: 'https://reel-banana-polish-423229273041.us-central1.run.app',
+  upload: 'https://reel-banana-upload-assets-223097908182.us-central1.run.app',
+  narrate: 'https://reel-banana-narrate-223097908182.us-central1.run.app',
+  align: 'https://reel-banana-align-captions-223097908182.us-central1.run.app',
+  render: 'https://reel-banana-render-223097908182.us-central1.run.app',
+  compose: 'https://reel-banana-compose-music-223097908182.us-central1.run.app',
+  polish: 'https://reel-banana-polish-223097908182.us-central1.run.app',
 };
 
 const DEV: ServiceUrls = {

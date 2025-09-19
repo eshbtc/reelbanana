@@ -1,13 +1,19 @@
 FROM node:20-slim
 
-WORKDIR /usr/src/app
+# Install system deps first (for caching)
+RUN apt-get update && apt-get install -y ffmpeg libass-dev && rm -rf /var/lib/apt/lists/*
 
-COPY package*.json ./
+# Work inside the service directory to preserve relative imports
+WORKDIR /app/backend/render
 
-RUN apt-get update && apt-get install -y ffmpeg libass-dev
-
+# Install dependencies for this service
+COPY backend/render/package*.json ./
 RUN npm install --only=production
 
-COPY . .
+# Copy service code
+COPY backend/render/. .
+
+# Copy shared code for centralized imports (../shared/*)
+COPY backend/shared /app/backend/shared
 
 CMD ["node", "index.js"]

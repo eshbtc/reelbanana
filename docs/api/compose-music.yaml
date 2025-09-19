@@ -3,7 +3,7 @@ info:
   title: ReelBanana Compose Music API
   version: 1.0.0
 servers:
-  - url: https://reel-banana-compose-music-423229273041.us-central1.run.app
+  - url: https://reel-banana-compose-music-223097908182.us-central1.run.app
   - url: http://localhost:8084
 components:
   securitySchemes:
@@ -50,4 +50,3 @@ paths:
         '400': { description: Invalid args, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '401': { description: App Check invalid, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '500': { description: Internal or config error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-

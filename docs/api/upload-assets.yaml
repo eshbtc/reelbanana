@@ -3,7 +3,7 @@ info:
   title: ReelBanana Upload Assets API
   version: 1.0.0
 servers:
-  - url: https://reel-banana-upload-assets-423229273041.us-central1.run.app
+  - url: https://reel-banana-upload-assets-223097908182.us-central1.run.app
     description: Production
   - url: http://localhost:8083
     description: Local
@@ -78,4 +78,3 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-

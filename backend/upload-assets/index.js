@@ -6,19 +6,20 @@ const { Storage } = require('@google-cloud/storage');
 const admin = require('firebase-admin');
 const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
 const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
-const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('./shared/creditService');
+const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('../shared/creditService');
 
 const app = express();
 
-// Trust proxy for Cloud Run (fixes X-Forwarded-For header issue for IP rate limiting)
-app.set('trust proxy', true);
+// Trust the first proxy (Cloud Run/GFE) for correct IPs without being permissive
+app.set('trust proxy', 1);
 
 app.use(express.json({ limit: '10mb' })); // Limit for a single base64 image
 const defaultOrigins = [
   'https://reelbanana.ai',
   'https://reel-banana-35a54.web.app',
   'http://localhost:5173',
-  'http://localhost:3000'
+  'http://localhost:3000',
+  'http://localhost:8080'
 ];
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || defaultOrigins.join(',')).split(',').map(s => s.trim()).filter(Boolean);
 app.use((req, res, next) => {

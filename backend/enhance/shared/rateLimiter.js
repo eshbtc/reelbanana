@@ -47,12 +47,12 @@ async function getUserQuotaLimits(userId, userPlan = null) {
   userPlan = userPlan || 'free';
   const quotas = {
     free: {
-      narrate: { daily: 10, hourly: 3 },
-      align: { daily: 10, hourly: 3 },
-      compose: { daily: 5, hourly: 2 },
-      render: { daily: 5, hourly: 2 },
-      polish: { daily: 2, hourly: 1 },
-      upload: { daily: 50, hourly: 10 }
+      narrate: { daily: 100, hourly: 20 },
+      align: { daily: 100, hourly: 20 },
+      compose: { daily: 50, hourly: 10 },
+      render: { daily: 50, hourly: 10 },
+      polish: { daily: 20, hourly: 5 },
+      upload: { daily: 500, hourly: 50 }
     },
     pro: {
       narrate: { daily: 100, hourly: 20 },
@@ -79,6 +79,11 @@ async function getUserQuotaLimits(userId, userPlan = null) {
  * Check if user has exceeded quota for a specific operation
  */
 async function checkUserQuota(userId, operation) {
+  // DEV_MODE: Disable all quotas for testing
+  if (process.env.DEV_MODE === 'true') {
+    return { allowed: true, remaining: 999999 };
+  }
+  
   if (!userId) return { allowed: true, remaining: 0 };
   
   const now = Date.now();
@@ -158,24 +163,6 @@ function createOperationRateLimiter(operation, options = {}) {
         userId = req.user.uid;
       }
       
-      // Check if user is admin (bypass all rate limits)
-      if (userId) {
-        try {
-          const admin = require('firebase-admin');
-          const db = admin.firestore();
-          const userDoc = await db.collection('users').doc(userId).get();
-          if (userDoc.exists) {
-            const userData = userDoc.data();
-            if (userData.isAdmin === true) {
-              console.log(`Admin user ${userId} bypassing rate limits for ${operation}`);
-              return next(); // Skip rate limiting for admins
-            }
-          }
-        } catch (error) {
-          console.warn('Failed to check admin status, proceeding with rate limiting:', error.message);
-        }
-      }
-      
       // Check user quota
       const quotaCheck = await checkUserQuota(userId, operation);
       
@@ -211,6 +198,11 @@ function createOperationRateLimiter(operation, options = {}) {
  * Create IP-based rate limiter for anonymous users
  */
 function createIPRateLimiter(options = {}) {
+  // DEV_MODE: Disable IP rate limiting for testing
+  if (process.env.DEV_MODE === 'true') {
+    return (req, res, next) => next(); // No-op middleware
+  }
+  
   const {
     windowMs = 15 * 60 * 1000, // 15 minutes
     max = 50, // requests per window
@@ -229,31 +221,8 @@ function createIPRateLimiter(options = {}) {
         requestId: null // Will be set by request middleware
       }
     },
-    // We run behind a single trusted proxy (Cloud Run load balancer).
-    // Express is configured with app.set('trust proxy', 1). Confirm here for ERL safety checks.
-    trustProxy: true,
     standardHeaders: true,
     legacyHeaders: false,
-    skip: async (req) => {
-      // Skip rate limiting for admin users
-      if (req.user && req.user.uid) {
-        try {
-          const admin = require('firebase-admin');
-          const db = admin.firestore();
-          const userDoc = await db.collection('users').doc(req.user.uid).get();
-          if (userDoc.exists) {
-            const userData = userDoc.data();
-            if (userData.isAdmin === true) {
-              console.log(`Admin user ${req.user.uid} bypassing IP rate limits`);
-              return true; // Skip rate limiting
-            }
-          }
-        } catch (error) {
-          console.warn('Failed to check admin status for IP rate limiter:', error.message);
-        }
-      }
-      return false; // Apply rate limiting
-    },
     handler: (req, res) => {
       const payload = {
         code: 'RATE_LIMIT_EXCEEDED',

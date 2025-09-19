@@ -3,7 +3,7 @@ info:
   title: ReelBanana API Key Service
   version: 1.0.0
 servers:
-  - url: https://reel-banana-api-key-service-423229273041.us-central1.run.app
+  - url: https://reel-banana-api-key-service-223097908182.us-central1.run.app
   - url: http://localhost:8085
 components:
   securitySchemes:
@@ -118,4 +118,3 @@ paths:
                   requestId: { type: string }
         '4XX': { description: Client error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '5XX': { description: Server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-

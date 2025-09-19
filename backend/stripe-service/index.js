@@ -5,14 +5,18 @@ const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
 const Stripe = require('stripe');
 const admin = require('firebase-admin');
 const { createHealthEndpoints } = require('./shared/healthCheck');
+const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('../shared/creditService');
 
 const app = express();
+// Trust the first proxy (Cloud Run/GFE) for correct IPs without being permissive
+app.set('trust proxy', 1);
 // Dynamic CORS allowlist; allow no-origin for webhooks/server-to-server
 const defaultOrigins = [
   'https://reel-banana-35a54.web.app',
   'https://reelbanana.ai',
   'http://localhost:3000',
-  'http://localhost:5173'
+  'http://localhost:5173',
+  'http://localhost:8080'
 ];
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || defaultOrigins.join(',')).split(',').map(s => s.trim()).filter(Boolean);
 app.use((req, res, next) => {

@@ -22,6 +22,7 @@ on:
           - api-key-service
           - polish
           - stripe-service
+          - enhance
       environment:
         description: 'Deployment environment'
         required: false
@@ -57,13 +58,13 @@ jobs:
         
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           if [ "${{ github.event.inputs.service }}" = "all" ] || [ -z "${{ github.event.inputs.service }}" ]; then
-            CHANGED_SERVICES="upload-assets narrate align-captions render compose-music api-key-service polish stripe-service"
+            CHANGED_SERVICES="upload-assets narrate align-captions render compose-music api-key-service polish stripe-service enhance"
           else
             CHANGED_SERVICES="${{ github.event.inputs.service }}"
           fi
         else
           # Check which services have changes
-          for service in upload-assets narrate align-captions render compose-music api-key-service polish stripe-service; do
+          for service in upload-assets narrate align-captions render compose-music api-key-service polish stripe-service enhance; do
             if git diff --name-only HEAD~1 HEAD | grep -q "^backend/$service/"; then
               CHANGED_SERVICES="$CHANGED_SERVICES $service"
             fi
@@ -185,7 +186,7 @@ jobs:
             ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
             ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
-            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app"
+            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app,http://localhost:8080"
             ;;
           "narrate")
             PORT=8080
@@ -196,7 +197,7 @@ jobs:
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
             ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
             ENV_FLAGS+=" --set-secrets=ELEVENLABS_API_KEY=ELEVENLABS_API_KEY_VOICE_NEW:latest"
-            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app"
+            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app,http://localhost:8080"
             ;;
           "align-captions")
             PORT=8081
@@ -206,7 +207,7 @@ jobs:
             ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
             ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
-            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app"
+            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app,http://localhost:8080"
             ;;
           "render")
             PORT=8082
@@ -219,20 +220,34 @@ jobs:
             ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
             ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
-            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app"
+            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app,http://localhost:8080"
             ENV_FLAGS+=" --set-secrets=FAL_RENDER_API_KEY=FAL_RENDER_API_KEY:latest"
             ;;
           "compose-music")
             PORT=8084
-            MEMORY="512Mi"
-            CPU="1"
-            ENV_FLAGS="--set-env-vars=GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}"
-            ENV_FLAGS+=" --set-env-vars=INPUT_BUCKET_NAME=${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}"
+            MEMORY="1Gi"
+            CPU="2"
+            ENV_FLAGS="--set-env-vars=INPUT_BUCKET_NAME=${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}"
             ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
             ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
+            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app,http://localhost:8080"
             ENV_FLAGS+=" --set-secrets=ELEVENLABS_MUSIC_API_KEY=ELEVENLABS_MUSIC_API_KEY:latest"
-            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app"
+            ENV_FLAGS+=" --set-env-vars=ELEVENLABS_MUSIC_MAX_RETRIES=3"
+            ENV_FLAGS+=" --set-env-vars=ELEVENLABS_MUSIC_TIMEOUT_MS=120000"
+            ENV_FLAGS+=" --set-env-vars=DEFAULT_MUSIC_DURATION=20"
+            ENV_FLAGS+=" --set-env-vars=DEFAULT_MUSIC_FORMAT=wav"
+            ENV_FLAGS+=" --set-env-vars=DEFAULT_MUSIC_STYLE=cinematic"
+            ENV_FLAGS+=" --set-env-vars=DEFAULT_MUSIC_GENRE=orchestral"
+            ENV_FLAGS+=" --set-env-vars=DEFAULT_MUSIC_VOCALS=instrumental"
+            ENV_FLAGS+=" --set-env-vars=DEFAULT_MUSIC_TEMPO=medium"
+            ENV_FLAGS+=" --set-env-vars=DEFAULT_MUSIC_MOOD=dramatic"
+            ENV_FLAGS+=" --set-env-vars=DEFAULT_MUSIC_INSTRUMENTS=orchestra"
+            ENV_FLAGS+=" --set-env-vars=DEFAULT_MUSIC_KEY=C"
+            ENV_FLAGS+=" --set-env-vars=DEFAULT_MUSIC_TIME_SIGNATURE=4/4"
+            ENV_FLAGS+=" --set-env-vars=DEFAULT_MUSIC_COMPLEXITY=moderate"
+            ENV_FLAGS+=" --set-env-vars=DEFAULT_MUSIC_ENERGY=medium"
+            ENV_FLAGS+=" --set-env-vars=DEFAULT_MUSIC_DENSITY=moderate"
             ;;
           "api-key-service")
             PORT=8085
@@ -242,7 +257,7 @@ jobs:
             ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
             ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
             ENV_FLAGS+=" --set-env-vars=KMS_KEY_RING_ID=projects/reel-banana-35a54/locations/global/keyRings/api-keys"
-            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app"
+            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app,http://localhost:8080"
             ;;
           "polish")
             PORT=8086
@@ -270,11 +285,23 @@ jobs:
             ENV_FLAGS+=" --set-secrets=STRIPE_SECRET_KEY=$STRIPE_SECRET_NAME:latest"
             ENV_FLAGS+=" --set-secrets=STRIPE_PUBLISHABLE_KEY=$STRIPE_PUBLISHABLE_NAME:latest"
             ENV_FLAGS+=" --set-env-vars=STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}"
-            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app"
+            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app,http://localhost:8080"
+            ;;
+          "enhance")
+            PORT=8088
+            MEMORY="1Gi"
+            CPU="2"
+            ENV_FLAGS="--set-env-vars=INPUT_BUCKET_NAME=${{ secrets.INPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}"
+            ENV_FLAGS+=" --set-env-vars=OUTPUT_BUCKET_NAME=${{ secrets.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app' }}"
+            ENV_FLAGS+=" --set-env-vars=DEV_MODE=$DEV_MODE"
+            ENV_FLAGS+=" --set-env-vars=NODE_ENV=$NODE_ENV"
+            ENV_FLAGS+=" --set-env-vars=DISABLE_RATE_LIMITS=$DISABLE_RATE_LIMITS"
+            ENV_FLAGS+=" --set-env-vars=ALLOWED_ORIGINS=https://reelbanana.ai,https://reel-banana-35a54.web.app,http://localhost:8080"
+            ENV_FLAGS+=" --set-secrets=FAL_ENHANCE_API_KEY=FAL_ENHANCE_API_KEY:latest"
             ;;
           *)
             echo "Unknown service: ${{ matrix.service }}"
-            echo "Available services: upload-assets, narrate, align-captions, render, compose-music, api-key-service, polish, stripe-service"
+            echo "Available services: upload-assets, narrate, align-captions, render, compose-music, api-key-service, polish, stripe-service, enhance"
             exit 1
             ;;
         esac
@@ -364,6 +391,26 @@ jobs:
             else
               echo "⚠️  AI configuration may not be properly set up"
             fi
+            echo "🎼 Checking music generation parameters..."
+            if echo "$HEALTH_RESPONSE" | grep -q '"bucket":'; then
+              echo "✅ Storage bucket is configured"
+            else
+              echo "⚠️  Storage bucket may not be configured"
+            fi
+            echo "🎵 Enhanced music generation features available:"
+            echo "  - Style variations (cinematic, electronic, ambient, etc.)"
+            echo "  - Genre selection (orchestral, synth, acoustic, etc.)"
+            echo "  - Vocals control (instrumental, vocals, both)"
+            echo "  - Duration control (10-60 seconds)"
+            echo "  - Format options (WAV, MP3, FLAC)"
+            echo "  - Tempo control (slow, medium, fast, very-fast)"
+            echo "  - Mood selection (happy, sad, energetic, etc.)"
+            echo "  - Instrument selection (orchestra, piano, guitar, etc.)"
+            echo "  - Key selection (C, C#, D, etc.)"
+            echo "  - Time signature (4/4, 3/4, 6/8, etc.)"
+            echo "  - Complexity levels (simple, moderate, complex, very-complex)"
+            echo "  - Energy levels (low, medium, high, very-high)"
+            echo "  - Density control (sparse, moderate, dense, very-dense)"
             ;;
           "polish")
             echo "✨ Checking FAL Polish and API Key Service configuration..."
@@ -438,6 +485,7 @@ jobs:
         API_KEY_URL=$(gcloud run services describe reel-banana-api-key-service --region=$REGION --format="value(status.url)" 2>/dev/null || echo "")
         POLISH_URL=$(gcloud run services describe reel-banana-polish --region=$REGION --format="value(status.url)" 2>/dev/null || echo "")
         STRIPE_URL=$(gcloud run services describe reel-banana-stripe-service --region=$REGION --format="value(status.url)" 2>/dev/null || echo "")
+        ENHANCE_URL=$(gcloud run services describe reel-banana-enhance --region=$REGION --format="value(status.url)" 2>/dev/null || echo "")
         
         echo "upload-url=$UPLOAD_URL" >> $GITHUB_OUTPUT
         echo "narrate-url=$NARRATE_URL" >> $GITHUB_OUTPUT
@@ -447,6 +495,7 @@ jobs:
         echo "api-key-url=$API_KEY_URL" >> $GITHUB_OUTPUT
         echo "polish-url=$POLISH_URL" >> $GITHUB_OUTPUT
         echo "stripe-url=$STRIPE_URL" >> $GITHUB_OUTPUT
+        echo "enhance-url=$ENHANCE_URL" >> $GITHUB_OUTPUT
         
         echo "Service URLs:"
         echo "Upload: $UPLOAD_URL"
@@ -457,6 +506,7 @@ jobs:
         echo "API Key: $API_KEY_URL"
         echo "Polish: $POLISH_URL"
         echo "Stripe: $STRIPE_URL"
+        echo "Enhance: $ENHANCE_URL"
         
     - name: Create deployment summary
       run: |
@@ -471,11 +521,20 @@ jobs:
         echo "- **API Key Service**: ${{ steps.get-urls.outputs.api-key-url }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Polish**: ${{ steps.get-urls.outputs.polish-url }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Stripe Service**: ${{ steps.get-urls.outputs.stripe-url }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Enhance**: ${{ steps.get-urls.outputs.enhance-url }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Enhanced Features:" >> $GITHUB_STEP_SUMMARY
+        echo "- **🎵 Enhanced Music Generation**: Full ElevenLabs Music API integration with 15+ parameters" >> $GITHUB_STEP_SUMMARY
+        echo "- **🎼 Advanced Music Controls**: Style, genre, vocals, duration, format, tempo, mood, instruments, key, time signature, complexity, energy, density" >> $GITHUB_STEP_SUMMARY
+        echo "- **🎨 AI-Powered Prompts**: Dynamic music prompt generation based on narration content and parameters" >> $GITHUB_STEP_SUMMARY
+        echo "- **🔄 Smart Caching**: Parameter-aware caching for efficient music generation" >> $GITHUB_STEP_SUMMARY
+        echo "- **📱 Mobile Optimization**: Enhanced mobile fast path with optimized music settings" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
         echo "1. Update `config/apiConfig.ts` with new URLs if they changed" >> $GITHUB_STEP_SUMMARY
         echo "2. Test all services with health checks" >> $GITHUB_STEP_SUMMARY
-        echo "3. Deploy frontend if needed" >> $GITHUB_STEP_SUMMARY
+        echo "3. Test enhanced music generation with various parameters" >> $GITHUB_STEP_SUMMARY
+        echo "4. Deploy frontend if needed" >> $GITHUB_STEP_SUMMARY
 
   notify:
     name: Notify Deployment Status

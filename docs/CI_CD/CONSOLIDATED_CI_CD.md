@@ -125,7 +125,7 @@ gcloud kms keys create user-api-keys \
 gcloud kms keys add-iam-policy-binding user-api-keys \
   --keyring=api-keys \
   --location=global \
-  --member="serviceAccount:423229273041-compute@developer.gserviceaccount.com" \
+  --member="serviceAccount:223097908182-compute@developer.gserviceaccount.com" \
   --role="roles/cloudkms.cryptoKeyEncrypterDecrypter"
 ```
 
@@ -249,7 +249,7 @@ gcloud run services describe reel-banana-stripe-service --region=us-central1
 ./scripts/monitor-services.sh dependencies
 
 # Check specific service dependencies
-curl -s https://reel-banana-stripe-service-423229273041.us-central1.run.app/health/detailed | jq
+curl -s https://reel-banana-stripe-service-223097908182.us-central1.run.app/health/detailed | jq
 ```
 
 #### Environment Variable Issues

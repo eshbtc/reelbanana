@@ -122,7 +122,11 @@ export function convertFALModel(model: FALModel): VideoModelOption {
     speed = 'standard';
     quality = 'standard';
     cost = 'medium';
-  } else if (model.id.includes('runway') || model.id.includes('ltxv')) {
+  } else if (model.id.includes('ltx') || model.id.includes('ltxv')) {
+    speed = 'fast';
+    quality = 'standard';
+    cost = 'low';  // 96% cheaper than Veo3!
+  } else if (model.id.includes('runway')) {
     speed = 'premium';
     quality = 'high';
     cost = 'high';

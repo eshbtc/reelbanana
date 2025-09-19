@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSE Test - ReelBanana</title>
+    <style>
+        body {
+            font-family: system-ui;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #0a0a0a;
+            color: #e5e5e5;
+        }
+        .test-container {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-left: 10px;
+        }
+        .status.connected { background: #10b981; color: white; }
+        .status.disconnected { background: #ef4444; color: white; }
+        .status.connecting { background: #f59e0b; color: white; }
+        .log-entry {
+            padding: 8px;
+            margin: 4px 0;
+            background: #0a0a0a;
+            border-left: 3px solid #333;
+            font-family: monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+        }
+        .log-entry.event { border-left-color: #10b981; }
+        .log-entry.error { border-left-color: #ef4444; color: #fca5a5; }
+        .log-entry.heartbeat { border-left-color: #6b7280; opacity: 0.5; }
+        button {
+            background: #f59e0b;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            margin-right: 10px;
+        }
+        button:hover { background: #d97706; }
+        button:disabled { background: #6b7280; cursor: not-allowed; }
+        h1 { color: #f59e0b; }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .stat-card {
+            background: #0a0a0a;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .stat-label { font-size: 11px; color: #9ca3af; }
+        .stat-value { font-size: 20px; font-weight: bold; color: #f59e0b; }
+    </style>
+</head>
+<body>
+    <h1>🍌 SSE Connection Test</h1>
+
+    <div class="test-container">
+        <h3>Connection Status <span id="status" class="status disconnected">Disconnected</span></h3>
+
+        <div style="margin: 20px 0;">
+            <button id="connectBtn" onclick="connectSSE()">Connect to SSE</button>
+            <button id="disconnectBtn" onclick="disconnectSSE()" disabled>Disconnect</button>
+            <button onclick="clearLogs()">Clear Logs</button>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-label">Messages Received</div>
+                <div class="stat-value" id="messageCount">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Heartbeats</div>
+                <div class="stat-value" id="heartbeatCount">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Connection Time</div>
+                <div class="stat-value" id="connectionTime">0s</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Data Received</div>
+                <div class="stat-value" id="dataSize">0 KB</div>
+            </div>
+        </div>
+
+        <h4>Event Log</h4>
+        <div id="log" style="max-height: 400px; overflow-y: auto;"></div>
+    </div>
+
+    <script>
+        let eventSource = null;
+        let messageCount = 0;
+        let heartbeatCount = 0;
+        let connectionStartTime = null;
+        let totalDataSize = 0;
+        let connectionTimer = null;
+
+        const API_URL = window.location.hostname === 'localhost'
+            ? 'http://localhost:8082'
+            : 'https://render-223097908182.us-central1.run.app';
+
+        function updateStats() {
+            document.getElementById('messageCount').textContent = messageCount;
+            document.getElementById('heartbeatCount').textContent = heartbeatCount;
+            document.getElementById('dataSize').textContent = (totalDataSize / 1024).toFixed(2) + ' KB';
+
+            if (connectionStartTime) {
+                const seconds = Math.floor((Date.now() - connectionStartTime) / 1000);
+                document.getElementById('connectionTime').textContent = seconds + 's';
+            }
+        }
+
+        function addLog(message, type = 'event') {
+            const log = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toISOString().split('T')[1].split('.')[0]}] ${message}`;
+            log.insertBefore(entry, log.firstChild);
+
+            // Keep only last 100 entries
+            while (log.children.length > 100) {
+                log.removeChild(log.lastChild);
+            }
+        }
+
+        async function connectSSE() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            const status = document.getElementById('status');
+            status.textContent = 'Connecting';
+            status.className = 'status connecting';
+
+            document.getElementById('connectBtn').disabled = true;
+            document.getElementById('disconnectBtn').disabled = false;
+
+            try {
+                // Test with fetch streaming (more reliable on Cloud Run)
+                addLog('Attempting SSE connection via fetch streaming...', 'event');
+
+                const response = await fetch(`${API_URL}/progress-stream`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'text/event-stream',
+                    },
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                connectionStartTime = Date.now();
+                connectionTimer = setInterval(updateStats, 1000);
+
+                status.textContent = 'Connected';
+                status.className = 'status connected';
+                addLog('✅ SSE connection established', 'event');
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    totalDataSize += value.length;
+
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.substring(6);
+                            if (data) {
+                                messageCount++;
+                                try {
+                                    const parsed = JSON.parse(data);
+                                    addLog(`📦 Data: ${JSON.stringify(parsed)}`, 'event');
+                                } catch {
+                                    addLog(`📝 Message: ${data}`, 'event');
+                                }
+                            }
+                        } else if (line.startsWith(':heartbeat')) {
+                            heartbeatCount++;
+                            addLog('💓 Heartbeat received', 'heartbeat');
+                        }
+                    }
+
+                    updateStats();
+                }
+
+                addLog('Stream ended', 'event');
+                disconnectSSE();
+
+            } catch (error) {
+                addLog(`❌ Connection error: ${error.message}`, 'error');
+                status.textContent = 'Error';
+                status.className = 'status disconnected';
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('disconnectBtn').disabled = true;
+
+                if (connectionTimer) {
+                    clearInterval(connectionTimer);
+                    connectionTimer = null;
+                }
+            }
+        }
+
+        function disconnectSSE() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+
+            if (connectionTimer) {
+                clearInterval(connectionTimer);
+                connectionTimer = null;
+            }
+
+            const status = document.getElementById('status');
+            status.textContent = 'Disconnected';
+            status.className = 'status disconnected';
+
+            document.getElementById('connectBtn').disabled = false;
+            document.getElementById('disconnectBtn').disabled = true;
+
+            addLog('🔌 Disconnected from SSE', 'event');
+            updateStats();
+        }
+
+        function clearLogs() {
+            document.getElementById('log').innerHTML = '';
+            messageCount = 0;
+            heartbeatCount = 0;
+            totalDataSize = 0;
+            connectionStartTime = null;
+            updateStats();
+        }
+
+        // Auto-connect on load
+        window.addEventListener('load', () => {
+            addLog('🚀 SSE Test Interface Ready', 'event');
+            addLog(`📍 Target: ${API_URL}/progress-stream`, 'event');
+        });
+    </script>
+</body>
+</html>

@@ -11,6 +11,7 @@ export interface ApiConfig {
     render: string;
     compose: string;
     polish: string;
+    enhance: string;
     apiKey: string;
     stripe: string;
   };
@@ -33,6 +34,7 @@ const PRODUCTION_CONFIG: ApiConfig = {
     render: 'https://reel-banana-render-223097908182.us-central1.run.app',
     compose: 'https://reel-banana-compose-music-223097908182.us-central1.run.app',
     polish: 'https://reel-banana-polish-223097908182.us-central1.run.app',
+    enhance: 'https://reel-banana-enhance-223097908182.us-central1.run.app',
     apiKey: 'https://reel-banana-api-key-service-223097908182.us-central1.run.app',
     stripe: 'https://reel-banana-stripe-service-223097908182.us-central1.run.app',
   },
@@ -55,6 +57,7 @@ const DEVELOPMENT_CONFIG: ApiConfig = {
     render: 'http://localhost:8082',
     compose: 'http://localhost:8084',
     polish: 'http://localhost:8086',
+    enhance: 'http://localhost:8088',
     apiKey: 'http://localhost:8085',
     stripe: 'http://localhost:8087',
   },
@@ -77,6 +80,7 @@ const AI_STUDIO_CONFIG: ApiConfig = {
     render: 'https://reel-banana-render-223097908182.us-central1.run.app',
     compose: 'https://reel-banana-compose-music-223097908182.us-central1.run.app',
     polish: 'https://reel-banana-polish-223097908182.us-central1.run.app',
+    enhance: 'https://reel-banana-enhance-223097908182.us-central1.run.app',
     apiKey: 'https://reel-banana-api-key-service-223097908182.us-central1.run.app',
     stripe: 'https://reel-banana-stripe-service-223097908182.us-central1.run.app',
   },
@@ -100,6 +104,7 @@ const ENV_OVERRIDE_CONFIG: ApiConfig | null = (() => {
     render: envBase.VITE_BASE_RENDER,
     compose: envBase.VITE_BASE_COMPOSE,
     polish: envBase.VITE_BASE_POLISH,
+    enhance: envBase.VITE_BASE_ENHANCE,
     apiKey: envBase.VITE_BASE_API_KEY,
     stripe: envBase.VITE_BASE_STRIPE,
   } as Record<string, string | undefined>;
@@ -115,6 +120,7 @@ const ENV_OVERRIDE_CONFIG: ApiConfig | null = (() => {
     render: maybe.render || PRODUCTION_CONFIG.baseUrls.render,
     compose: maybe.compose || PRODUCTION_CONFIG.baseUrls.compose,
     polish: maybe.polish || PRODUCTION_CONFIG.baseUrls.polish,
+    enhance: maybe.enhance || PRODUCTION_CONFIG.baseUrls.enhance,
     apiKey: maybe.apiKey || PRODUCTION_CONFIG.baseUrls.apiKey,
     stripe: maybe.stripe || PRODUCTION_CONFIG.baseUrls.stripe,
   };
@@ -231,6 +237,11 @@ export const API_ENDPOINTS = {
   generateClip: `${apiConfig.baseUrls.render}/generate-clip`,
   compose: `${apiConfig.baseUrls.compose}/compose-music`,
   polish: `${apiConfig.baseUrls.polish}/polish`,
+  enhance: {
+    enhanceVideo: `${apiConfig.baseUrls.enhance}/enhance-video`,
+    progressStream: `${apiConfig.baseUrls.enhance}/progress-stream`,
+    jobStatus: `${apiConfig.baseUrls.enhance}/job-status`,
+  },
   playbackTracking: `${apiConfig.baseUrls.render}/playback-tracking`,
   signedClips: `${apiConfig.baseUrls.render}/signed-clips`,
   sliDashboard: `${apiConfig.baseUrls.render}/sli-dashboard`,

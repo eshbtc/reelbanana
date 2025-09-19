@@ -501,9 +501,9 @@ firebase deploy --only hosting
 
 ```bash
 # Check all services
-curl https://reel-banana-narrate-423229273041.us-central1.run.app/health
-curl https://reel-banana-render-423229273041.us-central1.run.app/health
-curl https://reel-banana-stripe-service-423229273041.us-central1.run.app/health
+curl https://reel-banana-narrate-223097908182.us-central1.run.app/health
+curl https://reel-banana-render-223097908182.us-central1.run.app/health
+curl https://reel-banana-stripe-service-223097908182.us-central1.run.app/health
 ```
 
 ## Troubleshooting

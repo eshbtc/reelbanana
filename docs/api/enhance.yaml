@@ -1,0 +1,252 @@
+openapi: 3.0.0
+info:
+  title: ReelBanana Enhance Service API
+  description: Video enhancement and transformation service using AI models
+  version: 1.0.0
+servers:
+  - url: http://localhost:8088
+    description: Development server
+  - url: https://reel-banana-enhance-223097908182.us-central1.run.app
+    description: Production server
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                    example: enhance
+
+  /enhance-video:
+    post:
+      summary: Enhance or transform a video using AI
+      tags:
+        - Enhancement
+      security:
+        - bearerAuth: []
+        - appCheck: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                videoUrl:
+                  type: string
+                  description: URL of the video to enhance
+                  example: https://example.com/video.mp4
+                gsUrl:
+                  type: string
+                  description: Google Cloud Storage URL
+                  example: gs://bucket/path/video.mp4
+                preset:
+                  type: string
+                  enum:
+                    - style-cinematic
+                    - style-anime
+                    - style-cartoon
+                    - enhance-quality
+                    - enhance-face
+                    - remove-background
+                    - stabilize
+                  description: Enhancement preset to apply
+                operations:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - style
+                      - enhance
+                      - stabilize
+                      - face
+                      - background
+                  description: List of operations to apply
+                callbackUrl:
+                  type: string
+                  description: Webhook URL for completion notification
+                projectId:
+                  type: string
+                  description: Project identifier
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                video:
+                  type: string
+                  format: binary
+                  description: Video file to upload
+                preset:
+                  type: string
+                  description: Enhancement preset
+                operations:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Enhancement job started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                    example: enhance_1234567890_abc12345
+                  status:
+                    type: string
+                    example: processing
+                  message:
+                    type: string
+                    example: Enhancement job started
+                  progressUrl:
+                    type: string
+                    example: /progress-stream?jobId=enhance_1234567890_abc12345
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient credits or invalid App Check
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /progress-stream:
+    get:
+      summary: Server-sent events for job progress
+      tags:
+        - Progress
+      parameters:
+        - name: jobId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Job identifier
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: |
+                  data: {"jobId":"enhance_123","progress":50,"stage":"enhancing","message":"Applying style-cinematic..."}
+        '400':
+          description: Missing jobId
+
+  /job-status/{jobId}:
+    get:
+      summary: Get current job status
+      tags:
+        - Progress
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Job identifier
+      responses:
+        '200':
+          description: Job status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                  progress:
+                    type: number
+                    minimum: 0
+                    maximum: 100
+                  stage:
+                    type: string
+                    enum:
+                      - initializing
+                      - uploading
+                      - analyzing
+                      - enhancing
+                      - saving
+                      - completed
+                      - error
+                  message:
+                    type: string
+                  enhancedUrl:
+                    type: string
+                    description: URL of enhanced video (when completed)
+                  error:
+                    type: boolean
+                  done:
+                    type: boolean
+        '404':
+          description: Job not found
+
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+          example: INVALID_ARGUMENT
+        message:
+          type: string
+          example: Missing required fields
+        requestId:
+          type: string
+          example: abc-123-def
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Firebase ID token
+    appCheck:
+      type: apiKey
+      in: header
+      name: X-Firebase-AppCheck
+      description: Firebase App Check token
+
+tags:
+  - name: Enhancement
+    description: Video enhancement operations
+  - name: Progress
+    description: Job progress tracking
+  - name: Health
+    description: Service health checks
+
+x-credits:
+  videoEnhancement: 8
+  description: Each enhancement operation costs 8 credits

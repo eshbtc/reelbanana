@@ -1,8 +1,17 @@
 FROM node:20-slim
-WORKDIR /app
-COPY package.json package-lock.json* ./
+
+# Work inside the service directory to preserve relative imports
+WORKDIR /app/backend/polish
+
+# Install dependencies for this service
+COPY backend/polish/package.json backend/polish/package-lock.json* ./
 RUN npm ci --omit=dev || npm i --omit=dev
-COPY . .
+
+# Copy service code
+COPY backend/polish/. .
+
+# Copy shared code for centralized imports (../shared/*)
+COPY backend/shared /app/backend/shared
+
 EXPOSE 8086
 CMD ["npm","start"]
-

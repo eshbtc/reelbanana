@@ -46,6 +46,14 @@ export interface ProjectData {
     videoUrlOriginal?: string;
     videoUrlPolished?: string;
     videoGeneratedAt?: any; // Firestore timestamp
+    // Enhanced video URLs with presets
+    enhancedVideos?: {
+        [preset: string]: {
+            url: string;
+            preset: string;
+            enhancedAt: any; // Firestore timestamp
+        };
+    };
 }
 
 /**
@@ -701,6 +709,66 @@ export const publishMovie = async (movie: Omit<PublicMovie, 'createdAt'>): Promi
         console.error('🎬 publishMovie: Error publishing movie:', error);
         // Non-fatal for user flow
         throw error;
+    }
+};
+
+/**
+ * Save an enhanced video URL to a project
+ * @param projectId The project ID
+ * @param preset The enhancement preset used
+ * @param videoUrl The enhanced video URL
+ */
+export const saveEnhancedVideo = async (
+    projectId: string,
+    preset: string,
+    videoUrl: string
+): Promise<void> => {
+    try {
+        const currentUser = getCurrentUser();
+        if (!currentUser) {
+            throw new Error("User must be authenticated to save enhanced videos");
+        }
+
+        const docRef = doc(db, PROJECTS_COLLECTION, projectId);
+
+        // Create the enhanced video entry
+        const enhancedVideoData = {
+            [`enhancedVideos.${preset}`]: {
+                url: videoUrl,
+                preset: preset,
+                enhancedAt: serverTimestamp()
+            }
+        };
+
+        await updateDoc(docRef, enhancedVideoData);
+        console.log(`Enhanced video saved for project ${projectId} with preset ${preset}`);
+    } catch (error) {
+        console.error("Error saving enhanced video:", error);
+        throw new Error("Could not save enhanced video.");
+    }
+};
+
+/**
+ * Get all enhanced videos for a project
+ * @param projectId The project ID
+ * @returns Map of preset to enhanced video data
+ */
+export const getEnhancedVideos = async (
+    projectId: string
+): Promise<{ [preset: string]: { url: string; preset: string; enhancedAt: any } } | null> => {
+    try {
+        const docRef = doc(db, PROJECTS_COLLECTION, projectId);
+        const docSnap = await getDoc(docRef);
+
+        if (!docSnap.exists()) {
+            return null;
+        }
+
+        const data = docSnap.data() as ProjectData;
+        return data.enhancedVideos || null;
+    } catch (error) {
+        console.error("Error getting enhanced videos:", error);
+        return null;
     }
 };
 

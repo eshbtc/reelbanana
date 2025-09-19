@@ -1,16 +1,18 @@
-FROM node:20-slim
+FROM node:20-alpine
 
 # Work inside the service directory to preserve relative imports
-WORKDIR /app/backend/upload-assets
+WORKDIR /app/backend/enhance
 
-# Install dependencies for this service
-COPY backend/upload-assets/package*.json ./
-RUN npm install --only=production
+# Install dependencies for this service only
+COPY backend/enhance/package*.json ./
+RUN npm ci --only=production
 
 # Copy service code
-COPY backend/upload-assets/. .
+COPY backend/enhance/. .
 
 # Copy shared code for centralized imports (../shared/*)
 COPY backend/shared /app/backend/shared
+
+EXPOSE 8088
 
 CMD ["node", "index.js"]

@@ -2,9 +2,10 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useToast } from './ToastProvider';
 import { Scene } from '../types';
-import { publishMovie } from '../services/firebaseService';
+import { publishMovie, saveEnhancedVideo } from '../services/firebaseService';
 import { API_ENDPOINTS, apiCall } from '../config/apiConfig';
 import { trackPlayback, markPublished } from '../services/pipelineService';
+import { enhanceVideo, subscribeToEnhanceProgress, ENHANCE_PRESETS, type EnhancePreset } from '../services/enhanceService';
 
 interface MoviePlayerProps {
   scenes: Scene[];
@@ -27,6 +28,12 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
   const [published, setPublished] = useState(false);
   const [usePolished, setUsePolished] = useState<boolean>(true);
   const [playbackTracked, setPlaybackTracked] = useState(false);
+  const [showEnhanceModal, setShowEnhanceModal] = useState(false);
+  const [enhancing, setEnhancing] = useState(false);
+  const [enhanceProgress, setEnhanceProgress] = useState(0);
+  const [enhanceMessage, setEnhanceMessage] = useState('');
+  const [selectedEnhancement, setSelectedEnhancement] = useState<EnhancePreset>('style-cinematic');
+  const [enhancedUrl, setEnhancedUrl] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const normalizeToGcs = (url?: string | null): string => {
     if (!url) return '';
@@ -287,6 +294,71 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
       setPublishing(false);
     }
   };
+
+  const handleEnhance = async () => {
+    const currentVideoUrl = srcUrl;
+    if (!currentVideoUrl || !projectId) {
+      toast.error('No video available to enhance');
+      return;
+    }
+
+    setEnhancing(true);
+    setEnhanceProgress(0);
+    setEnhanceMessage('Initializing enhancement...');
+
+    try {
+      // Start enhancement job
+      const response = await enhanceVideo({
+        videoUrl: currentVideoUrl,
+        projectId: projectId,
+        preset: selectedEnhancement
+      });
+
+      // Subscribe to progress updates
+      const unsubscribe = subscribeToEnhanceProgress(
+        response.jobId,
+        (progress) => {
+          setEnhanceProgress(progress.progress);
+          setEnhanceMessage(progress.message);
+
+          if (progress.done && progress.enhancedUrl) {
+            setEnhancedUrl(progress.enhancedUrl);
+
+            // Save enhanced video URL to project
+            if (projectId) {
+              saveEnhancedVideo(projectId, selectedEnhancement, progress.enhancedUrl)
+                .then(() => {
+                  console.log('Enhanced video URL saved to project');
+                })
+                .catch(error => {
+                  console.error('Failed to save enhanced video URL:', error);
+                });
+            }
+
+            setShowEnhanceModal(false);
+            toast.success('Video enhanced successfully!');
+            unsubscribe();
+          }
+
+          if (progress.error) {
+            toast.error('Enhancement failed');
+            setShowEnhanceModal(false);
+            unsubscribe();
+          }
+        },
+        (error) => {
+          toast.error(`Enhancement error: ${error.message}`);
+          setShowEnhanceModal(false);
+        }
+      );
+    } catch (error: any) {
+      toast.error(`Failed to enhance video: ${error.message}`);
+      setShowEnhanceModal(false);
+    } finally {
+      setEnhancing(false);
+    }
+  };
+
   return (
     <div className="flex flex-col items-center">
       <div className="w-full max-w-4xl">
@@ -483,6 +555,15 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
               Publish to Gallery
             </button>
           )}
+          {(videoUrl || polishedUrl || originalUrl) && (
+            <button
+              onClick={() => setShowEnhanceModal(true)}
+              className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-8 rounded-lg transition-colors text-lg flex items-center gap-2"
+            >
+              <span>✨</span>
+              Enhance Video
+            </button>
+          )}
         </div>
       </div>
       
@@ -584,6 +665,91 @@ const MoviePlayer: React.FC<MoviePlayerProps> = ({ scenes, videoUrl, originalUrl
                 {publishing ? 'Publishing...' : 'Publish'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enhance Modal */}
+      {showEnhanceModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+          <div className="bg-gray-800 rounded-lg p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold text-white mb-4">Enhance Your Video</h3>
+
+            {!enhancing ? (
+              <>
+                <p className="text-gray-300 mb-4">
+                  Choose an enhancement style to transform your video:
+                </p>
+
+                <div className="grid grid-cols-1 gap-3 mb-6">
+                  {Object.entries(ENHANCE_PRESETS).map(([key, preset]) => (
+                    <button
+                      key={key}
+                      onClick={() => setSelectedEnhancement(key as EnhancePreset)}
+                      className={`p-4 rounded-lg border-2 transition-all text-left ${
+                        selectedEnhancement === key
+                          ? 'border-purple-500 bg-purple-500/20'
+                          : 'border-gray-600 hover:border-gray-500 bg-gray-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{preset.icon}</span>
+                        <div>
+                          <div className="text-white font-semibold">{preset.name}</div>
+                          <div className="text-sm text-gray-400">{preset.description}</div>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowEnhanceModal(false)}
+                    className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-2 rounded transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleEnhance}
+                    className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded transition-colors"
+                  >
+                    Start Enhancement
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="animate-spin h-5 w-5 border-2 border-purple-500 border-t-transparent rounded-full"></div>
+                    <span className="text-white">Enhancing video...</span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
+                    <div
+                      className="bg-purple-500 h-full transition-all duration-300"
+                      style={{ width: `${enhanceProgress}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-sm text-gray-400 mt-2">{enhanceMessage}</p>
+                </div>
+              </>
+            )}
+
+            {enhancedUrl && (
+              <div className="mt-4 p-3 bg-green-900/30 border border-green-600 rounded-lg">
+                <p className="text-green-400 text-sm">✅ Video enhanced successfully!</p>
+                <button
+                  onClick={() => {
+                    // Update the video URL to use the enhanced version
+                    window.location.reload();
+                  }}
+                  className="mt-2 w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded transition-colors"
+                >
+                  View Enhanced Video
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

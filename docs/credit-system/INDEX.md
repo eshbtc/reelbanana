@@ -143,7 +143,7 @@ The credit system is **100% production-ready** with:
 node scripts/test-credit-system.js
 
 # Check service health
-curl https://reel-banana-narrate-423229273041.us-central1.run.app/health
+curl https://reel-banana-narrate-223097908182.us-central1.run.app/health
 ```
 
 ### Deployment

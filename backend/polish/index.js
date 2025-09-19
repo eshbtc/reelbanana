@@ -5,20 +5,21 @@ const admin = require('firebase-admin');
 const { Storage } = require('@google-cloud/storage');
 const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
 const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
-const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('./shared/creditService');
+const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('../shared/creditService');
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 const app = express();
 
-// Trust proxy for Cloud Run (fixes X-Forwarded-For header issue for IP rate limiting)
-app.set('trust proxy', true);
+// Trust the first proxy (Cloud Run/GFE) for correct IPs without being permissive
+app.set('trust proxy', 1);
 
 app.use(express.json());
 const defaultOrigins = [
   'https://reelbanana.ai',
   'https://reel-banana-35a54.web.app',
   'http://localhost:5173',
-  'http://localhost:3000'
+  'http://localhost:3000',
+  'http://localhost:8080'
 ];
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || defaultOrigins.join(',')).split(',').map(s => s.trim()).filter(Boolean);
 app.use((req, res, next) => {
@@ -114,6 +115,23 @@ const appCheckVerification = async (req, res, next) => {
   }
 };
 
+// Verify Firebase ID token and attach req.user
+const verifyToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    const idToken = authHeader.split('Bearer ')[1];
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    console.error('ID token verification failed:', error);
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+};
+
 /**
  * POST /polish
  * Request: { projectId: string, videoUrl: string }
@@ -123,7 +141,8 @@ app.post('/polish',
   requireCredits('proPolish'),
   deductCreditsAfter('proPolish'),
   ...createExpensiveOperationLimiter('polish'), 
-  appCheckVerification, 
+  appCheckVerification,
+  verifyToken,
   async (req, res) => {
   const { projectId, videoUrl, userId } = req.body || {};
   if (!projectId || !videoUrl) {
@@ -137,7 +156,7 @@ app.post('/polish',
     // First, try to get customer's FAL API key
     if (userId) {
       try {
-        const apiKeyServiceUrl = process.env.API_KEY_SERVICE_URL || 'https://reel-banana-api-key-service-423229273041.us-central1.run.app';
+        const apiKeyServiceUrl = process.env.API_KEY_SERVICE_URL || 'https://reel-banana-api-key-service-223097908182.us-central1.run.app';
         const response = await fetch(`${apiKeyServiceUrl}/get-api-key`, {
           method: 'POST',
           headers: {

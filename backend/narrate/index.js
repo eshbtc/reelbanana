@@ -9,12 +9,12 @@ const { Storage } = require('@google-cloud/storage');
 const admin = require('firebase-admin');
 const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
 const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
-const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('./shared/creditService');
+const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('../shared/creditService');
 
 const app = express();
 
-// Trust proxy for Cloud Run (fixes X-Forwarded-For header issue for IP rate limiting)
-app.set('trust proxy', true);
+// Trust the first proxy (Cloud Run/GFE) for correct IPs without being permissive
+app.set('trust proxy', 1);
 
 app.use(express.json());
 // Dynamic CORS allowlist
@@ -22,7 +22,8 @@ const defaultOrigins = [
   'https://reelbanana.ai',
   'https://reel-banana-35a54.web.app',
   'http://localhost:5173',
-  'http://localhost:3000'
+  'http://localhost:3000',
+  'http://localhost:8080'
 ];
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || defaultOrigins.join(',')).split(',').map(s => s.trim()).filter(Boolean);
 app.use((req, res, next) => {
@@ -327,7 +328,7 @@ app.post('/narrate',
   ...createExpensiveOperationLimiter('narrate'), 
   appCheckOrAdmin, 
   async (req, res) => {
-  const { projectId, narrationScript, emotion, jobId: providedJobId } = req.body;
+  const { projectId, narrationScript, emotion, voiceId, jobId: providedJobId } = req.body;
   const jobId = (providedJobId && String(providedJobId)) || `narrate-${projectId}-${Date.now()}`;
 
   if (!projectId || !narrationScript) {
@@ -382,8 +383,9 @@ app.post('/narrate',
     }
 
     // Global content-addressable cache (cross-project: exact then normalized)
-    const exactId = ttsCacheKey({ text: narrationScript, voiceId: '21m00Tcm4TlvDq8ikWAM', emotion, normalized: false });
-    const normId  = ttsCacheKey({ text: narrationScript, voiceId: '21m00Tcm4TlvDq8ikWAM', emotion, normalized: true });
+    const selectedVoiceId = voiceId || '21m00Tcm4TlvDq8ikWAM'; // Default to Rachel if not provided
+    const exactId = ttsCacheKey({ text: narrationScript, voiceId: selectedVoiceId, emotion, normalized: false });
+    const normId  = ttsCacheKey({ text: narrationScript, voiceId: selectedVoiceId, emotion, normalized: true });
     const exactFile = bucket.file(`cache/narrate/exact/${exactId}.mp3`);
     const normFile  = bucket.file(`cache/narrate/norm/${normId}.mp3`);
     const [[exactExists],[normExists]] = await Promise.all([exactFile.exists(), normFile.exists()]);
@@ -407,10 +409,10 @@ app.post('/narrate',
     const voice_settings = settingsByEmotion[(emotion || 'neutral')] || settingsByEmotion.neutral;
 
     // 1. Generate audio stream from ElevenLabs using direct API call
-    console.log(`Starting ElevenLabs TTS for ${projectId}, text length: ${narrationScript.length} chars`);
-    pushProgress(jobId, { progress: 10, stage: 'narrating', message: 'Calling TTS provider…' });
+    console.log(`Starting ElevenLabs TTS for ${projectId}, text length: ${narrationScript.length} chars, voice: ${selectedVoiceId}`);
+    pushProgress(jobId, { progress: 10, stage: 'narrating', message: `Calling TTS provider with voice ${selectedVoiceId}…` });
     
-    let response = await fetch('https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM', {
+    let response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${selectedVoiceId}`, {
       method: 'POST',
       headers: {
         'Accept': 'audio/mpeg',
@@ -429,7 +431,7 @@ app.post('/narrate',
     // If user key fails with 401/403, fallback to platform key
     if (!response.ok && (response.status === 401 || response.status === 403) && userElevenLabsKey && process.env.ELEVENLABS_API_KEY) {
       console.warn(`User ElevenLabs key failed (${response.status}), falling back to platform key`);
-      response = await fetch('https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM', {
+      response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${selectedVoiceId}`, {
         method: 'POST',
         headers: {
           'Accept': 'audio/mpeg',
@@ -455,41 +457,92 @@ app.post('/narrate',
 
     console.log(`ElevenLabs TTS stream created successfully for ${projectId}`);
 
-    // 2. Stream the audio directly to Google Cloud Storage with retry logic
-    // Reuse the bucket, fileName, and file variables from the exists check above
+    // Read the response once into a Buffer so retries don't reuse a locked stream
+    // (ReadableStreams can only be consumed once)
+    const audioArrayBuffer = await response.arrayBuffer();
+    const audioBuffer = Buffer.from(audioArrayBuffer);
+
+    // Optional: spool to ephemeral disk (/tmp) when audio size exceeds threshold
+    // This keeps memory stable under concurrency. Cloud Run allows writing to /tmp.
+    const bytesToMB = (n) => Math.round((n / (1024 * 1024)) * 100) / 100;
+    const thresholdMB = parseInt(process.env.NARRATE_SPOOL_THRESHOLD_MB || '8', 10); // default 8MB
+    const audioSizeMB = bytesToMB(audioBuffer.length);
+    let tmpPath = null;
+    try {
+      if (audioSizeMB >= thresholdMB) {
+        const os = require('os');
+        const path = require('path');
+        const fsp = require('fs/promises');
+        tmpPath = path.join(os.tmpdir(), `narrate_${projectId}_${Date.now()}.mp3`);
+        await fsp.writeFile(tmpPath, audioBuffer);
+        console.log(`Spooling narration to disk: ${tmpPath} (${audioSizeMB} MB)`);
+      }
+    } catch (e) {
+      console.warn('Failed to spool narration to disk; falling back to in-memory buffer:', e?.message || e);
+      tmpPath = null;
+    }
+
+    // 2. Upload audio to GCS with retry logic
+    const sizeBytes = tmpPath
+      ? (() => { try { return require('fs').statSync(tmpPath).size; } catch { return audioBuffer.length; } })()
+      : audioBuffer.length;
+    const saveThresholdMB = parseInt(process.env.NARRATE_FILE_SAVE_THRESHOLD_MB || '16', 10);
+    const preferFileSave = sizeBytes <= saveThresholdMB * 1024 * 1024;
+    console.log(`[NARRATE] Upload method=${preferFileSave ? 'file.save' : 'stream'} size=${sizeBytes} bytes tmp=${!!tmpPath} bucket=${bucketName} object=${fileName}`);
+
     await retryWithBackoff(async () => {
-      return new Promise((resolve, reject) => {
-        const writeStream = file.createWriteStream({
-          metadata: { contentType: 'audio/mpeg' },
+      const t0 = Date.now();
+      if (preferFileSave) {
+        // Simple buffered upload (robust for small files)
+        const payload = tmpPath ? await require('fs/promises').readFile(tmpPath) : audioBuffer;
+        await file.save(payload, { metadata: { contentType: 'audio/mpeg' } });
+        const dt = Date.now() - t0;
+        console.log(`[NARRATE] file.save completed in ${dt} ms (${sizeBytes} bytes)`);
+        try { pushProgress(jobId, { progress: 90, stage: 'narrating', message: 'Uploaded to storage' }); } catch {}
+        return;
+      }
+      // Streaming path with progress (for larger files)
+      await new Promise((resolve, reject) => {
+        const writeStream = file.createWriteStream({ metadata: { contentType: 'audio/mpeg' } });
+        const { Readable } = require('stream');
+        const fs = require('fs');
+        const audioStream = tmpPath ? fs.createReadStream(tmpPath) : Readable.from(audioBuffer);
+
+        let written = 0;
+        const total = sizeBytes || 1;
+        const logEveryBytes = Math.max(256 * 1024, Math.floor(total / 10)); // ~10% or 256KB
+
+        audioStream.on('data', (chunk) => {
+          written += chunk.length;
+          if (written % logEveryBytes < chunk.length) {
+            const pct = Math.min(100, Math.round((written / total) * 100));
+            console.log(`[NARRATE] streaming progress ${written}/${total} (${pct}%)`);
+            try { pushProgress(jobId, { progress: Math.min(95, 60 + Math.round((written / total) * 35)), stage: 'narrating', message: `Uploading audio… ${pct}%` }); } catch {}
+          }
         });
 
-        // Convert fetch ReadableStream to Node.js stream and pipe to GCS
-        const { Readable } = require('stream');
-        const audioStream = Readable.fromWeb(response.body);
-        
-        // Add error handling to the audio stream
-        audioStream.on('error', (streamError) => {
-          console.error(`ElevenLabs audio stream error for ${projectId}:`, streamError);
-          writeStream.destroy(streamError);
-          reject(streamError);
+        audioStream.on('error', (err) => {
+          console.error(`[NARRATE] audio stream error: ${err?.message || err}`);
+          writeStream.destroy(err);
+          reject(err);
         });
-        
-        writeStream.on('error', (writeError) => {
-          console.error(`GCS write error for ${projectId}:`, writeError);
-          reject(writeError);
+        writeStream.on('error', (err) => {
+          console.error(`[NARRATE] GCS write error: ${err?.message || err}`);
+          reject(err);
         });
-        
         writeStream.on('finish', () => {
-          console.log(`Audio successfully streamed to GCS for ${projectId}`);
+          const dt = Date.now() - t0;
+          console.log(`[NARRATE] stream upload finished in ${dt} ms (${written} bytes)`);
           resolve();
         });
-        
-        // Add timeout to prevent hanging
-        setTimeout(() => {
-          reject(new Error('Stream timeout after 60 seconds'));
-        }, 60000);
-        
-        audioStream.on('readable', () => { try { pushProgress(jobId, { progress: 50, stage: 'narrating', message: 'Streaming audio…' }); } catch {} });
+
+        // Timeout watchdog
+        const timeoutMs = parseInt(process.env.NARRATE_STREAM_TIMEOUT_MS || '300000', 10);
+        const timeoutId = setTimeout(() => {
+          reject(new Error(`Stream timeout after ${timeoutMs} ms`));
+        }, timeoutMs);
+
+        writeStream.on('close', () => { try { clearTimeout(timeoutId); } catch {} });
         audioStream.pipe(writeStream);
       });
     });
@@ -512,6 +565,15 @@ app.post('/narrate',
     // Complete credit operation
     if (req.creditDeduction?.idempotencyKey) {
       await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
+    }
+
+    // Cleanup temp file if we spooled to disk
+    if (tmpPath && String(process.env.NARRATE_KEEP_TEMP || '0') !== '1') {
+      try {
+        const fsp = require('fs/promises');
+        await fsp.unlink(tmpPath);
+        console.log('Cleaned temp narration file:', tmpPath);
+      } catch (e) { console.warn('Failed to remove temp file:', e?.message || e); }
     }
 
     try { pushProgress(jobId, { progress: 100, stage: 'narrating', message: 'Narration ready', done: true }); } catch {}

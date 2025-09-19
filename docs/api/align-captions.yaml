@@ -3,7 +3,7 @@ info:
   title: ReelBanana Align Captions API
   version: 1.0.0
 servers:
-  - url: https://reel-banana-align-captions-423229273041.us-central1.run.app
+  - url: https://reel-banana-align-captions-223097908182.us-central1.run.app
   - url: http://localhost:8081
 components:
   securitySchemes:
@@ -50,4 +50,3 @@ paths:
         '401': { description: App Check invalid, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '422': { description: No words detected, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '500': { description: Internal, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-

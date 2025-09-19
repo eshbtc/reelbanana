@@ -205,7 +205,7 @@ gcloud run services describe reel-banana-stripe-service --region=us-central1
 #### Health Check Failures
 ```bash
 # Test health endpoint directly
-curl -f https://reel-banana-stripe-service-423229273041.us-central1.run.app/health
+curl -f https://reel-banana-stripe-service-223097908182.us-central1.run.app/health
 
 # Check service status
 ./scripts/monitor-services.sh status

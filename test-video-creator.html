@@ -1,0 +1,1731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReelBanana Pipeline Tester</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .container {
+            background: #2a2a2a;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #ffd700;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #555;
+            border-radius: 5px;
+            background: #333;
+            color: #fff;
+            font-size: 14px;
+        }
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        button {
+            background: #ffd700;
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 20px;
+        }
+        button:hover {
+            background: #ffed4e;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .status.success {
+            background: #2d5a2d;
+            border: 1px solid #4a7c4a;
+        }
+        .status.error {
+            background: #5a2d2d;
+            border: 1px solid #7c4a4a;
+        }
+        .status.info {
+            background: #2d4a5a;
+            border: 1px solid #4a6a7c;
+        }
+        .progress {
+            margin-top: 20px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #333;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #ffd700;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .step {
+            margin: 10px 0;
+            padding: 10px;
+            background: #333;
+            border-radius: 5px;
+            border-left: 4px solid #ffd700;
+        }
+        .step.completed {
+            border-left-color: #4a7c4a;
+            background: #2d5a2d;
+        }
+        .step.error {
+            border-left-color: #7c4a4a;
+            background: #5a2d2d;
+        }
+        .video-result {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .video-result video {
+            max-width: 100%;
+            border-radius: 10px;
+        }
+        .video-result a {
+            display: inline-block;
+            margin-top: 10px;
+            color: #ffd700;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .video-result a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 ReelBanana Pipeline Tester</h1>
+        <p style="text-align: center; color: #ccc; margin-bottom: 30px;">
+            Create test videos to verify the complete pipeline is working
+        </p>
+
+        <form id="videoForm">
+            <div class="form-group">
+                <label for="projectName">Project Name:</label>
+                <input type="text" id="projectName" value="test-video" required>
+            </div>
+
+            <div class="form-group">
+                <label for="sceneCount">Number of Scenes:</label>
+                <select id="sceneCount">
+                    <option value="2">2 scenes</option>
+                    <option value="3" selected>3 scenes</option>
+                    <option value="4">4 scenes</option>
+                    <option value="5">5 scenes</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="sceneDuration">Duration per Scene (seconds):</label>
+                <select id="sceneDuration">
+                    <option value="5">5 seconds</option>
+                    <option value="6">6 seconds</option>
+                    <option value="8" selected>8 seconds</option>
+                    <option value="10">10 seconds</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="narrationScript">Narration Script:</label>
+                <textarea id="narrationScript" placeholder="Enter your narration script here...">Welcome to AI video creation. This is ReelBanana, where artificial intelligence transforms ideas into cinematic masterpieces. In this scene, we explore AI-driven storytelling. The technology represents a revolution in content creation. Moving to our next scene, we witness machine learning generating stunning visuals and compelling narratives. This is not just video editing, this is the future of entertainment. Finally, we see the culmination of AI creativity. Every frame, every transition, every moment crafted by artificial intelligence. This is ReelBanana, where imagination meets AI innovation.</textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="voice">Voice Selection:</label>
+                <select id="voice">
+                    <option value="21m00Tcm4TlvDq8ikWAM" selected>🎤 Rachel - Warm, friendly female</option>
+                    <option value="AZnzlk1XvdvUeBnXmlld">🎤 Domi - Smooth, sophisticated female</option>
+                    <option value="EXAVITQu4vr4xnSDxMaL">🎤 Bella - Soft, gentle female</option>
+                    <option value="ErXwobaYiN019PkySvjV">🎤 Antoni - Deep, professional male</option>
+                    <option value="MF3mGyEYCl7XYWbV9V6O">🎤 Elli - Young, energetic female</option>
+                    <option value="TxGEqnHWrfWFTfGW9XjX">🎤 Josh - Confident, authoritative male</option>
+                    <option value="VR6AewLTigWG4xSOukaG">🎤 Arnold - Mature, dramatic male</option>
+                    <option value="pNInz6obpgDQGcFmaJgB">🎤 Adam - Clear, professional male</option>
+                    <option value="yoZ06aMxZJJ28mfd3POQ">🎤 Sam - Friendly, approachable male</option>
+                    <option value="2EiwWnXFnvU5JabPnv8n">🎤 Clyde - Mysterious, deep male</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="emotion">Voice Emotion:</label>
+                <select id="emotion">
+                    <option value="professional" selected>Professional</option>
+                    <option value="friendly">Friendly</option>
+                    <option value="dramatic">Dramatic</option>
+                    <option value="calm">Calm</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="includeCaptions">Include Captions:</label>
+                <select id="includeCaptions">
+                    <option value="true" selected>Yes (try to align captions)</option>
+                    <option value="false">No (skip captions)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="includeMusic">Include Background Music:</label>
+                <select id="includeMusic">
+                    <option value="true" selected>Yes (AI-powered music generation)</option>
+                    <option value="false">No (no background music)</option>
+                </select>
+                <p class="help-text">🎨 AI will automatically analyze your images and create unique music that perfectly matches the visual story</p>
+            </div>
+
+        <div class="form-group">
+            <label for="aspectRatio">Aspect Ratio:</label>
+            <select id="aspectRatio">
+                <option value="9:16" selected>📱 Mobile (9:16) - Vertical</option>
+                <option value="16:9">📺 Widescreen (16:9) - Horizontal</option>
+                <option value="1:1">⬜ Square (1:1)</option>
+                <option value="4:3">📺 Classic (4:3)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="mobileFastPath">Mobile Fast Path (≤15s, 720p, no captions):</label>
+            <select id="mobileFastPath">
+                <option value="true" selected>Enabled</option>
+                <option value="false">Disabled</option>
+            </select>
+            <small style="color: #ccc; font-size: 12px;">Optimizes for speed by capping duration, forcing 9:16 @ 720p, and skipping captions.</small>
+        </div>
+
+        <div class="form-group">
+            <label for="renderUseSSE">Use SSE for render progress:</label>
+            <select id="renderUseSSE">
+                <option value="true" selected>Yes (Live Progress)</option>
+                <option value="false">No (Standard)</option>
+            </select>
+            <small style="color: #ccc; font-size: 12px;">SSE provides real-time progress updates during rendering.</small>
+        </div>
+
+        <div class="form-group">
+            <label for="videoModel">Video Generation Model:</label>
+            <select id="videoModel">
+                <option value="fal-ai/ltx-video-13b-distilled/image-to-video" selected>🎬 LTX Video (Standard) - $0.04/8s - Fast & Cost-Effective</option>
+                <option value="fal-ai/veo3/fast/image-to-video">⚡ Veo3 Fast - $0.80/8s - Quick Generation</option>
+                <option value="fal-ai/veo3/image-to-video">🏆 Veo3 Premium - $1.20/8s - Highest Quality</option>
+                <option value="fal-ai/runway-gen3/turbo/image-to-video">🎭 Runway Gen3 - $1.50/8s - Creative & Artistic</option>
+                <option value="fal-ai/stable-video-diffusion/image-to-video">🎨 Stable Video - $0.20/8s - Experimental</option>
+            </select>
+            <small class="form-help">Choose based on your quality vs cost preferences. LTX Video offers 96% cost savings!</small>
+        </div>
+
+        <div class="form-group">
+            <label>Estimated Cost:</label>
+            <div id="costEstimate" style="background: #2a2a2a; padding: 10px; border-radius: 5px; margin-top: 5px;">
+                <div style="color: #4ade80; font-weight: bold;">🎬 LTX Video: ~$0.12 total (3 scenes × $0.04/8s)</div>
+                <div style="color: #ccc; font-size: 12px; margin-top: 5px;">
+                    Cost breakdown: Video generation only. Narration, music, and processing are additional.
+                </div>
+            </div>
+        </div>
+
+            <div class="form-group">
+                <label for="recaptchaKey">ReCAPTCHA Site Key (Optional):</label>
+                <input type="text" id="recaptchaKey" placeholder="6LfSNMArAAAAALXUYNGFmOSJN7O7W9c4Chp4oP1e" value="6LfSNMArAAAAALXUYNGFmOSJN7O7W9c4Chp4oP1e">
+                <small style="color: #ccc; font-size: 12px;">
+                    Default key is provided, but you can use your own if needed
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label for="idToken">Firebase ID Token (Optional):</label>
+                <input type="text" id="idToken" placeholder="Paste your Firebase ID token here (get from DevTools)">
+                <small style="color: #ccc; font-size: 12px;">
+                    Get this from Chrome DevTools → Application → Local Storage → reel-banana-35a54.web.app
+                </small>
+            </div>
+
+            <button type="submit" id="createButton">🎬 Create Test Video</button>
+        </form>
+
+        <div id="status" class="status" style="display: none;"></div>
+        <div id="progress" class="progress" style="display: none;">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+        <div id="steps"></div>
+        <div class="form-group">
+            <label>Render Logs:</label>
+            <div id="renderLogs" style="background:#111;border:1px solid #333;border-radius:6px;padding:10px;height:140px;overflow:auto;font-family:Menlo,Monaco,monospace;font-size:12px;white-space:pre-wrap;"></div>
+        </div>
+        <div id="videoResult" class="video-result"></div>
+        
+        <div id="videoPlayer" class="result-section" style="display: none;">
+            <h3>🎬 Your Video</h3>
+            <video id="generatedVideo" controls style="width: 100%; max-width: 500px; border-radius: 8px; background: #000;">
+                Your browser does not support the video tag.
+            </video>
+            <div id="videoInfo" style="margin-top: 15px; color: #ccc; font-size: 14px;">
+                <!-- Video info will be displayed here -->
+            </div>
+            <div id="videoActions" style="margin-top: 15px;">
+                <button id="shareVideo" class="btn" style="background: #10b981; margin-right: 10px;">📤 Share Video</button>
+                <button id="downloadVideo" class="btn" style="background: #3b82f6; margin-right: 10px;">💾 Download</button>
+                <button id="toggleAudio" class="btn" style="background: #8b5cf6;">🔊 Toggle Audio</button>
+            </div>
+        </div>
+
+        <div id="audioPlayer" class="result-section" style="display: none;">
+            <h3>🎵 Audio Components</h3>
+            <div id="narrationPlayer" style="margin-bottom: 20px;">
+                <h4 style="color: #fbbf24; margin-bottom: 10px;">🎤 Narration</h4>
+                <audio id="narrationAudio" controls style="width: 100%; max-width: 400px;">
+                    Your browser does not support the audio element.
+                </audio>
+                <div style="margin-top: 5px;">
+                    <button id="downloadNarration" class="btn" style="background: #f59e0b; font-size: 12px; padding: 5px 10px;">💾 Download Narration</button>
+                </div>
+            </div>
+            <div id="musicPlayer" style="margin-bottom: 20px;">
+                <h4 style="color: #10b981; margin-bottom: 10px;">🎵 Background Music</h4>
+                <audio id="musicAudio" controls style="width: 100%; max-width: 400px;">
+                    Your browser does not support the audio element.
+                </audio>
+                <div style="margin-top: 5px;">
+                    <button id="downloadMusic" class="btn" style="background: #10b981; font-size: 12px; padding: 5px 10px;">💾 Download Music</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="recentVideos" class="result-section" style="display: none;">
+            <h3>🎥 Recent Videos</h3>
+            <div id="videoGallery" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
+                <!-- Recent videos will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Firebase configuration
+        const firebaseConfig = {
+            projectId: 'reel-banana-35a54',
+            apiKey: 'AIzaSyCeZNdwsaZ_sBmOt8WY0FcUziq22-OVJjg',
+            authDomain: 'reel-banana-35a54.firebaseapp.com',
+            storageBucket: 'reel-banana-35a54.firebasestorage.app',
+            appId: '1:223097908182:web:982c634d6aaeb3c805d277'
+        };
+
+        // Initialize Firebase
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js';
+        import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js';
+        import { initializeAppCheck, ReCaptchaV3Provider, getToken } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-app-check.js';
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js';
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        
+        // Set debug token first
+        window.FIREBASE_APPCHECK_DEBUG_TOKEN = 'BD052919-E623-4887-8CFC-FAAFF4E8B2D5';
+        
+        // Initialize App Check with configurable ReCAPTCHA key
+        let appCheck = null;
+        
+        function initializeAppCheckWithKey(recaptchaKey) {
+            try {
+                appCheck = initializeAppCheck(app, {
+                    provider: new ReCaptchaV3Provider(recaptchaKey),
+                    isTokenAutoRefreshEnabled: true
+                });
+                console.log('✅ App Check initialized with ReCAPTCHA key:', recaptchaKey);
+                return true;
+            } catch (error) {
+                console.error('❌ App Check initialization failed:', error);
+                return false;
+            }
+        }
+        
+        // Initialize with default key
+        initializeAppCheckWithKey('6LfSNMArAAAAALXUYNGFmOSJN7O7W9c4Chp4oP1e');
+
+        let currentUser = null;
+        let appCheckToken = null;
+        let lastVideoUrl = null;
+        const db = getFirestore(app);
+
+        // Service URLs
+        const SERVICES = {
+            upload: 'https://reel-banana-upload-assets-223097908182.us-central1.run.app',
+            narrate: 'https://reel-banana-narrate-223097908182.us-central1.run.app',
+            align: 'https://reel-banana-align-captions-223097908182.us-central1.run.app',
+            compose: 'https://reel-banana-compose-music-223097908182.us-central1.run.app',
+            render: 'https://reel-banana-render-223097908182.us-central1.run.app',
+            enhance: 'https://reel-banana-enhance-223097908182.us-central1.run.app'
+        };
+
+        // Initialize authentication
+        async function initializeAuth() {
+            try {
+                // Get ReCAPTCHA key from form
+                const recaptchaKey = document.getElementById('recaptchaKey').value.trim();
+                
+                // Re-initialize App Check with the provided key if different
+                if (recaptchaKey && recaptchaKey !== '6LfSNMArAAAAALXUYNGFmOSJN7O7W9c4Chp4oP1e') {
+                    console.log('🔄 Re-initializing App Check with new ReCAPTCHA key...');
+                    initializeAppCheckWithKey(recaptchaKey);
+                }
+                
+                // Get App Check token
+                if (!appCheck) {
+                    throw new Error('App Check not initialized. Please check your ReCAPTCHA key.');
+                }
+                
+                const appCheckTokenResult = await getToken(appCheck, false);
+                appCheckToken = appCheckTokenResult.token;
+                
+                console.log('✅ App Check token obtained');
+
+                // Prefer provided ID token; otherwise sign in anonymously and get a fresh token
+                const providedToken = document.getElementById('idToken').value.trim();
+                if (providedToken) {
+                    console.log('✅ Using provided ID token');
+                    return { idToken: providedToken, appCheckToken };
+                }
+
+                console.log('🔐 Signing in anonymously to get ID token…');
+                const cred = await signInAnonymously(auth);
+                currentUser = cred.user;
+                const idToken = await currentUser.getIdToken(true);
+                console.log('✅ Anonymous sign-in complete. UID:', currentUser.uid);
+
+                // Ensure user profile with sufficient credits exists (client-owned doc per rules)
+                try {
+                    const uref = doc(db, 'users', currentUser.uid);
+                    const snap = await getDoc(uref);
+                    if (!snap.exists()) {
+                        await setDoc(uref, {
+                            uid: currentUser.uid,
+                            email: '',
+                            displayName: 'Anonymous Tester',
+                            freeCredits: 500,
+                            totalUsage: 0,
+                            createdAt: serverTimestamp(),
+                            lastLoginAt: serverTimestamp()
+                        });
+                        console.log('👤 Created test user profile with 500 credits');
+                    } else {
+                        const data = snap.data() || {};
+                        if ((data.freeCredits || 0) < 5) {
+                            await updateDoc(uref, { freeCredits: 100, lastLoginAt: serverTimestamp() });
+                            console.log('💳 Topped up test user credits to 100');
+                        }
+                    }
+                } catch (e) {
+                    console.warn('⚠️ Failed to ensure user profile (credits may be low):', e?.message || e);
+                }
+
+                return { idToken, appCheckToken };
+            } catch (error) {
+                console.error('❌ Authentication failed:', error);
+                throw error;
+            }
+        }
+
+        // Show status message
+        function showStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+        }
+
+        // Update progress
+        function updateProgress(percent) {
+            const progress = document.getElementById('progress');
+            const progressFill = document.getElementById('progressFill');
+            progress.style.display = 'block';
+            progressFill.style.width = `${percent}%`;
+        }
+
+        // Update cost estimate based on selected model and scene count
+        function updateCostEstimate() {
+            const sceneCount = parseInt(document.getElementById('sceneCount').value) || 3;
+            const videoModel = document.getElementById('videoModel').value;
+            
+            // Model pricing per 8-second video
+            const modelPricing = {
+                'fal-ai/ltx-video-13b-distilled': { cost: 0.04, name: 'LTX Video', emoji: '🎬', color: '#4ade80' },
+                'fal-ai/veo3-fast/image-to-video': { cost: 0.80, name: 'Veo3 Fast', emoji: '⚡', color: '#fbbf24' },
+                'fal-ai/veo3/image-to-video': { cost: 1.20, name: 'Veo3 Premium', emoji: '🏆', color: '#f59e0b' },
+                'fal-ai/runway-gen3/image-to-video': { cost: 1.50, name: 'Runway Gen3', emoji: '🎭', color: '#ef4444' },
+                'fal-ai/stable-video-diffusion/image-to-video': { cost: 0.20, name: 'Stable Video', emoji: '🎨', color: '#8b5cf6' }
+            };
+            
+            const selectedModel = modelPricing[videoModel] || modelPricing['fal-ai/ltx-video-13b-distilled'];
+            const totalCost = selectedModel.cost * sceneCount;
+            
+            const costEstimate = document.getElementById('costEstimate');
+            costEstimate.innerHTML = `
+                <div style="color: ${selectedModel.color}; font-weight: bold;">
+                    ${selectedModel.emoji} ${selectedModel.name}: ~$${totalCost.toFixed(2)} total (${sceneCount} scenes × $${selectedModel.cost}/8s)
+                </div>
+                <div style="color: #ccc; font-size: 12px; margin-top: 5px;">
+                    Cost breakdown: Video generation only. Narration, music, and processing are additional.
+                </div>
+            `;
+        }
+
+        // Add event listeners for cost updates
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('videoModel').addEventListener('change', updateCostEstimate);
+            document.getElementById('sceneCount').addEventListener('change', updateCostEstimate);
+            updateCostEstimate(); // Initial calculation
+            
+            // Add event listeners for video actions
+            document.getElementById('shareVideo')?.addEventListener('click', shareVideo);
+            document.getElementById('downloadVideo')?.addEventListener('click', downloadVideo);
+            document.getElementById('toggleAudio')?.addEventListener('click', toggleVideoAudio);
+            
+            // Add event listeners for audio actions
+            document.getElementById('downloadNarration')?.addEventListener('click', downloadNarration);
+            document.getElementById('downloadMusic')?.addEventListener('click', downloadMusic);
+            
+            // Load recent videos on page load
+            loadRecentVideos();
+        });
+
+        // Display video player with the generated video
+        function displayVideoPlayer(videoUrl, projectId, videoInfo) {
+            const videoPlayer = document.getElementById('videoPlayer');
+            const generatedVideo = document.getElementById('generatedVideo');
+            const videoInfoDiv = document.getElementById('videoInfo');
+            // Track last displayed video URL for enhancement flow
+            lastVideoUrl = videoUrl;
+            
+            // Set video source
+            generatedVideo.src = videoUrl;
+            generatedVideo.load();
+            
+            // Display video info
+            videoInfoDiv.innerHTML = `
+                <p><strong>Project ID:</strong> ${projectId}</p>
+                <p><strong>Model:</strong> ${videoInfo.model}</p>
+                <p><strong>Duration:</strong> ${videoInfo.duration} seconds</p>
+                <p><strong>Aspect Ratio:</strong> ${videoInfo.aspectRatio}</p>
+                <p><strong>Features:</strong> ${videoInfo.features}</p>
+            `;
+            
+            // Show video player
+            videoPlayer.style.display = 'block';
+            
+            // Scroll to video player
+            videoPlayer.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Share video functionality
+        async function shareVideo() {
+            const videoUrl = document.getElementById('generatedVideo').src;
+            const projectId = document.getElementById('videoInfo').textContent.match(/Project ID: (.+)/)?.[1];
+            
+            if (!videoUrl || !projectId) {
+                alert('No video to share');
+                return;
+            }
+            
+            try {
+                // Create a public movie entry in Firestore
+                const movieData = {
+                    title: `Test Video - ${projectId}`,
+                    description: 'AI-generated video created with ReelBanana test page',
+                    videoUrl: videoUrl,
+                    thumbnailUrl: null, // Could extract thumbnail from video
+                    createdAt: new Date(),
+                    createdBy: currentUser?.uid || 'anonymous',
+                    isPublic: true
+                };
+                
+                // Add to public_movies collection
+                const movieRef = doc(db, 'public_movies', projectId);
+                await setDoc(movieRef, movieData);
+                
+                // Generate share URL
+                const shareUrl = `https://reel-banana-35a54.web.app/share/${projectId}`;
+                
+                // Copy to clipboard
+                await navigator.clipboard.writeText(shareUrl);
+                alert(`Share link copied to clipboard!\n\n${shareUrl}`);
+                
+            } catch (error) {
+                console.error('Error sharing video:', error);
+                alert('Failed to create share link. You can still share the direct video URL.');
+            }
+        }
+
+        // Download video functionality
+        function downloadVideo() {
+            const videoUrl = document.getElementById('generatedVideo').src;
+            const projectId = document.getElementById('videoInfo').textContent.match(/Project ID: (.+)/)?.[1];
+            
+            if (!videoUrl) {
+                alert('No video to download');
+                return;
+            }
+            
+            // Create download link
+            const link = document.createElement('a');
+            link.href = videoUrl;
+            link.download = `reelbanana-video-${projectId || 'unknown'}.mp4`;
+            link.target = '_blank';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Load recent videos from public gallery
+        async function loadRecentVideos() {
+            try {
+                const response = await fetch('https://us-central1-reel-banana-35a54.cloudfunctions.net/listPublicMovies?limit=6');
+                const data = await response.json();
+                
+                if (data.items && data.items.length > 0) {
+                    displayRecentVideos(data.items);
+                }
+            } catch (error) {
+                console.warn('Failed to load recent videos:', error);
+            }
+        }
+
+        // Display recent videos in gallery
+        function displayRecentVideos(videos) {
+            const recentVideos = document.getElementById('recentVideos');
+            const videoGallery = document.getElementById('videoGallery');
+            
+            videoGallery.innerHTML = videos.map(video => `
+                <div class="video-card" style="background: #2a2a2a; border-radius: 8px; padding: 10px; cursor: pointer;" onclick="playVideo('${video.videoUrl}', '${video.id}', '${video.title}')">
+                    ${video.thumbnailUrl ? 
+                        `<img src="${video.thumbnailUrl}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 8px;">` :
+                        `<div style="width: 100%; height: 120px; background: #333; border-radius: 4px; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; color: #666;">🎬</div>`
+                    }
+                    <h4 style="margin: 0 0 4px 0; font-size: 14px; color: #fff;">${video.title}</h4>
+                    <p style="margin: 0; font-size: 12px; color: #ccc;">${new Date(video.createdAt).toLocaleDateString()}</p>
+                </div>
+            `).join('');
+            
+            recentVideos.style.display = 'block';
+        }
+
+        // Play video from gallery
+        function playVideo(videoUrl, projectId, title) {
+            const videoInfo = {
+                model: 'Unknown',
+                duration: 'Unknown',
+                aspectRatio: 'Unknown',
+                features: 'Gallery Video'
+            };
+            
+            displayVideoPlayer(videoUrl, projectId, videoInfo);
+        }
+
+        // Toggle video audio on/off
+        function toggleVideoAudio() {
+            const video = document.getElementById('generatedVideo');
+            const button = document.getElementById('toggleAudio');
+            
+            if (video.muted) {
+                video.muted = false;
+                button.textContent = '🔇 Mute Audio';
+                button.style.background = '#ef4444';
+            } else {
+                video.muted = true;
+                button.textContent = '🔊 Unmute Audio';
+                button.style.background = '#8b5cf6';
+            }
+        }
+
+        // Download narration audio
+        function downloadNarration() {
+            const audioUrl = document.getElementById('narrationAudio').src;
+            const projectId = document.getElementById('videoInfo').textContent.match(/Project ID: (.+)/)?.[1];
+            
+            if (!audioUrl) {
+                alert('No narration audio to download');
+                return;
+            }
+            
+            const link = document.createElement('a');
+            link.href = audioUrl;
+            link.download = `reelbanana-narration-${projectId || 'unknown'}.mp3`;
+            link.target = '_blank';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Download music audio
+        function downloadMusic() {
+            const audioUrl = document.getElementById('musicAudio').src;
+            const projectId = document.getElementById('videoInfo').textContent.match(/Project ID: (.+)/)?.[1];
+            
+            if (!audioUrl) {
+                alert('No music audio to download');
+                return;
+            }
+            
+            const link = document.createElement('a');
+            link.href = audioUrl;
+            link.download = `reelbanana-music-${projectId || 'unknown'}.wav`;
+            link.target = '_blank';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Display audio players with generated audio
+        function displayAudioPlayers(narrationUrl, musicUrl, projectId) {
+            const audioPlayer = document.getElementById('audioPlayer');
+            const narrationAudio = document.getElementById('narrationAudio');
+            const musicAudio = document.getElementById('musicAudio');
+            const narrationPlayer = document.getElementById('narrationPlayer');
+            const musicPlayer = document.getElementById('musicPlayer');
+            
+            // Set narration audio
+            if (narrationUrl) {
+                console.log('Setting narration audio source:', narrationUrl);
+                narrationAudio.src = narrationUrl;
+                narrationAudio.load();
+                
+                // Add error handling for audio loading
+                narrationAudio.addEventListener('error', function(e) {
+                    console.error('Narration audio failed to load:', e);
+                    narrationPlayer.innerHTML = `
+                        <h4 style="color: #fbbf24; margin-bottom: 10px;">🎤 Narration</h4>
+                        <p style="color: #ef4444;">❌ Audio failed to load. URL: ${narrationUrl}</p>
+                        <button onclick="window.open('${narrationUrl}', '_blank')" class="btn" style="background: #f59e0b; font-size: 12px; padding: 5px 10px;">🔗 Open Audio URL</button>
+                    `;
+                });
+                
+                narrationAudio.addEventListener('loadeddata', function() {
+                    console.log('Narration audio loaded successfully');
+                });
+                
+                narrationPlayer.style.display = 'block';
+            } else {
+                narrationPlayer.style.display = 'none';
+            }
+            
+            // Set music audio
+            if (musicUrl) {
+                console.log('Setting music audio source:', musicUrl);
+                musicAudio.src = musicUrl;
+                musicAudio.load();
+                
+                // Add error handling for audio loading
+                musicAudio.addEventListener('error', function(e) {
+                    console.error('Music audio failed to load:', e);
+                    musicPlayer.innerHTML = `
+                        <h4 style="color: #10b981; margin-bottom: 10px;">🎵 Background Music</h4>
+                        <p style="color: #ef4444;">❌ Audio failed to load. URL: ${musicUrl}</p>
+                        <button onclick="window.open('${musicUrl}', '_blank')" class="btn" style="background: #10b981; font-size: 12px; padding: 5px 10px;">🔗 Open Audio URL</button>
+                    `;
+                });
+                
+                musicAudio.addEventListener('loadeddata', function() {
+                    console.log('Music audio loaded successfully');
+                });
+                
+                musicPlayer.style.display = 'block';
+            } else {
+                musicPlayer.style.display = 'none';
+            }
+            
+            // Show audio player if we have any audio
+            if (narrationUrl || musicUrl) {
+                audioPlayer.style.display = 'block';
+            }
+        }
+
+        // Adjust narration script length based on video duration
+        function adjustNarrationLength(script, totalDuration) {
+            // Rough estimate: 150-200 words per minute for natural speech
+            const wordsPerMinute = 175;
+            const targetWords = Math.floor((totalDuration / 60) * wordsPerMinute);
+            
+            const words = script.split(' ');
+            if (words.length <= targetWords) {
+                return script; // Already short enough
+            }
+            
+            // Truncate to target length, trying to end at sentence boundaries
+            const truncated = words.slice(0, targetWords).join(' ');
+            const lastPeriod = truncated.lastIndexOf('.');
+            const lastExclamation = truncated.lastIndexOf('!');
+            const lastQuestion = truncated.lastIndexOf('?');
+            
+            const lastSentenceEnd = Math.max(lastPeriod, lastExclamation, lastQuestion);
+            if (lastSentenceEnd > targetWords * 0.7) { // If we can end at a sentence
+                return truncated.substring(0, lastSentenceEnd + 1);
+            }
+            
+            return truncated + '...';
+        }
+
+        // Add step
+        function addStep(message, status = 'pending') {
+            const steps = document.getElementById('steps');
+            const step = document.createElement('div');
+            step.className = `step ${status}`;
+            step.textContent = message;
+            steps.appendChild(step);
+        }
+
+        // Update step status
+        function updateStep(index, status) {
+            const steps = document.querySelectorAll('.step');
+            if (steps[index]) {
+                steps[index].className = `step ${status}`;
+            }
+        }
+
+        // Create test image
+        function createTestImage(color, text) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 800;
+            canvas.height = 600;
+            const ctx = canvas.getContext('2d');
+            
+            // Create gradient background
+            const gradient = ctx.createLinearGradient(0, 0, 800, 600);
+            gradient.addColorStop(0, color);
+            gradient.addColorStop(1, color + '80');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 800, 600);
+            
+            // Add text
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 48px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('ReelBanana', 400, 200);
+            ctx.font = '36px Arial';
+            ctx.fillText(text, 400, 300);
+            ctx.font = '24px Arial';
+            ctx.fillText('AI Video Creation Test', 400, 400);
+            ctx.fillText(new Date().toLocaleString(), 400, 500);
+            
+            return canvas.toDataURL('image/jpeg', 0.8);
+        }
+
+        // Upload image
+        async function uploadImage(projectId, sceneIndex, tokens) {
+            const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7'];
+            const color = colors[sceneIndex % colors.length];
+            const text = `Scene ${sceneIndex + 1}`;
+            
+            const testImage = createTestImage(color, text);
+            
+            const response = await fetch(`${SERVICES.upload}/upload-image`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Firebase-AppCheck': tokens.appCheckToken,
+                    'Authorization': `Bearer ${tokens.idToken}`
+                },
+                body: JSON.stringify({
+                    projectId,
+                    fileName: `scene-${sceneIndex}-0.jpeg`,
+                    base64Image: testImage
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Upload failed: ${await response.text()}`);
+            }
+            
+            return await response.json();
+        }
+
+        // Generate narration
+        async function generateNarration(projectId, script, emotion, voiceId, tokens) {
+            const response = await fetch(`${SERVICES.narrate}/narrate`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Firebase-AppCheck': tokens.appCheckToken,
+                    'Authorization': `Bearer ${tokens.idToken}`
+                },
+                body: JSON.stringify({
+                    projectId,
+                    narrationScript: script,
+                    emotion,
+                    voiceId: voiceId
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Narration failed: ${await response.text()}`);
+            }
+            
+            return await response.json();
+        }
+
+        // Align captions
+        async function alignCaptions(projectId, gsAudioPath, tokens) {
+            const response = await fetch(`${SERVICES.align}/align`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Firebase-AppCheck': tokens.appCheckToken,
+                    'Authorization': `Bearer ${tokens.idToken}`
+                },
+                body: JSON.stringify({
+                    projectId,
+                    gsAudioPath
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Caption alignment failed: ${await response.text()}`);
+            }
+            
+            return await response.json();
+        }
+
+        // Generate background music
+        async function generateMusic(projectId, musicParameters, narrationScript, tokens, imageUrls = []) {
+            console.log(`🎵 Generating music for project ${projectId} with parameters:`, musicParameters);
+            console.log(`🎨 Using ${imageUrls.length} images for visual analysis`);
+            
+            const response = await fetch(`${SERVICES.compose}/compose-music`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Firebase-AppCheck': tokens.appCheckToken,
+                    'Authorization': `Bearer ${tokens.idToken}`
+                },
+                body: JSON.stringify({
+                    projectId,
+                    narrationScript,
+                    imageUrls, // Include image URLs for visual analysis
+                    ...musicParameters
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Music generation failed: ${await response.text()}`);
+            }
+            
+            return await response.json();
+        }
+
+        // Render video
+        async function renderVideo(projectId, scenes, gsAudioPath, srtPath, gsMusicPath, emotion, aspectRatio, tokens, options = {}) {
+            const videoModel = document.getElementById('videoModel').value;
+            const payload = {
+                projectId,
+                scenes,
+                emotion,
+                gsAudioPath,
+                aspectRatio,
+                clipModel: videoModel, // Pass the selected model
+                clipModelOverride: videoModel, // Ensure model override is used
+                useFal: true, // Force FAL engine for video generation
+                ...(srtPath ? { srtPath } : { noSubtitles: true }),
+                ...(gsMusicPath ? { gsMusicPath } : {}),
+                ...options
+            };
+            
+            const response = await fetch(`${SERVICES.render}/render`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Firebase-AppCheck': tokens.appCheckToken,
+                    'Authorization': `Bearer ${tokens.idToken}`
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Render failed: ${await response.text()}`);
+            }
+            
+            return await response.json();
+        }
+
+        // Main video creation function
+        async function createVideo() {
+            const form = document.getElementById('videoForm');
+            const button = document.getElementById('createButton');
+            const status = document.getElementById('status');
+            const progress = document.getElementById('progress');
+            const steps = document.getElementById('steps');
+            const videoResult = document.getElementById('videoResult');
+            
+            // Get form data
+            const projectName = document.getElementById('projectName').value;
+            const sceneCount = parseInt(document.getElementById('sceneCount').value);
+            const sceneDuration = parseInt(document.getElementById('sceneDuration').value);
+            const narrationScript = document.getElementById('narrationScript').value;
+            const emotion = document.getElementById('emotion').value;
+            const voiceId = document.getElementById('voice').value;
+            const includeCaptions = document.getElementById('includeCaptions').value === 'true';
+            const includeMusic = document.getElementById('includeMusic').value === 'true';
+            const aspectRatio = document.getElementById('aspectRatio').value;
+            
+            const projectId = `${projectName}_${Date.now()}`;
+            const totalDuration = sceneCount * sceneDuration;
+            
+            // Adjust narration script length to match video duration
+            const adjustedScript = adjustNarrationLength(narrationScript, totalDuration);
+            console.log(`Original script: ${narrationScript.split(' ').length} words`);
+            console.log(`Adjusted script: ${adjustedScript.split(' ').length} words for ${totalDuration}s video`);
+            
+            // Reset UI
+            button.disabled = true;
+            button.textContent = 'Creating Video...';
+            status.style.display = 'none';
+            progress.style.display = 'none';
+            steps.innerHTML = '';
+            videoResult.innerHTML = '';
+            
+            try {
+                showStatus('Initializing authentication...', 'info');
+                updateProgress(5);
+                
+                // Initialize authentication
+                const tokens = await initializeAuth();
+                addStep('✅ Authentication initialized');
+                
+                showStatus('Uploading images...', 'info');
+                updateProgress(15);
+                
+                // Upload images
+                const uploadedImages = [];
+                for (let i = 0; i < sceneCount; i++) {
+                    addStep(`📤 Uploading scene ${i + 1}...`);
+                    const result = await uploadImage(projectId, i, tokens);
+                    uploadedImages.push(result);
+                    updateStep(i, 'completed');
+                    updateProgress(15 + (i + 1) * 15);
+                }
+                
+                showStatus('Generating narration...', 'info');
+                updateProgress(60);
+                addStep('🎤 Generating narration...');
+                
+                // Generate narration
+                const narrationResult = await generateNarration(projectId, adjustedScript, emotion, voiceId, tokens);
+                updateStep(sceneCount, 'completed');
+                
+                let srtPath = null;
+                if (includeCaptions) {
+                    showStatus('Aligning captions...', 'info');
+                    updateProgress(70);
+                    addStep('📝 Aligning captions...');
+                    
+                    try {
+                        const alignResult = await alignCaptions(projectId, narrationResult.gsAudioPath, tokens);
+                        srtPath = alignResult.srtPath;
+                        updateStep(sceneCount + 1, 'completed');
+                    } catch (error) {
+                        console.warn('Caption alignment failed:', error);
+                        updateStep(sceneCount + 1, 'error');
+                        addStep('⚠️ Caption alignment failed, proceeding without captions');
+                    }
+                } else {
+                    addStep('⏭️ Skipping captions (noSubtitles=true)');
+                }
+                
+                let gsMusicPath = null;
+                if (includeMusic) {
+                    showStatus('Generating background music...', 'info');
+                    updateProgress(80);
+                    addStep('🎵 Generating background music...');
+                    
+                    try {
+                        // Use default parameters - AI will override them based on visual analysis
+                        const musicParameters = {
+                            style: 'cinematic', // Default, will be overridden by AI
+                            genre: 'orchestral', // Default, will be overridden by AI
+                            vocals: 'instrumental', // Default, will be overridden by AI
+                            duration: totalDuration, // Match video duration
+                            format: 'wav', // High quality
+                            tempo: 'medium', // Default, will be overridden by AI
+                            mood: 'dramatic', // Default, will be overridden by AI
+                            instruments: 'orchestra', // Default, will be overridden by AI
+                            key: 'C', // Default, will be overridden by AI
+                            timeSignature: '4/4', // Default, will be overridden by AI
+                            complexity: 'moderate', // Default, will be overridden by AI
+                            energy: 'medium', // Default, will be overridden by AI
+                            density: 'moderate' // Default, will be overridden by AI
+                        };
+                        
+                        // Get image URLs from the generated scenes for visual analysis
+                        const imageUrls = scenes.map(scene => scene.imageUrl).filter(url => url);
+                        console.log(`🎨 Passing ${imageUrls.length} image URLs for visual music analysis:`, imageUrls);
+                        addStep(`🎨 Analyzing ${imageUrls.length} images for music generation...`);
+                        
+                        const musicResult = await generateMusic(projectId, musicParameters, adjustedScript, tokens, imageUrls);
+                        gsMusicPath = musicResult.gsMusicPath;
+                        updateStep(sceneCount + (includeCaptions ? 2 : 1), 'completed');
+                        addStep('✅ AI-powered background music generated successfully');
+                        
+                        // Log visual analysis results
+                        if (musicResult.visualAnalysis) {
+                            console.log('🎨 Visual Analysis Results:', musicResult.visualAnalysis);
+                            console.log('🎵 AI-Selected Parameters:', musicResult.parameters);
+                            addStep(`🎨 Visual analysis: ${musicResult.visualAnalysis.imagesAnalyzed} images analyzed`);
+                            addStep(`🎵 AI selected: ${musicResult.parameters.style} ${musicResult.parameters.genre} music`);
+                        }
+                    } catch (error) {
+                        console.warn('Music generation failed:', error);
+                        updateStep(sceneCount + (includeCaptions ? 2 : 1), 'error');
+                        addStep('⚠️ Music generation failed, proceeding without background music');
+                        addStep('💡 You can still create the video without music');
+                    }
+                } else {
+                    addStep('⏭️ Skipping background music');
+                }
+                
+                showStatus('Rendering video...', 'info');
+                updateProgress(85);
+                addStep('🎬 Rendering video...');
+                
+                // Create scenes array
+                // Generate dynamic scene prompts based on narration
+                const narrationParts = adjustedScript.split(/[.!?]+/).filter(s => s.trim());
+                const scenesPerNarration = Math.ceil(narrationParts.length / sceneCount);
+
+                const scenes = Array.from({ length: sceneCount }, (_, i) => {
+                    // Create context-aware prompts
+                    const scenePrompts = [
+                        // Scene 0: Morning/Beginning
+                        "Futuristic AI workspace at dawn, holographic displays showing creative ideas floating in air, warm golden sunrise light streaming through floor-to-ceiling windows, neural network visualizations, ultra modern minimalist office, cinematic depth of field, 8K quality, photorealistic",
+                        // Scene 1: Noon/Middle
+                        "AI robot elegantly transforming raw video footage into stunning visuals on massive LED screens, dynamic particle effects, bright daylight, creative studio environment with neon accents, multiple floating screens showing before/after transformations, volumetric lighting, hyper detailed",
+                        // Scene 2: Night/End
+                        "Viral social media success visualization, thousands of glowing hearts and shares floating in dark space, city skyline at night with screens showing viral content, celebration atmosphere with fireworks made of data particles, cyberpunk aesthetic, dramatic lighting, epic composition"
+                    ];
+
+                    // Use context-aware prompt or fallback
+                    const prompt = scenePrompts[i] || `Dynamic scene ${i + 1}: ${narrationParts[i * scenesPerNarration] || 'AI creating amazing content'}. Cinematic quality, dramatic lighting, detailed environment, photorealistic style, trending on artstation`;
+
+                    return {
+                        id: `scene-${i}`,
+                        prompt: prompt,
+                        camera: ['zoom-in', 'pan-left', 'zoom-out', 'pan-right', 'zoom-in'][i % 5],
+                        transition: ['fade', 'slide', 'fade', 'slide', 'fade'][i % 5],
+                        duration: sceneDuration
+                    };
+                });
+                
+        // Render video (with optional SSE progress)
+        const mobileFastPath = document.getElementById('mobileFastPath').value === 'true';
+        const useRenderSSE = document.getElementById('renderUseSSE').value === 'true';
+        const renderJobId = `render-${projectId}-${Date.now()}`;
+
+        // Reset render logs
+        const renderLogs = document.getElementById('renderLogs');
+        if (renderLogs) renderLogs.textContent = '';
+
+        function renderLog(msg) {
+            const el = document.getElementById('renderLogs');
+            if (!el) return;
+            const ts = new Date().toLocaleTimeString();
+            el.textContent += `[${ts}] ${msg}\n`;
+            el.scrollTop = el.scrollHeight;
+        }
+
+        let stopSSE = null;
+        let lastStageText = '';
+        let lastPct = -1;
+
+        function handleRenderUpdate(evt) {
+            const pct = Math.round(evt.progress || 0);
+            const stageText = `${evt.stage || 'render'}: ${evt.message || ''}`.trim();
+            updateProgress(Math.min(100, Math.max(0, pct)));
+            if (stageText !== lastStageText || pct >= lastPct + 10) {
+                renderLog(`${stageText} (${pct}%)`);
+                lastStageText = stageText;
+                lastPct = pct;
+            }
+            if (evt.done) {
+                renderLog('Render job marked done by server');
+                if (stopSSE) stopSSE();
+            }
+        }
+
+        async function startRenderSSE(jobId, tokens) {
+            try {
+                // Use EventSource for better SSE support
+                const sseUrl = `${SERVICES.render}/progress-stream?jobId=${encodeURIComponent(jobId)}`;
+                renderLog('Connecting to SSE for live progress updates…');
+
+                // EventSource doesn't support custom headers, so we'll use fetch with streaming
+                const controller = new AbortController();
+                const resp = await fetch(sseUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'text/event-stream',
+                        'X-Firebase-AppCheck': tokens.appCheckToken,
+                        'Authorization': `Bearer ${tokens.idToken}`
+                    },
+                    signal: controller.signal
+                });
+
+                if (!resp.ok) {
+                    renderLog(`SSE connection failed with status ${resp.status}`);
+                    return () => {};
+                }
+
+                if (!resp.body) {
+                    renderLog('SSE response has no body');
+                    return () => {};
+                }
+
+                renderLog('SSE connected successfully, receiving updates…');
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder('utf-8');
+                let buffer = '';
+
+                // Process SSE stream
+                const processStream = async () => {
+                    try {
+                        while (true) {
+                            const { value, done } = await reader.read();
+                            if (done) {
+                                renderLog('SSE stream ended');
+                                break;
+                            }
+
+                            buffer += decoder.decode(value, { stream: true });
+                            const lines = buffer.split('\n');
+                            buffer = lines[lines.length - 1]; // Keep incomplete line
+
+                            for (let i = 0; i < lines.length - 1; i++) {
+                                const line = lines[i].trim();
+                                if (line.startsWith('data:')) {
+                                    const jsonStr = line.substring(5).trim();
+                                    try {
+                                        const evt = JSON.parse(jsonStr);
+                                        handleRenderUpdate(evt);
+                                    } catch (e) {
+                                        // Ignore non-JSON data
+                                    }
+                                } else if (line.startsWith(':')) {
+                                    // Comment or heartbeat, ignore
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        renderLog(`SSE stream error: ${e?.message || e}`);
+                    }
+                };
+
+                processStream();
+                return () => {
+                    controller.abort();
+                    renderLog('SSE connection closed');
+                };
+            } catch (e) {
+                renderLog(`SSE setup failed: ${e?.message || e}`);
+                return () => {};
+            }
+        }
+
+        if (useRenderSSE) {
+            stopSSE = await startRenderSSE(renderJobId, tokens);
+        }
+
+        const renderResult = await renderVideo(
+            projectId,
+            scenes,
+            narrationResult.gsAudioPath,
+            srtPath,
+            gsMusicPath,
+            emotion,
+            aspectRatio,
+            tokens,
+            {
+                ...(mobileFastPath ? { mobileReel: true } : {}),
+                jobId: renderJobId
+            }
+        );
+
+        if (stopSSE) stopSSE();
+                updateStep(sceneCount + (includeCaptions ? 2 : 1) + (includeMusic ? 1 : 0), 'completed');
+                
+                showStatus('Video created successfully!', 'success');
+                updateProgress(100);
+                
+                // Display result
+                const videoUrl = renderResult.gsVideoPath || renderResult.videoUrl;
+                if (videoUrl) {
+                    const videoModel = document.getElementById('videoModel').value;
+                    const modelPricing = {
+                        'fal-ai/ltx-video-13b-distilled/image-to-video': { name: 'LTX Video', emoji: '🎬' },
+                        'fal-ai/veo3/fast/image-to-video': { name: 'Veo3 Fast', emoji: '⚡' },
+                        'fal-ai/veo3/image-to-video': { name: 'Veo3 Premium', emoji: '🏆' },
+                        'fal-ai/runway-gen3/turbo/image-to-video': { name: 'Runway Gen3', emoji: '🎭' },
+                        'fal-ai/stable-video-diffusion/image-to-video': { name: 'Stable Video', emoji: '🎨' }
+                    };
+                    const selectedModel = modelPricing[videoModel] || modelPricing['fal-ai/ltx-video-13b-distilled/image-to-video'];
+                    
+                    videoResult.innerHTML = `
+                        <h3>🎉 Your Video is Ready!</h3>
+                        <p><strong>Project ID:</strong> ${projectId}</p>
+                        <p><strong>Duration:</strong> ${sceneCount * sceneDuration} seconds</p>
+                        <p><strong>Scenes:</strong> ${sceneCount} scenes</p>
+                        <p><strong>Video Model:</strong> ${selectedModel.emoji} ${selectedModel.name}</p>
+                        <p><strong>Aspect Ratio:</strong> ${aspectRatio} ${aspectRatio === '9:16' ? '(Mobile Vertical)' : aspectRatio === '16:9' ? '(Widescreen)' : ''}</p>
+                        <p><strong>Captions:</strong> ${srtPath ? 'Included' : 'Not included'}</p>
+                        <p><strong>Background Music:</strong> ${gsMusicPath ? 'AI-generated (visual-aware)' : 'Not included'}</p>
+                        <br>
+                        <p style="color: #4ade80; font-weight: bold;">✅ Video generated successfully! Scroll down to watch and share.</p>
+                    `;
+                    
+                    // Display the video player with the generated video
+                    const videoInfo = {
+                        model: `${selectedModel.emoji} ${selectedModel.name}`,
+                        duration: sceneCount * sceneDuration,
+                        aspectRatio: aspectRatio,
+                        features: `${srtPath ? 'Captions, ' : ''}${gsMusicPath ? 'Music, ' : ''}Motion Clips`
+                    };
+                    displayVideoPlayer(videoUrl, projectId, videoInfo);
+                    
+                    // Display audio players with generated audio
+                    let narrationUrl = null;
+                    let musicUrl = null;
+                    
+                    // Generate proper URLs for audio files
+                    // Note: These are private URLs and won't work directly from browser
+                    // They need signed URLs or to be made public
+                    if (narrationResult.gsAudioPath) {
+                        const audioPath = narrationResult.gsAudioPath.replace('gs://', '');
+                        // This URL won't work due to CORS - need signed URL
+                        narrationUrl = `https://storage.googleapis.com/${audioPath}`;
+                        console.log('Narration URL (needs auth):', narrationUrl);
+                    }
+
+                    if (gsMusicPath) {
+                        const musicPath = gsMusicPath.replace('gs://', '');
+                        // This URL won't work due to CORS - need signed URL
+                        musicUrl = `https://storage.googleapis.com/${musicPath}`;
+                        console.log('Music URL (needs auth):', musicUrl);
+                    }
+                    
+                    displayAudioPlayers(narrationUrl, musicUrl, projectId);
+                } else {
+                    videoResult.innerHTML = `
+                        <h3>🎉 Video Processing Complete!</h3>
+                        <p><strong>Project ID:</strong> ${projectId}</p>
+                        <p>The video has been processed and should be available shortly.</p>
+                    `;
+                }
+                
+            } catch (error) {
+                console.error('Video creation failed:', error);
+                showStatus(`Error: ${error.message}`, 'error');
+                addStep(`❌ ${error.message}`);
+            } finally {
+                button.disabled = false;
+                button.textContent = '🎬 Create Test Video';
+            }
+        }
+
+        // Event listener
+        document.getElementById('videoForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            createVideo();
+        });
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            showStatus('Ready to create test videos!', 'info');
+        });
+
+        // =============================
+        // Enhance Video (New Section)
+        // =============================
+    </script>
+
+    <div class="container">
+        <h2>✨ Enhance Video</h2>
+        <p style="color:#ccc;">Run AI enhancements (style transfer, face enhance, stabilize) on an existing video.</p>
+        <div class="form-group">
+            <label for="enhanceUseLast">Use last generated video?</label>
+            <select id="enhanceUseLast">
+                <option value="true" selected>Yes</option>
+                <option value="false">No</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="enhanceVideoUrl">Video URL (ignored if using last video):</label>
+            <input type="text" id="enhanceVideoUrl" placeholder="https://.../your-video.mp4">
+        </div>
+        <div class="form-group">
+            <label for="enhancePreset">Enhancement Preset:</label>
+            <select id="enhancePreset">
+                <option value="style-cinematic" selected>🎬 Style - Cinematic</option>
+                <option value="style-anime">🎌 Style - Anime</option>
+                <option value="style-cartoon">🎨 Style - Cartoon</option>
+                <option value="enhance-quality">🔧 Enhance - Quality Upscale</option>
+                <option value="enhance-face">🙂 Enhance - Face Restoration</option>
+                <option value="stabilize">🧷 Stabilize</option>
+                <option value="remove-background">🖼️ Remove Background</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="enhanceUseSSE">Use SSE for progress:</label>
+            <select id="enhanceUseSSE">
+                <option value="true" selected>Yes</option>
+                <option value="false">No (use polling)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="enhanceCallbackUrl">Callback URL (optional):</label>
+            <input type="text" id="enhanceCallbackUrl" placeholder="https://yourapp.com/webhook">
+            <small style="color:#ccc;">Service will POST completion to this URL.</small>
+        </div>
+        <button id="enhanceButton">✨ Enhance Video</button>
+        <div id="enhanceStatus" class="status" style="display:none;"></div>
+        <div class="form-group">
+            <label>Logs:</label>
+            <div id="enhanceLogs" style="background:#111;border:1px solid #333;border-radius:6px;padding:10px;height:140px;overflow:auto;font-family:Menlo,Monaco,monospace;font-size:12px;white-space:pre-wrap;"></div>
+        </div>
+    </div>
+
+    <script>
+        function enhanceLog(msg) {
+            const el = document.getElementById('enhanceLogs');
+            if (!el) return;
+            const ts = new Date().toLocaleTimeString();
+            el.textContent += `[${ts}] ${msg}\n`;
+            el.scrollTop = el.scrollHeight;
+        }
+
+        async function enhanceVideoFlow() {
+            const statusEl = document.getElementById('enhanceStatus');
+            const useLast = document.getElementById('enhanceUseLast').value === 'true';
+            const preset = document.getElementById('enhancePreset').value;
+            let videoUrl = document.getElementById('enhanceVideoUrl').value.trim();
+            const useSSE = document.getElementById('enhanceUseSSE').value === 'true';
+            const callbackUrl = document.getElementById('enhanceCallbackUrl').value.trim();
+
+            function setEnhanceStatus(msg, type='info') {
+                statusEl.textContent = msg;
+                statusEl.className = `status ${type}`;
+                statusEl.style.display = 'block';
+            }
+
+            try {
+                // Reset logs
+                const logs = document.getElementById('enhanceLogs');
+                if (logs) logs.textContent = '';
+                setEnhanceStatus('Initializing authentication...', 'info');
+                enhanceLog('Initializing authentication');
+                const tokens = await initializeAuth();
+
+                if (useLast) {
+                    if (!lastVideoUrl) {
+                        throw new Error('No recent video found. Generate a video first or paste a URL.');
+                    }
+                    videoUrl = lastVideoUrl;
+                }
+                if (!videoUrl) throw new Error('Please provide a video URL.');
+
+                setEnhanceStatus('Submitting enhancement job...', 'info');
+                enhanceLog(`Submitting job with preset=${preset}${callbackUrl ? ', callbackUrl set' : ''}`);
+                const projectId = `enhance_${Date.now()}`;
+                const resp = await fetch(`${SERVICES.enhance}/enhance-video`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Firebase-AppCheck': tokens.appCheckToken,
+                        'Authorization': `Bearer ${tokens.idToken}`
+                    },
+                    body: JSON.stringify({ videoUrl, preset, projectId, ...(callbackUrl ? { callbackUrl } : {}) })
+                });
+                if (!resp.ok) throw new Error(await resp.text());
+                const { jobId } = await resp.json();
+                setEnhanceStatus(`Enhancement started (jobId: ${jobId}). Tracking progress...`, 'info');
+                enhanceLog(`Job started. jobId=${jobId}`);
+
+                // Prefer SSE for progress; fallback to polling if not available or fails
+                let completed = false;
+                let lastStage = '';
+                let lastPercent = -1;
+
+                function handleUpdate(j) {
+                    if (!j) return;
+                    if (j.stage === 'error') {
+                        throw new Error(j.message || 'Enhancement failed');
+                    }
+                    if (j.done && j.enhancedUrl) {
+                        setEnhanceStatus('Enhancement complete! Rendering video...', 'success');
+                        enhanceLog('Completed. Displaying enhanced video.');
+                        displayVideoPlayer(j.enhancedUrl, projectId, { model: `Enhance: ${preset}`, duration: 'unknown', aspectRatio: 'original', features: 'enhanced' });
+                        completed = true;
+                        return true;
+                    }
+                    const pct = Math.round(j.progress || 0);
+                    const stageText = `${j.stage || 'processing'}: ${j.message || ''}`.trim();
+                    setEnhanceStatus(`${stageText} (${pct}%)`, 'info');
+                    if (stageText !== lastStage || pct >= lastPercent + 10) {
+                        enhanceLog(`${stageText} (${pct}%)`);
+                        lastStage = stageText;
+                        lastPercent = pct;
+                    }
+                    return false;
+                }
+
+                const sseUrl = `${SERVICES.enhance}/progress-stream?jobId=${jobId}`;
+                let usedSSE = false;
+                try {
+                    if (useSSE && 'EventSource' in window) {
+                        const es = new EventSource(sseUrl);
+                        usedSSE = true;
+                        es.onopen = () => enhanceLog('SSE connected');
+                        es.onmessage = (evt) => {
+                            try {
+                                const j = JSON.parse(evt.data);
+                                if (handleUpdate(j)) {
+                                    es.close();
+                                }
+                            } catch (e) {
+                                console.warn('SSE parse error:', e);
+                                enhanceLog(`SSE parse error: ${e?.message || e}`);
+                            }
+                        };
+                        es.onerror = () => {
+                            console.warn('SSE connection error. Falling back to polling.');
+                            enhanceLog('SSE error. Falling back to polling.');
+                            es.close();
+                            usedSSE = false;
+                        };
+                        // Wait briefly to see if SSE connects; if not, fall back
+                        await new Promise(r => setTimeout(r, 1200));
+                    }
+                } catch (_) {
+                    usedSSE = false;
+                }
+
+                if (!usedSSE) {
+                    enhanceLog('Using polling for progress');
+                    // Poll job status every 1.5s
+                    while (!completed) {
+                        await new Promise(r => setTimeout(r, 1500));
+                        const s = await fetch(`${SERVICES.enhance}/job-status/${jobId}`);
+                        if (!s.ok) continue;
+                        const j = await s.json();
+                        if (handleUpdate(j)) break;
+                    }
+                }
+            } catch (e) {
+                console.error('Enhance failed:', e);
+                setEnhanceStatus(`Error: ${e.message || e}`, 'error');
+                enhanceLog(`Error: ${e.message || e}`);
+            }
+        }
+
+        document.getElementById('enhanceButton').addEventListener('click', (e) => {
+            e.preventDefault();
+            enhanceVideoFlow();
+        });
+        // =============================
+        // Mobile App Simulation & Testing Tools
+        // =============================
+        
+        // Benchmark tracking
+        window.reelBenchmark = {
+            start: () => {
+                window.benchStart = Date.now();
+                console.log('🏁 Benchmark started');
+            },
+            end: () => {
+                const duration = (Date.now() - window.benchStart) / 1000;
+                console.log(`✅ Total time: ${duration}s`);
+                
+                // Calculate cost savings
+                const ltxCost = 0.04;
+                const veo3Cost = 1.20;
+                const savings = ((veo3Cost - ltxCost) / veo3Cost * 100).toFixed(1);
+                console.log(`💰 Cost: $${ltxCost} (${savings}% savings vs Veo3)`);
+                
+                return duration;
+            }
+        };
+        
+        // Simulate mobile app constraints
+        function simulateMobileApp() {
+            // Force mobile settings
+            document.getElementById('sceneCount').value = '3';
+            document.getElementById('sceneDuration').value = '5';
+            document.getElementById('mobileFastPath').value = 'true';
+            document.getElementById('aspectRatio').value = '9:16';
+            document.getElementById('videoModel').value = 'fal-ai/ltx-video-13b-distilled/image-to-video';
+            document.getElementById('includeMusic').value = 'true';
+            // Mobile simulation - AI will automatically optimize music parameters
+            
+            // Simulate mobile viewport
+            document.body.style.maxWidth = '375px';
+            document.body.style.margin = '0 auto';
+            document.body.style.padding = '10px';
+            
+            console.log('📱 Mobile simulation active - optimized for mobile reels');
+        }
+        
+        // Viral content templates
+        const viralTemplates = {
+            dayInLife: {
+                name: "Day in the Life",
+                narration: "POV: You're an AI creating content. Morning: Generate ideas. Noon: Transform videos. Night: Go viral.",
+                music: {
+                    style: "electronic",
+                    genre: "electronic",
+                    vocals: "instrumental",
+                    duration: 15,
+                    format: "wav",
+                    tempo: "fast",
+                    mood: "energetic",
+                    instruments: "synthesizer",
+                    key: "C",
+                    timeSignature: "4/4",
+                    complexity: "simple",
+                    energy: "high",
+                    density: "moderate"
+                },
+                duration: 15,
+                scenes: 3
+            },
+            beforeAfter: {
+                name: "Before/After",
+                narration: "Your content before AI. The AI transformation. The viral result.",
+                music: {
+                    style: "cinematic",
+                    genre: "orchestral",
+                    vocals: "instrumental",
+                    duration: 15,
+                    format: "wav",
+                    tempo: "medium",
+                    mood: "dramatic",
+                    instruments: "orchestra",
+                    key: "C",
+                    timeSignature: "4/4",
+                    complexity: "moderate",
+                    energy: "medium",
+                    density: "moderate"
+                },
+                duration: 15,
+                scenes: 3,
+                enhance: "style-cinematic"
+            },
+            quickTips: {
+                name: "Quick Tips",
+                narration: "3 AI tricks you need. Generate content in seconds. Save 96% on costs.",
+                music: {
+                    style: "electronic",
+                    genre: "synth",
+                    vocals: "instrumental",
+                    duration: 9,
+                    format: "wav",
+                    tempo: "very-fast",
+                    mood: "energetic",
+                    instruments: "synthesizer",
+                    key: "C",
+                    timeSignature: "4/4",
+                    complexity: "simple",
+                    energy: "very-high",
+                    density: "dense"
+                },
+                duration: 9,
+                scenes: 3
+            }
+        };
+        
+        function loadViralTemplate(templateName) {
+            const template = viralTemplates[templateName];
+            if (!template) return;
+
+            document.getElementById('projectName').value = template.name.toLowerCase().replace(/\s+/g, '_');
+            document.getElementById('sceneCount').value = template.scenes;
+            document.getElementById('sceneDuration').value = template.duration / template.scenes;
+            document.getElementById('narrationScript').value = template.narration;
+            
+            // AI will automatically generate music based on the template content
+            
+            document.getElementById('mobileFastPath').value = 'true';
+            document.getElementById('aspectRatio').value = '9:16';
+
+            console.log(`📝 Loaded template: ${template.name}`);
+        }
+        
+        // Add mobile simulation button
+        function addMobileSimulationButton() {
+            const btn = document.createElement('button');
+            btn.textContent = '📱 Simulate Mobile App';
+            btn.onclick = simulateMobileApp;
+            btn.style.cssText = 'position:fixed;top:10px;right:10px;z-index:9999;background:#4CAF50;color:white;padding:10px;border-radius:5px;border:none;cursor:pointer;';
+            document.body.appendChild(btn);
+        }
+        
+        // Add testing tools panel
+        function addTestingTools() {
+            const toolsPanel = document.createElement('div');
+            toolsPanel.innerHTML = `
+                <div style="position:fixed;top:10px;left:10px;z-index:9999;background:rgba(0,0,0,0.8);color:white;padding:15px;border-radius:8px;max-width:300px;">
+                    <h4 style="margin:0 0 10px 0;">🧪 Testing Tools</h4>
+                    <button onclick="reelBenchmark.start()" style="margin:2px;padding:5px 10px;background:#2196F3;color:white;border:none;border-radius:3px;cursor:pointer;">Start Benchmark</button>
+                    <button onclick="reelBenchmark.end()" style="margin:2px;padding:5px 10px;background:#4CAF50;color:white;border:none;border-radius:3px;cursor:pointer;">End Benchmark</button>
+                    <hr style="margin:10px 0;border-color:#555;">
+                    <h5 style="margin:5px 0;">Viral Templates:</h5>
+                    <button onclick="loadViralTemplate('dayInLife')" style="margin:2px;padding:5px 10px;background:#9C27B0;color:white;border:none;border-radius:3px;cursor:pointer;font-size:12px;">Day in Life</button>
+                    <button onclick="loadViralTemplate('beforeAfter')" style="margin:2px;padding:5px 10px;background:#9C27B0;color:white;border:none;border-radius:3px;cursor:pointer;font-size:12px;">Before/After</button>
+                    <button onclick="loadViralTemplate('quickTips')" style="margin:2px;padding:5px 10px;background:#9C27B0;color:white;border:none;border-radius:3px;cursor:pointer;font-size:12px;">Quick Tips</button>
+                </div>
+            `;
+            document.body.appendChild(toolsPanel);
+        }
+        
+        // Initialize testing tools when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            addMobileSimulationButton();
+            addTestingTools();
+            console.log('🧪 Testing tools loaded. Use the panel in the top-left corner.');
+        });
+    </script>
+</body>
+</html>

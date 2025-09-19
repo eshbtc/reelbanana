@@ -1,20 +1,19 @@
 FROM node:20-slim
 
-WORKDIR /usr/src/app
-
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy package files
-COPY package*.json ./
+# Work inside the service directory
+WORKDIR /app/backend/api-key-service
 
-# Install dependencies
+# Copy package files and install deps
+COPY backend/api-key-service/package*.json ./
 RUN npm ci --only=production
 
 # Copy application code
-COPY . .
+COPY backend/api-key-service/. .
 
 # Expose port
 EXPOSE 8085

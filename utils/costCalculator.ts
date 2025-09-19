@@ -1,20 +1,25 @@
 // Cost calculation utilities for ReelBanana
 import { Scene } from '../types';
 
-// Real API costs (per unit)
+// Real API costs (per unit) - Updated January 2025
 export const REAL_API_COSTS = {
-  // Google Gemini 2.0 Flash pricing (per 1M tokens)
-  geminiText: 0.000075, // $0.075 per 1M tokens
-  geminiImage: 0.000075, // $0.075 per 1M tokens
-  
-  // ElevenLabs pricing (per 100 characters)
-  elevenLabs: 0.0005, // $0.0005 per 100 characters
-  
-  // FAL AI pricing (per image)
-  falUpscale: 0.005, // $0.005 per image upscale
-  
-  // FFmpeg processing (estimated)
-  ffmpeg: 0.002, // $0.002 per video render
+  // Google Gemini 2.5 Flash pricing
+  geminiText: 0.00015, // $0.15 per 1M input tokens
+  geminiImage: 0.039, // $0.039 per generated image (1290 tokens @ $30/1M)
+
+  // ElevenLabs pricing
+  elevenLabsTTS: 0.00005, // $0.05 per 1000 characters ($50/1M chars)
+  elevenLabsMusic: 0.50, // $0.50 per minute of music
+
+  // FAL AI pricing
+  falVeo3VideoPerSecond: 0.10, // $0.10 per second (no audio)
+  falVeo3VideoPerSecondAudio: 0.15, // $0.15 per second (with audio)
+  falLtxVideoPerSecond: 0.005, // $0.005 per second (~$0.04 per 8s video)
+  falUpscale: 0.10, // $0.10 per upscale (polish)
+
+  // Other processing
+  ffmpeg: 0.002, // $0.002 per video compose
+  speechToText: 0.01, // Google Speech-to-Text for captions
 };
 
 // Credit system configuration
@@ -68,51 +73,53 @@ export const estimateImageTokens = (imageCount: number): number => {
   return imageCount * ESTIMATED_TOKENS_PER_IMAGE;
 };
 
-// Calculate cost for a single scene (in credits)
-export const calculateSceneCost = (scene: Scene, frames: number = 5): {
+// Calculate cost for a single scene (using real API costs in dollars)
+export const calculateSceneCost = (scene: Scene, frames: number = 5, videoDuration: number = 8): {
   imageGeneration: number;
   narration: number;
   videoRendering: number;
   proPolish: number;
   total: number;
   breakdown: {
-    imageGeneration: { credits: number; cost: number };
-    narration: { credits: number; cost: number };
-    videoRendering: { credits: number; cost: number };
-    proPolish: { credits: number; cost: number };
+    imageGeneration: { frames: number; cost: number };
+    narration: { characters: number; cost: number };
+    videoRendering: { seconds: number; cost: number };
+    proPolish: { enabled: boolean; cost: number };
   };
 } => {
-  // Image generation cost (in credits)
-  const imageCredits = OPERATION_COSTS.imageGeneration * frames;
-  const imageCost = creditsToDollars(imageCredits);
-  
-  // Narration cost (in credits) - based on character count
+  // Image generation cost (Gemini 2.5 Flash)
+  // Each scene typically generates 3-5 images
+  const imageCost = REAL_API_COSTS.geminiImage * frames;
+
+  // Narration cost (ElevenLabs TTS)
   const narrationChars = scene.narration ? scene.narration.length : 0;
-  const narrationCredits = Math.ceil(narrationChars / 100) * OPERATION_COSTS.narration;
-  const narrationCost = creditsToDollars(narrationCredits);
-  
-  // Video rendering cost (in credits)
-  const videoCredits = OPERATION_COSTS.videoRendering;
-  const videoCost = creditsToDollars(videoCredits);
-  
-  // Pro polish cost (in credits) - optional
-  const polishCredits = OPERATION_COSTS.proPolish;
-  const polishCost = creditsToDollars(polishCredits);
-  
-  const totalCredits = imageCredits + narrationCredits + videoCredits + polishCredits;
-  const totalCost = imageCost + narrationCost + videoCost + polishCost;
-  
+  const narrationCost = (narrationChars / 1000) * (REAL_API_COSTS.elevenLabsTTS * 1000);
+
+  // Video rendering cost (FAL - per second)
+  // Default 8 seconds per scene
+  // Use LTX for standard quality (96% cheaper) or Veo3 for premium
+  const usesPremium = scene.quality === 'premium' || scene.modelOverride?.includes('veo3');
+  const videoRate = usesPremium ?
+    REAL_API_COSTS.falVeo3VideoPerSecondAudio :
+    REAL_API_COSTS.falLtxVideoPerSecond;
+  const videoCost = videoRate * videoDuration;
+
+  // Pro polish cost (FAL upscaling) - optional
+  const polishCost = REAL_API_COSTS.falUpscale;
+
+  const totalCost = imageCost + narrationCost + videoCost;
+
   return {
-    imageGeneration: imageCredits,
-    narration: narrationCredits,
-    videoRendering: videoCredits,
-    proPolish: polishCredits,
-    total: totalCredits,
+    imageGeneration: imageCost,
+    narration: narrationCost,
+    videoRendering: videoCost,
+    proPolish: 0, // Disabled by default due to high cost
+    total: totalCost,
     breakdown: {
-      imageGeneration: { credits: imageCredits, cost: imageCost },
-      narration: { credits: narrationCredits, cost: narrationCost },
-      videoRendering: { credits: videoCredits, cost: videoCost },
-      proPolish: { credits: polishCredits, cost: polishCost },
+      imageGeneration: { frames, cost: imageCost },
+      narration: { characters: narrationChars, cost: narrationCost },
+      videoRendering: { seconds: videoDuration, cost: videoCost },
+      proPolish: { enabled: false, cost: 0 },
     }
   };
 };
@@ -234,6 +241,17 @@ export const FREE_TIER_CONFIG = {
   resolution: '480p',
   watermarked: true,
   features: ['Basic templates', 'Standard voices', '480p output'],
+};
+
+// Get video model cost per second
+export const getVideoModelCost = (modelId: string): number => {
+  if (modelId.includes('ltx') || modelId.includes('ltxv')) {
+    return REAL_API_COSTS.falLtxVideoPerSecond;
+  } else if (modelId.includes('veo3')) {
+    return REAL_API_COSTS.falVeo3VideoPerSecondAudio;
+  }
+  // Default to LTX pricing for unknown models
+  return REAL_API_COSTS.falLtxVideoPerSecond;
 };
 
 // Format cost for display

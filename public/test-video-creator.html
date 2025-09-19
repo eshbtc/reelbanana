@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReelBanana Pipeline Tester</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .container {
+            background: #2a2a2a;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #ffd700;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #555;
+            border-radius: 5px;
+            background: #333;
+            color: #fff;
+            font-size: 14px;
+        }
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        button {
+            background: #ffd700;
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 20px;
+        }
+        button:hover {
+            background: #ffed4e;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .status.success {
+            background: #2d5a2d;
+            border: 1px solid #4a7c4a;
+        }
+        .status.error {
+            background: #5a2d2d;
+            border: 1px solid #7c4a4a;
+        }
+        .status.info {
+            background: #2d4a5a;
+            border: 1px solid #4a6a7c;
+        }
+        .progress {
+            margin-top: 20px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #333;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #ffd700;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .step {
+            margin: 10px 0;
+            padding: 10px;
+            background: #333;
+            border-radius: 5px;
+            border-left: 4px solid #ffd700;
+        }
+        .step.completed {
+            border-left-color: #4a7c4a;
+            background: #2d5a2d;
+        }
+        .step.error {
+            border-left-color: #7c4a4a;
+            background: #5a2d2d;
+        }
+        .video-result {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .video-result video {
+            max-width: 100%;
+            border-radius: 10px;
+        }
+        .video-result a {
+            display: inline-block;
+            margin-top: 10px;
+            color: #ffd700;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .video-result a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 ReelBanana Pipeline Tester</h1>
+        <p style="text-align: center; color: #ccc; margin-bottom: 30px;">
+            Create test videos to verify the complete pipeline is working
+        </p>
+
+        <form id="videoForm">
+            <div class="form-group">
+                <label for="projectName">Project Name:</label>
+                <input type="text" id="projectName" value="test-video" required>
+            </div>
+
+            <div class="form-group">
+                <label for="sceneCount">Number of Scenes:</label>
+                <select id="sceneCount">
+                    <option value="2">2 scenes</option>
+                    <option value="3" selected>3 scenes</option>
+                    <option value="4">4 scenes</option>
+                    <option value="5">5 scenes</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="sceneDuration">Duration per Scene (seconds):</label>
+                <select id="sceneDuration">
+                    <option value="5">5 seconds</option>
+                    <option value="6">6 seconds</option>
+                    <option value="8" selected>8 seconds</option>
+                    <option value="10">10 seconds</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="narrationScript">Narration Script:</label>
+                <textarea id="narrationScript" placeholder="Enter your narration script here...">Welcome to the future of AI video creation. This is ReelBanana, where artificial intelligence transforms your ideas into cinematic masterpieces. In this first scene, we explore the power of AI-driven storytelling. The technology behind this video represents a revolution in content creation. Moving to our second scene, we witness how machine learning algorithms can generate stunning visuals and compelling narratives. This is not just video editing, this is the future of entertainment. Finally, in our third scene, we see the culmination of AI creativity. Every frame, every transition, every moment has been crafted by artificial intelligence. This is ReelBanana, where your imagination meets AI innovation.</textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="emotion">Voice Emotion:</label>
+                <select id="emotion">
+                    <option value="professional" selected>Professional</option>
+                    <option value="friendly">Friendly</option>
+                    <option value="dramatic">Dramatic</option>
+                    <option value="calm">Calm</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="includeCaptions">Include Captions:</label>
+                <select id="includeCaptions">
+                    <option value="true" selected>Yes (try to align captions)</option>
+                    <option value="false">No (skip captions)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="recaptchaKey">ReCAPTCHA Site Key (Optional):</label>
+                <input type="text" id="recaptchaKey" placeholder="6LfSNMArAAAAALXUYNGFmOSJN7O7W9c4Chp4oP1e" value="6LfSNMArAAAAALXUYNGFmOSJN7O7W9c4Chp4oP1e">
+                <small style="color: #ccc; font-size: 12px;">
+                    Default key is provided, but you can use your own if needed
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label for="idToken">Firebase ID Token (Optional):</label>
+                <input type="text" id="idToken" placeholder="Paste your Firebase ID token here (get from DevTools)">
+                <small style="color: #ccc; font-size: 12px;">
+                    Get this from Chrome DevTools → Application → Local Storage → reel-banana-35a54.web.app
+                </small>
+            </div>
+
+            <button type="submit" id="createButton">🎬 Create Test Video</button>
+        </form>
+
+        <div id="status" class="status" style="display: none;"></div>
+        <div id="progress" class="progress" style="display: none;">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+        <div id="steps"></div>
+        <div id="videoResult" class="video-result"></div>
+    </div>
+
+    <script type="module">
+        // Firebase configuration
+        const firebaseConfig = {
+            projectId: 'reel-banana-35a54',
+            apiKey: 'AIzaSyCeZNdwsaZ_sBmOt8WY0FcUziq22-OVJjg',
+            authDomain: 'reel-banana-35a54.firebaseapp.com',
+            storageBucket: 'reel-banana-35a54.firebasestorage.app',
+            appId: '1:223097908182:web:982c634d6aaeb3c805d277'
+        };
+
+        // Initialize Firebase
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js';
+        import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js';
+        import { initializeAppCheck, ReCaptchaV3Provider, getToken } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-app-check.js';
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        
+        // Set debug token first
+        window.FIREBASE_APPCHECK_DEBUG_TOKEN = 'BD052919-E623-4887-8CFC-FAAFF4E8B2D5';
+        
+        // Initialize App Check with configurable ReCAPTCHA key
+        let appCheck = null;
+        
+        function initializeAppCheckWithKey(recaptchaKey) {
+            try {
+                appCheck = initializeAppCheck(app, {
+                    provider: new ReCaptchaV3Provider(recaptchaKey),
+                    isTokenAutoRefreshEnabled: true
+                });
+                console.log('✅ App Check initialized with ReCAPTCHA key:', recaptchaKey);
+                return true;
+            } catch (error) {
+                console.error('❌ App Check initialization failed:', error);
+                return false;
+            }
+        }
+        
+        // Initialize with default key
+        initializeAppCheckWithKey('6LfSNMArAAAAALXUYNGFmOSJN7O7W9c4Chp4oP1e');
+
+        let currentUser = null;
+        let appCheckToken = null;
+
+        // Service URLs
+        const SERVICES = {
+            upload: 'https://reel-banana-upload-assets-223097908182.us-central1.run.app',
+            narrate: 'https://reel-banana-narrate-223097908182.us-central1.run.app',
+            align: 'https://reel-banana-align-captions-223097908182.us-central1.run.app',
+            render: 'https://reel-banana-render-223097908182.us-central1.run.app'
+        };
+
+        // Initialize authentication
+        async function initializeAuth() {
+            try {
+                // Get ReCAPTCHA key from form
+                const recaptchaKey = document.getElementById('recaptchaKey').value.trim();
+                
+                // Re-initialize App Check with the provided key if different
+                if (recaptchaKey && recaptchaKey !== '6LfSNMArAAAAALXUYNGFmOSJN7O7W9c4Chp4oP1e') {
+                    console.log('🔄 Re-initializing App Check with new ReCAPTCHA key...');
+                    initializeAppCheckWithKey(recaptchaKey);
+                }
+                
+                // Get App Check token
+                if (!appCheck) {
+                    throw new Error('App Check not initialized. Please check your ReCAPTCHA key.');
+                }
+                
+                const appCheckTokenResult = await getToken(appCheck, false);
+                appCheckToken = appCheckTokenResult.token;
+                
+                // Get ID token from form or use placeholder
+                const providedToken = document.getElementById('idToken').value.trim();
+                const idToken = providedToken || 'PLACEHOLDER_TOKEN';
+                
+                console.log('✅ App Check token obtained');
+                if (providedToken) {
+                    console.log('✅ Using provided ID token');
+                } else {
+                    console.log('⚠️ Using placeholder ID token - you may need to provide a real one');
+                }
+                return { idToken, appCheckToken };
+            } catch (error) {
+                console.error('❌ Authentication failed:', error);
+                throw error;
+            }
+        }
+
+        // Show status message
+        function showStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+        }
+
+        // Update progress
+        function updateProgress(percent) {
+            const progress = document.getElementById('progress');
+            const progressFill = document.getElementById('progressFill');
+            progress.style.display = 'block';
+            progressFill.style.width = `${percent}%`;
+        }
+
+        // Add step
+        function addStep(message, status = 'pending') {
+            const steps = document.getElementById('steps');
+            const step = document.createElement('div');
+            step.className = `step ${status}`;
+            step.textContent = message;
+            steps.appendChild(step);
+        }
+
+        // Update step status
+        function updateStep(index, status) {
+            const steps = document.querySelectorAll('.step');
+            if (steps[index]) {
+                steps[index].className = `step ${status}`;
+            }
+        }
+
+        // Create test image
+        function createTestImage(color, text) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 800;
+            canvas.height = 600;
+            const ctx = canvas.getContext('2d');
+            
+            // Create gradient background
+            const gradient = ctx.createLinearGradient(0, 0, 800, 600);
+            gradient.addColorStop(0, color);
+            gradient.addColorStop(1, color + '80');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 800, 600);
+            
+            // Add text
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 48px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('ReelBanana', 400, 200);
+            ctx.font = '36px Arial';
+            ctx.fillText(text, 400, 300);
+            ctx.font = '24px Arial';
+            ctx.fillText('AI Video Creation Test', 400, 400);
+            ctx.fillText(new Date().toLocaleString(), 400, 500);
+            
+            return canvas.toDataURL('image/jpeg', 0.8);
+        }
+
+        // Upload image
+        async function uploadImage(projectId, sceneIndex, tokens) {
+            const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7'];
+            const color = colors[sceneIndex % colors.length];
+            const text = `Scene ${sceneIndex + 1}`;
+            
+            const testImage = createTestImage(color, text);
+            
+            const response = await fetch(`${SERVICES.upload}/upload-image`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Firebase-AppCheck': tokens.appCheckToken,
+                    'Authorization': `Bearer ${tokens.idToken}`
+                },
+                body: JSON.stringify({
+                    projectId,
+                    fileName: `scene-${sceneIndex}-0.jpeg`,
+                    base64Image: testImage
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Upload failed: ${await response.text()}`);
+            }
+            
+            return await response.json();
+        }
+
+        // Generate narration
+        async function generateNarration(projectId, script, emotion, tokens) {
+            const response = await fetch(`${SERVICES.narrate}/narrate`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Firebase-AppCheck': tokens.appCheckToken,
+                    'Authorization': `Bearer ${tokens.idToken}`
+                },
+                body: JSON.stringify({
+                    projectId,
+                    narrationScript: script,
+                    emotion
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Narration failed: ${await response.text()}`);
+            }
+            
+            return await response.json();
+        }
+
+        // Align captions
+        async function alignCaptions(projectId, gsAudioPath, tokens) {
+            const response = await fetch(`${SERVICES.align}/align`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Firebase-AppCheck': tokens.appCheckToken,
+                    'Authorization': `Bearer ${tokens.idToken}`
+                },
+                body: JSON.stringify({
+                    projectId,
+                    gsAudioPath
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Caption alignment failed: ${await response.text()}`);
+            }
+            
+            return await response.json();
+        }
+
+        // Render video
+        async function renderVideo(projectId, scenes, gsAudioPath, srtPath, emotion, tokens) {
+            const payload = {
+                projectId,
+                scenes,
+                emotion,
+                gsAudioPath,
+                ...(srtPath ? { srtPath } : { noSubtitles: true })
+            };
+            
+            const response = await fetch(`${SERVICES.render}/render`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Firebase-AppCheck': tokens.appCheckToken,
+                    'Authorization': `Bearer ${tokens.idToken}`
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Render failed: ${await response.text()}`);
+            }
+            
+            return await response.json();
+        }
+
+        // Main video creation function
+        async function createVideo() {
+            const form = document.getElementById('videoForm');
+            const button = document.getElementById('createButton');
+            const status = document.getElementById('status');
+            const progress = document.getElementById('progress');
+            const steps = document.getElementById('steps');
+            const videoResult = document.getElementById('videoResult');
+            
+            // Get form data
+            const projectName = document.getElementById('projectName').value;
+            const sceneCount = parseInt(document.getElementById('sceneCount').value);
+            const sceneDuration = parseInt(document.getElementById('sceneDuration').value);
+            const narrationScript = document.getElementById('narrationScript').value;
+            const emotion = document.getElementById('emotion').value;
+            const includeCaptions = document.getElementById('includeCaptions').value === 'true';
+            
+            const projectId = `${projectName}_${Date.now()}`;
+            
+            // Reset UI
+            button.disabled = true;
+            button.textContent = 'Creating Video...';
+            status.style.display = 'none';
+            progress.style.display = 'none';
+            steps.innerHTML = '';
+            videoResult.innerHTML = '';
+            
+            try {
+                showStatus('Initializing authentication...', 'info');
+                updateProgress(5);
+                
+                // Initialize authentication
+                const tokens = await initializeAuth();
+                addStep('✅ Authentication initialized');
+                
+                showStatus('Uploading images...', 'info');
+                updateProgress(15);
+                
+                // Upload images
+                const uploadedImages = [];
+                for (let i = 0; i < sceneCount; i++) {
+                    addStep(`📤 Uploading scene ${i + 1}...`);
+                    const result = await uploadImage(projectId, i, tokens);
+                    uploadedImages.push(result);
+                    updateStep(i, 'completed');
+                    updateProgress(15 + (i + 1) * 15);
+                }
+                
+                showStatus('Generating narration...', 'info');
+                updateProgress(60);
+                addStep('🎤 Generating narration...');
+                
+                // Generate narration
+                const narrationResult = await generateNarration(projectId, narrationScript, emotion, tokens);
+                updateStep(sceneCount, 'completed');
+                
+                let srtPath = null;
+                if (includeCaptions) {
+                    showStatus('Aligning captions...', 'info');
+                    updateProgress(75);
+                    addStep('📝 Aligning captions...');
+                    
+                    try {
+                        const alignResult = await alignCaptions(projectId, narrationResult.gsAudioPath, tokens);
+                        srtPath = alignResult.srtPath;
+                        updateStep(sceneCount + 1, 'completed');
+                    } catch (error) {
+                        console.warn('Caption alignment failed:', error);
+                        updateStep(sceneCount + 1, 'error');
+                        addStep('⚠️ Caption alignment failed, proceeding without captions');
+                    }
+                } else {
+                    addStep('⏭️ Skipping captions (noSubtitles=true)');
+                }
+                
+                showStatus('Rendering video...', 'info');
+                updateProgress(85);
+                addStep('🎬 Rendering video...');
+                
+                // Create scenes array
+                const scenes = Array.from({ length: sceneCount }, (_, i) => ({
+                    id: `scene-${i}`,
+                    prompt: `Professional scene ${i + 1} with cinematic lighting, modern design, and AI-generated visuals. High quality, detailed, professional photography style.`,
+                    camera: ['zoom-in', 'pan-left', 'zoom-out', 'pan-right', 'zoom-in'][i % 5],
+                    transition: ['fade', 'slide', 'fade', 'slide', 'fade'][i % 5],
+                    duration: sceneDuration
+                }));
+                
+                // Render video
+                const renderResult = await renderVideo(projectId, scenes, narrationResult.gsAudioPath, srtPath, emotion, tokens);
+                updateStep(sceneCount + (includeCaptions ? 2 : 1), 'completed');
+                
+                showStatus('Video created successfully!', 'success');
+                updateProgress(100);
+                
+                // Display result
+                const videoUrl = renderResult.gsVideoPath || renderResult.videoUrl;
+                if (videoUrl) {
+                    videoResult.innerHTML = `
+                        <h3>🎉 Your Video is Ready!</h3>
+                        <p><strong>Project ID:</strong> ${projectId}</p>
+                        <p><strong>Duration:</strong> ${sceneCount * sceneDuration} seconds</p>
+                        <p><strong>Scenes:</strong> ${sceneCount} scenes</p>
+                        <p><strong>Captions:</strong> ${srtPath ? 'Included' : 'Not included'}</p>
+                        <br>
+                        <a href="${videoUrl}" target="_blank" style="font-size: 18px; padding: 10px 20px; background: #ffd700; color: #000; text-decoration: none; border-radius: 5px;">
+                            📹 Watch Your Video
+                        </a>
+                        <br><br>
+                        <p style="color: #ccc; font-size: 14px;">
+                            Click the link above to watch your AI-generated video!
+                        </p>
+                    `;
+                } else {
+                    videoResult.innerHTML = `
+                        <h3>🎉 Video Processing Complete!</h3>
+                        <p><strong>Project ID:</strong> ${projectId}</p>
+                        <p>The video has been processed and should be available shortly.</p>
+                    `;
+                }
+                
+            } catch (error) {
+                console.error('Video creation failed:', error);
+                showStatus(`Error: ${error.message}`, 'error');
+                addStep(`❌ ${error.message}`);
+            } finally {
+                button.disabled = false;
+                button.textContent = '🎬 Create Test Video';
+            }
+        }
+
+        // Event listener
+        document.getElementById('videoForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            createVideo();
+        });
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            showStatus('Ready to create test videos!', 'info');
+        });
+    </script>
+</body>
+</html>

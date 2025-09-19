@@ -174,7 +174,8 @@ function getOperationCost(operation, params = {}) {
     'proPolish': 10,
     'musicGeneration': 2,
     'alignCaptions': 1,
-    'uploadAsset': 0 // Free operation
+    'uploadAsset': 0, // Free operation
+    'videoEnhancement': 8 // Video-to-video AI transformations
   };
 
   let baseCost = costs[operation] || 1;

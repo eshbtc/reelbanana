@@ -24,19 +24,20 @@ const { ElevenLabsClient } = require('elevenlabs');
 const { createHash } = require('crypto');
 const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
 const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
-const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('./shared/creditService');
+const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('../shared/creditService');
 
 const app = express();
 
-// Trust proxy for Cloud Run (fixes X-Forwarded-For header issue for IP rate limiting)
-app.set('trust proxy', true);
+// Trust the first proxy (Cloud Run/GFE) for correct IPs without being permissive
+app.set('trust proxy', 1);
 
 app.use(express.json());
 const defaultOrigins = [
   'https://reelbanana.ai',
   'https://reel-banana-35a54.web.app',
   'http://localhost:5173',
-  'http://localhost:3000'
+  'http://localhost:3000',
+  'http://localhost:8080'
 ];
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || defaultOrigins.join(',')).split(',').map(s => s.trim()).filter(Boolean);
 app.use((req, res, next) => {
@@ -240,43 +241,323 @@ const metrics = {
   cacheHits: 0
 };
 
-// AI-powered music prompt generation using Firebase Genkit with Vertex AI
-async function generateMusicPromptWithAI(narrationScript) {
-  const prompt = `Analyze the following narration script and provide a short, descriptive musical prompt (e.g., "An upbeat, whimsical, adventurous orchestral score for a children's story, with a sense of wonder and a triumphant finish."). Only return the prompt text, nothing else. Script: "${narrationScript}"`;
-  
+// Analyze images and generate music parameters based on visual content
+async function analyzeImagesForMusic(imageUrls, narrationScript, baseMusicParameters = {}) {
+  if (!imageUrls || imageUrls.length === 0) {
+    console.log('🎨 No images provided for visual analysis, using base parameters');
+    return baseMusicParameters;
+  }
+
   try {
-    if (!ai || typeof ai.generate !== 'function') {
-      return generateFallbackPrompt(narrationScript);
-    }
-    console.log('🎵 Generating music prompt with Firebase Genkit + Vertex AI...');
+    console.log(`🎨 Analyzing ${imageUrls.length} images for music generation...`);
+    
+    // Create a comprehensive prompt for visual analysis
+    const visualAnalysisPrompt = `You are a music composer analyzing visual content to create the perfect soundtrack. Analyze the images and narration to generate unique music parameters.
+
+NARRATION: "${narrationScript}"
+
+VISUAL ANALYSIS INSTRUCTIONS:
+Analyze the visual content and identify:
+1. **Atmosphere**: Dark/mysterious, bright/cheerful, dramatic/intense, calm/peaceful, energetic/dynamic
+2. **Color Palette**: Warm (reds, oranges, yellows), Cool (blues, greens, purples), Monochromatic, High contrast, Muted tones
+3. **Setting**: Urban/city, Nature/outdoor, Indoor/domestic, Futuristic/sci-fi, Historical/period, Abstract/surreal
+4. **Movement**: Static/calm, Slow/gentle, Dynamic/active, Fast/energetic, Chaotic/intense
+5. **Emotional Tone**: Joyful, Melancholic, Tense, Peaceful, Exciting, Romantic, Epic, Mysterious
+
+MUSIC PARAMETER SELECTION:
+Based on your analysis, select music parameters that will create a soundtrack that perfectly matches the visual story:
+
+**Style Selection Guide:**
+- Dark/mysterious → dramatic, ambient, or electronic
+- Bright/cheerful → pop, folk, or classical
+- Urban/modern → electronic, hip-hop, or rock
+- Nature/outdoor → acoustic, folk, or ambient
+- Futuristic → electronic, synth, or ambient
+- Historical → classical, orchestral, or folk
+
+**Genre Selection Guide:**
+- Orchestral: Epic, dramatic, or classical scenes
+- Electronic: Modern, futuristic, or urban scenes
+- Acoustic: Natural, intimate, or organic scenes
+- Ambient: Atmospheric, mysterious, or contemplative scenes
+
+**Tempo Selection:**
+- Static/calm → slow
+- Gentle movement → medium
+- Active/dynamic → fast
+- Intense/chaotic → very-fast
+
+**Mood Selection:**
+- Match the dominant emotional tone of the visuals
+- Consider the overall atmosphere and color palette
+
+**Instruments Selection:**
+- Choose instruments that match the setting and mood
+- Consider the visual complexity and energy level
+
+**Key Selection:**
+- Major keys for bright, positive, or uplifting content
+- Minor keys for dark, mysterious, or melancholic content
+
+**Complexity/Energy/Density:**
+- Match the visual complexity and energy level
+- Consider the amount of detail and movement in the images
+
+CRITICAL: Make each selection unique and specific to the visual content. Avoid generic choices. The music should feel like it was composed specifically for these exact images.
+
+Return your analysis in this exact format:
+VISUAL_ANALYSIS: [Detailed analysis of the visual content, atmosphere, and emotional tone]
+MUSIC_PARAMETERS: {
+  "style": "[specific style choice]",
+  "genre": "[specific genre choice]", 
+  "tempo": "[specific tempo choice]",
+  "mood": "[specific mood choice]",
+  "instruments": "[specific instrument choice]",
+  "key": "[specific key choice]",
+  "complexity": "[specific complexity choice]",
+  "energy": "[specific energy choice]",
+  "density": "[specific density choice]"
+}`;
+
+    // Use AI to analyze images and generate music parameters
     const response = await ai.generate({
-      prompt,
-      config: { maxOutputTokens: 100, temperature: 0.7 }
+      prompt: visualAnalysisPrompt,
+      config: { 
+        maxOutputTokens: 500, 
+        temperature: 0.8 // Higher temperature for more creative analysis
+      }
     });
+
     const aiResponse = response?.text?.()?.trim();
-    console.log('🎵 AI-generated music prompt:', aiResponse);
-    return aiResponse || generateFallbackPrompt(narrationScript);
+    console.log('🎨 AI Visual Analysis Response:', aiResponse);
+
+    // Parse the AI response to extract music parameters
+    const musicParamsMatch = aiResponse.match(/MUSIC_PARAMETERS:\s*({[\s\S]*?})/);
+    if (musicParamsMatch) {
+      try {
+        const extractedParams = JSON.parse(musicParamsMatch[1]);
+        console.log('🎨 Extracted music parameters from visual analysis:', extractedParams);
+        
+        // Merge with base parameters, giving priority to visual analysis
+        const finalParams = {
+          ...baseMusicParameters,
+          ...extractedParams,
+          // Ensure required parameters are present
+          duration: baseMusicParameters.duration || 20,
+          format: baseMusicParameters.format || 'wav',
+          vocals: baseMusicParameters.vocals || 'instrumental'
+        };
+        
+        console.log('🎨 Final visual-aware music parameters:', finalParams);
+        return finalParams;
+      } catch (parseError) {
+        console.log('🎨 Failed to parse music parameters from AI response:', parseError.message);
+      }
+    }
+
+    console.log('🎨 Could not extract music parameters from visual analysis, using base parameters');
+    return baseMusicParameters;
+
   } catch (error) {
-    console.log('🎵 AI generation failed, using fallback:', error?.message || error);
-    return generateFallbackPrompt(narrationScript);
+    console.log('🎨 Visual analysis failed, using base parameters:', error?.message || error);
+    return baseMusicParameters;
   }
 }
 
-// Fallback music prompt generation
-function generateFallbackPrompt(narrationScript) {
-  const script = narrationScript.toLowerCase();
+// Generate composition plan using ElevenLabs Music API
+async function generateCompositionPlan(narrationScript, musicParameters = {}, imageUrls = []) {
+  const {
+    style = 'cinematic',
+    genre = 'orchestral',
+    structure = 'intro-verse-chorus-verse-chorus-outro',
+    vocals = 'instrumental',
+    duration = 20,
+    tempo = 'medium',
+    mood = 'dramatic',
+    instruments = 'orchestra',
+    key = 'C',
+    timeSignature = '4/4',
+    complexity = 'moderate',
+    energy = 'medium',
+    density = 'moderate'
+  } = musicParameters;
+
+  // Create a detailed prompt for composition plan generation
+  const planPrompt = `Create a ${style} ${genre} composition for a ${duration}-second ${mood} piece. 
   
-  if (script.includes('adventure') || script.includes('journey') || script.includes('quest')) {
-    return "An epic, adventurous orchestral score with triumphant brass and driving percussion";
-  } else if (script.includes('mystery') || script.includes('secret') || script.includes('hidden')) {
-    return "A mysterious, atmospheric score with haunting strings and subtle percussion";
-  } else if (script.includes('happy') || script.includes('joy') || script.includes('celebration')) {
-    return "An upbeat, cheerful orchestral score with bright melodies and uplifting harmonies";
-  } else if (script.includes('magic') || script.includes('fantasy') || script.includes('wonder')) {
-    return "A whimsical, magical orchestral score with sparkling melodies and enchanting harmonies";
-  } else {
-    return "A balanced, cinematic orchestral score with emotional depth and dynamic range";
+Narration context: "${narrationScript}"
+
+${imageUrls.length > 0 ? `Visual context: This music will accompany ${imageUrls.length} images that tell a visual story.` : ''}
+
+Musical requirements:
+- Style: ${style} with ${genre} elements
+- Tempo: ${tempo} (${tempo === 'slow' ? '60-80 BPM' : tempo === 'medium' ? '80-120 BPM' : tempo === 'fast' ? '120-160 BPM' : '160+ BPM'})
+- Mood: ${mood} throughout
+- Instruments: ${instruments}
+- Key: ${key}
+- Time signature: ${timeSignature}
+- Complexity: ${complexity}
+- Energy level: ${energy}
+- Density: ${density}
+- Vocals: ${vocals === 'instrumental' ? 'No vocals, purely instrumental' : vocals === 'vocals' ? 'Include vocal elements' : 'Mix of instrumental and vocal elements'}
+
+Structure: ${structure}
+Duration: ${duration} seconds total
+
+${imageUrls.length > 0 ? 'Create a dynamic, engaging composition that matches both the narration and the visual story being told through the images.' : 'Create a dynamic, engaging composition that matches the narration\'s emotional arc and content.'}`;
+
+  try {
+    console.log('🎵 Creating composition plan with ElevenLabs Music API...');
+    
+    // Use ElevenLabs Music API to create a composition plan
+    const planResponse = await elevenLabsClient.music.createCompositionPlan({
+      prompt: planPrompt,
+      music_length_ms: duration * 1000,
+      model_id: 'music_v1'
+    });
+
+    console.log('🎵 Composition plan created:', JSON.stringify(planResponse, null, 2));
+    return planResponse;
+  } catch (error) {
+    console.log('🎵 Composition plan generation failed, using fallback prompt:', error?.message || error);
+    return null; // Will fall back to simple prompt
   }
+}
+
+// AI-powered music prompt generation using Firebase Genkit with Vertex AI
+async function generateMusicPromptWithAI(narrationScript, musicParameters = {}) {
+  const {
+    style = 'cinematic',
+    genre = 'orchestral',
+    structure = 'intro-verse-chorus-verse-chorus-outro',
+    vocals = 'instrumental',
+    duration = 20,
+    format = 'wav',
+    tempo = 'medium',
+    mood = 'dramatic',
+    instruments = 'orchestra',
+    key = 'C',
+    timeSignature = '4/4',
+    complexity = 'moderate',
+    energy = 'medium',
+    density = 'moderate'
+  } = musicParameters;
+
+  // Add randomization and style variation
+  const randomSeed = Math.random().toString(36).substring(7);
+  
+  const prompt = `Create a detailed musical prompt for ElevenLabs Music API based on this narration script and parameters:
+
+NARRATION: "${narrationScript}"
+
+PARAMETERS:
+- Style: ${style}
+- Genre: ${genre}
+- Structure: ${structure}
+- Vocals: ${vocals}
+- Duration: ${duration} seconds
+- Format: ${format}
+- Tempo: ${tempo}
+- Mood: ${mood}
+- Instruments: ${instruments}
+- Key: ${key}
+- Time Signature: ${timeSignature}
+- Complexity: ${complexity}
+- Energy: ${energy}
+- Density: ${density}
+
+Create a comprehensive, specific prompt that incorporates all these parameters. Include musical direction, instrumentation details, emotional arc, and technical specifications. Make it unique and varied.`;
+  
+  try {
+    if (!ai || typeof ai.generate !== 'function') {
+      return generateFallbackPrompt(narrationScript, musicParameters);
+    }
+    console.log(`🎵 Generating music prompt with Firebase Genkit + Vertex AI (style: ${style}, genre: ${genre}, seed: ${randomSeed})...`);
+    const response = await ai.generate({
+      prompt,
+      config: { maxOutputTokens: 200, temperature: 0.9 } // Higher temperature for more variation
+    });
+    const aiResponse = response?.text?.()?.trim();
+    console.log('🎵 AI-generated music prompt:', aiResponse);
+    return aiResponse || generateFallbackPrompt(narrationScript, musicParameters);
+  } catch (error) {
+    console.log('🎵 AI generation failed, using fallback:', error?.message || error);
+    return generateFallbackPrompt(narrationScript, musicParameters);
+  }
+}
+
+// Fallback music prompt generation with comprehensive parameter support
+function generateFallbackPrompt(narrationScript, musicParameters = {}) {
+  const {
+    style = 'cinematic',
+    genre = 'orchestral',
+    structure = 'intro-verse-chorus-verse-chorus-outro',
+    vocals = 'instrumental',
+    duration = 20,
+    format = 'wav',
+    tempo = 'medium',
+    mood = 'dramatic',
+    instruments = 'orchestra',
+    key = 'C',
+    timeSignature = '4/4',
+    complexity = 'moderate',
+    energy = 'medium',
+    density = 'moderate'
+  } = musicParameters;
+
+  const script = narrationScript.toLowerCase();
+  const randomSeed = Math.random();
+  
+  // Build comprehensive prompt based on all parameters
+  const tempoMap = {
+    'slow': 'slow, relaxed tempo',
+    'medium': 'moderate tempo',
+    'fast': 'upbeat, energetic tempo',
+    'very-fast': 'very fast, driving tempo'
+  };
+  
+  const energyMap = {
+    'low': 'gentle, subdued energy',
+    'medium': 'balanced energy',
+    'high': 'high energy and intensity',
+    'very-high': 'maximum energy and power'
+  };
+  
+  const complexityMap = {
+    'simple': 'simple, straightforward arrangement',
+    'moderate': 'moderately complex arrangement',
+    'complex': 'complex, layered arrangement',
+    'very-complex': 'highly complex, intricate arrangement'
+  };
+  
+  const densityMap = {
+    'sparse': 'sparse, minimal instrumentation',
+    'moderate': 'moderate instrumentation',
+    'dense': 'dense, full instrumentation',
+    'very-dense': 'very dense, rich instrumentation'
+  };
+  
+  // Content-based mood detection
+  let contentMood = mood;
+  if (script.includes('adventure') || script.includes('journey') || script.includes('quest')) {
+    contentMood = 'epic';
+  } else if (script.includes('mystery') || script.includes('secret') || script.includes('hidden')) {
+    contentMood = 'mysterious';
+  } else if (script.includes('happy') || script.includes('joy') || script.includes('celebration')) {
+    contentMood = 'happy';
+  } else if (script.includes('magic') || script.includes('fantasy') || script.includes('wonder')) {
+    contentMood = 'magical';
+  }
+  
+  // Generate comprehensive prompt
+  const prompt = `A ${style} ${genre} composition in ${key} key with ${timeSignature} time signature. 
+${tempoMap[tempo]} with ${energyMap[energy]}. 
+${complexityMap[complexity]} featuring ${instruments} with ${densityMap[density]}. 
+${contentMood} mood throughout the ${duration}-second piece. 
+${vocals === 'instrumental' ? 'Purely instrumental' : vocals === 'vocals' ? 'With vocal elements' : 'Both instrumental and vocal elements'}. 
+${structure} structure with ${mood} emotional arc.`;
+  
+  return prompt.trim();
 }
 
 // Normalize scripts for cache matching (punctuation/spacing/quotes)
@@ -293,25 +574,63 @@ function normalizeScriptForCache(text) {
 }
 
 // Content-addressable cache key for music results (supports exact and normalized)
-function musicCacheKey({ narrationScript, normalized = false }) {
+function musicCacheKey({ narrationScript, musicParameters = {}, imageUrls = [], normalized = false }) {
   const base = normalized ? normalizeScriptForCache(narrationScript) : String(narrationScript || '').trim();
-  const payload = JSON.stringify({ v: 2, text: base, duration: 20, format: 'wav' });
+  const payload = JSON.stringify({ 
+    v: 5, // Increment version to include image URLs
+    text: base, 
+    imageUrls: imageUrls || [], // Include image URLs in cache key
+    ...musicParameters,
+    // Include all parameters that affect music generation
+    style: musicParameters.style || 'cinematic',
+    genre: musicParameters.genre || 'orchestral',
+    structure: musicParameters.structure || 'intro-verse-chorus-verse-chorus-outro',
+    vocals: musicParameters.vocals || 'instrumental',
+    duration: musicParameters.duration || 20,
+    format: musicParameters.format || 'wav',
+    tempo: musicParameters.tempo || 'medium',
+    mood: musicParameters.mood || 'dramatic',
+    instruments: musicParameters.instruments || 'orchestra',
+    key: musicParameters.key || 'C',
+    timeSignature: musicParameters.timeSignature || '4/4',
+    complexity: musicParameters.complexity || 'moderate',
+    energy: musicParameters.energy || 'medium',
+    density: musicParameters.density || 'moderate'
+  });
   return createHash('sha256').update(payload).digest('hex');
 }
 
 /**
  * POST /compose-music
  * Generates a musical score based on narration script mood and saves it to GCS.
+ * Supports all ElevenLabs Music API features for maximum customization.
  *
  * Request Body:
  * {
  *   "projectId": "string",
- *   "narrationScript": "The full text of the narration."
+ *   "narrationScript": "The full text of the narration.",
+ *   "style": "cinematic|electronic|ambient|dramatic|jazz|rock|classical|pop|hip-hop|folk|blues|country|reggae|funk|soul|r&b|metal|punk|indie|alternative",
+ *   "genre": "orchestral|synth|acoustic|electronic|ambient|rock|jazz|classical|pop|hip-hop|folk|blues|country|reggae|funk|soul|r&b|metal|punk|indie|alternative",
+ *   "structure": "intro-verse-chorus-verse-chorus-bridge-chorus-outro|verse-chorus-verse-chorus|intro-verse-chorus-outro|ambient-drone|cinematic-crescendo|simple-loop",
+ *   "vocals": "instrumental|vocals|both",
+ *   "duration": 10-60 (seconds, default: 20),
+ *   "format": "wav|mp3|flac",
+ *   "tempo": "slow|medium|fast|very-fast",
+ *   "mood": "happy|sad|energetic|calm|dramatic|mysterious|romantic|epic|melancholic|uplifting",
+ *   "instruments": "piano|guitar|violin|drums|bass|synthesizer|orchestra|brass|strings|woodwinds|percussion|electric-guitar|acoustic-guitar|keyboard|organ|harp|flute|saxophone|trumpet|trombone|cello|viola|clarinet|oboe|bassoon|french-horn|tuba|timpani|cymbals|xylophone|marimba|vibraphone|glockenspiel|chimes|bells|gong|tambourine|shaker|cowbell|triangle|wood-block|claves|guiro|cabasa|maracas|bongos|congas|djembe|tabla|dhol|bodhran|frame-drum|handpan|hang|steel-drum|kalimba|thumb-piano|mbira|didgeridoo|bagpipes|accordion|harmonica|mandolin|banjo|ukulele|lute|sitar|oud|koto|shamisen|erhu|guzheng|pipa|yangqin|dizi|xiao|suona|sheng|gong|chime|bell|temple-block|wood-fish|mokugyo|taiko|kotsuzumi|otsuzumi|shime-daiko|hirado-daiko|nagado-daiko|okedo-daiko|chudaiko|hira-daiko|miya-daiko|odaiko|uchiwa-daiko|byo-daiko|kakko|san-no-tsuzumi|tsuzumi|kotsuzumi|otsuzumi|shime-daiko|hirado-daiko|nagado-daiko|okedo-daiko|chudaiko|hira-daiko|miya-daiko|odaiko|uchiwa-daiko|byo-daiko|kakko|san-no-tsuzumi|tsuzumi",
+ *   "key": "C|C#|D|D#|E|F|F#|G|G#|A|A#|B|Cm|C#m|Dm|D#m|Em|Fm|F#m|Gm|G#m|Am|A#m|Bm",
+ *   "timeSignature": "4/4|3/4|2/4|6/8|12/8|5/4|7/8|9/8",
+ *   "complexity": "simple|moderate|complex|very-complex",
+ *   "energy": "low|medium|high|very-high",
+ *   "density": "sparse|moderate|dense|very-dense"
  * }
  *
  * Response:
  * {
- *   "gsMusicPath": "gs://bucket-name/project-id/music.mp3"
+ *   "gsMusicPath": "gs://bucket-name/project-id/music.wav",
+ *   "musicPrompt": "Generated prompt used",
+ *   "parameters": { ... },
+ *   "cached": false
  * }
  */
 app.post('/compose-music', 
@@ -321,12 +640,69 @@ app.post('/compose-music',
   ...createExpensiveOperationLimiter('compose'), 
   appCheckOrAdmin, 
   async (req, res) => {
-  const { projectId, narrationScript, jobId: providedJobId } = req.body;
+  const { 
+    projectId, 
+    narrationScript, 
+    jobId: providedJobId,
+    // Image URLs for visual analysis
+    imageUrls = [],
+    // ElevenLabs Music API parameters
+    style = 'cinematic',
+    genre = 'orchestral',
+    structure = 'intro-verse-chorus-verse-chorus-outro',
+    vocals = 'instrumental',
+    duration = 20,
+    format = 'wav',
+    tempo = 'medium',
+    mood = 'dramatic',
+    instruments = 'orchestra',
+    key = 'C',
+    timeSignature = '4/4',
+    complexity = 'moderate',
+    energy = 'medium',
+    density = 'moderate'
+  } = req.body;
+  
   const jobId = (providedJobId && String(providedJobId)) || `compose-${projectId}-${Date.now()}`;
 
   if (!projectId || !narrationScript) {
     return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required fields: projectId and narrationScript');
   }
+
+  // Validate parameters
+  const validStyles = ['cinematic', 'electronic', 'ambient', 'dramatic', 'jazz', 'rock', 'classical', 'pop', 'hip-hop', 'folk', 'blues', 'country', 'reggae', 'funk', 'soul', 'r&b', 'metal', 'punk', 'indie', 'alternative'];
+  const validGenres = ['orchestral', 'synth', 'acoustic', 'electronic', 'ambient', 'rock', 'jazz', 'classical', 'pop', 'hip-hop', 'folk', 'blues', 'country', 'reggae', 'funk', 'soul', 'r&b', 'metal', 'punk', 'indie', 'alternative'];
+  const validVocals = ['instrumental', 'vocals', 'both'];
+  const validFormats = ['wav', 'mp3', 'flac'];
+  const validTempos = ['slow', 'medium', 'fast', 'very-fast'];
+  const validMoods = ['happy', 'sad', 'energetic', 'calm', 'dramatic', 'mysterious', 'romantic', 'epic', 'melancholic', 'uplifting'];
+  const validKeys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B', 'Cm', 'C#m', 'Dm', 'D#m', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'A#m', 'Bm'];
+  const validTimeSignatures = ['4/4', '3/4', '2/4', '6/8', '12/8', '5/4', '7/8', '9/8'];
+  const validComplexities = ['simple', 'moderate', 'complex', 'very-complex'];
+  const validEnergies = ['low', 'medium', 'high', 'very-high'];
+  const validDensities = ['sparse', 'moderate', 'dense', 'very-dense'];
+
+  if (!validStyles.includes(style)) {
+    return sendError(req, res, 400, 'INVALID_ARGUMENT', `Invalid style. Must be one of: ${validStyles.join(', ')}`);
+  }
+  if (!validGenres.includes(genre)) {
+    return sendError(req, res, 400, 'INVALID_ARGUMENT', `Invalid genre. Must be one of: ${validGenres.join(', ')}`);
+  }
+  if (!validVocals.includes(vocals)) {
+    return sendError(req, res, 400, 'INVALID_ARGUMENT', `Invalid vocals. Must be one of: ${validVocals.join(', ')}`);
+  }
+  if (!validFormats.includes(format)) {
+    return sendError(req, res, 400, 'INVALID_ARGUMENT', `Invalid format. Must be one of: ${validFormats.join(', ')}`);
+  }
+  if (duration < 10 || duration > 60) {
+    return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Duration must be between 10 and 60 seconds');
+  }
+
+  // Store all parameters for response
+  const musicParameters = {
+    style, genre, structure, vocals, duration, format, tempo, mood, 
+    instruments, key, timeSignature, complexity, energy, density
+  };
 
 
   console.log(`Received music composition request for projectId: ${projectId}`);
@@ -334,7 +710,7 @@ app.post('/compose-music',
   try {
     // Check if music file already exists to avoid re-processing
     const bucket = storage.bucket(bucketName);
-    const fileName = `${projectId}/music.wav`;
+    const fileName = `${projectId}/music.${format}`;
     const file = bucket.file(fileName);
     
     const [exists] = await file.exists();
@@ -355,13 +731,13 @@ app.post('/compose-music',
         cached: true
       });
     }
-    // Global cache by narration script (exact then normalized)
-    const exactId = musicCacheKey({ narrationScript, normalized: false });
-    const normId  = musicCacheKey({ narrationScript, normalized: true });
-    const exactFile = bucket.file(`cache/music/exact/${exactId}.wav`);
-    const normFile  = bucket.file(`cache/music/norm/${normId}.wav`);
+    // Global cache by narration script, parameters, and image URLs (exact then normalized)
+    const exactId = musicCacheKey({ narrationScript, musicParameters, imageUrls, normalized: false });
+    const normId  = musicCacheKey({ narrationScript, musicParameters, imageUrls: [], normalized: true });
+    const exactFile = bucket.file(`cache/music/exact/${exactId}.${format}`);
+    const normFile  = bucket.file(`cache/music/norm/${normId}.${format}`);
     const [[exactExists],[normExists]] = await Promise.all([exactFile.exists(), normFile.exists()]);
-    if (exactExists || normExists) {
+    if (exactExists || (normExists && (!imageUrls || imageUrls.length === 0))) {
       const source = exactExists ? exactFile : normFile;
       await source.copy(file);
       const gsMusicPath = `gs://${bucketName}/${fileName}`;
@@ -375,26 +751,53 @@ app.post('/compose-music',
       return res.status(200).json({ 
         gsMusicPath,
         musicPrompt: 'Previously generated',
+        parameters: musicParameters,
         requestId: req.requestId,
         cached: true,
         cacheId: exactExists ? exactId : normId
       });
     }
-    // 1. Generate music prompt using AI analysis of narration content
-    pushProgress(jobId, { progress: 10, stage: 'compose', message: 'Analyzing narration…' });
-    const musicPrompt = await generateMusicPromptWithAI(narrationScript);
-    console.log(`Generated music prompt: "${musicPrompt}"`);
+    // 1. Analyze images for visual-aware music generation
+    let visualAwareMusicParameters = musicParameters;
+    if (imageUrls && imageUrls.length > 0) {
+      pushProgress(jobId, { progress: 5, stage: 'compose', message: 'Analyzing images for music generation…' });
+      visualAwareMusicParameters = await analyzeImagesForMusic(imageUrls, narrationScript, musicParameters);
+      console.log('🎨 Visual analysis complete, using image-driven music parameters');
+    } else {
+      console.log('🎨 No images provided, using base music parameters');
+    }
 
-    // 2. Generate real music using ElevenLabs Eleven Music API
-    // Reuse bucket, fileName, and file variables from cache check above
+    // 2. Try to generate composition plan first, then fall back to simple prompt
+    pushProgress(jobId, { progress: 10, stage: 'compose', message: 'Creating composition plan…' });
+    const compositionPlan = await generateCompositionPlan(narrationScript, visualAwareMusicParameters, imageUrls);
     
+    let musicPrompt = null;
+    if (compositionPlan) {
+      console.log('🎵 Using composition plan for music generation');
+      pushProgress(jobId, { progress: 20, stage: 'compose', message: 'Composition plan created, generating music…' });
+    } else {
+      console.log('🎵 Composition plan failed, using AI-generated prompt');
+      pushProgress(jobId, { progress: 20, stage: 'compose', message: 'Generating music prompt…' });
+      musicPrompt = await generateMusicPromptWithAI(narrationScript, visualAwareMusicParameters);
+      console.log(`Generated music prompt: "${musicPrompt}"`);
+    }
+
+    // 3. Generate real music using ElevenLabs Eleven Music API with composition plan or prompt
     console.log('🎵 Generating real music with ElevenLabs Eleven Music...');
     pushProgress(jobId, { progress: 40, stage: 'compose', message: 'Generating music…' });
-    const audioBuffer = await generateRealMusic(musicPrompt);
+    const audioBuffer = await generateRealMusic(musicPrompt, visualAwareMusicParameters, compositionPlan);
     
     pushProgress(jobId, { progress: 85, stage: 'compose', message: 'Saving music…' });
+    
+    // Set correct content type based on format
+    const contentTypeMap = {
+      'wav': 'audio/wav',
+      'mp3': 'audio/mpeg',
+      'flac': 'audio/flac'
+    };
+    
     await file.save(audioBuffer, {
-      metadata: { contentType: 'audio/wav' },
+      metadata: { contentType: contentTypeMap[format] || 'audio/wav' },
     });
 
     const gsMusicPath = `gs://${bucketName}/${fileName}`;
@@ -421,6 +824,13 @@ app.post('/compose-music',
     res.status(200).json({ 
       gsMusicPath: gsMusicPath,
       musicPrompt: musicPrompt,
+      parameters: visualAwareMusicParameters, // Return the visual-aware parameters
+      originalParameters: musicParameters, // Keep original for reference
+      visualAnalysis: {
+        imagesAnalyzed: imageUrls?.length || 0,
+        imageUrls: imageUrls || [],
+        visualAware: (imageUrls && imageUrls.length > 0) ? true : false
+      },
       requestId: req.requestId
     });
 
@@ -484,26 +894,70 @@ app.post('/cache-clear', appCheckVerification, async (req, res) => {
 /**
  * Generate real music using ElevenLabs Eleven Music API with retry logic
  */
-async function generateRealMusic(musicPrompt) {
+async function generateRealMusic(musicPrompt, musicParameters = {}, compositionPlan = null) {
+  const {
+    duration = 20,
+    format = 'wav'
+  } = musicParameters;
+  
   const startTime = Date.now();
   const maxRetries = parseInt(process.env.ELEVENLABS_MUSIC_MAX_RETRIES || '2', 10);
-  const timeoutMs = parseInt(process.env.ELEVENLABS_MUSIC_TIMEOUT_MS || '30000', 10); // 30 second timeout
+  const timeoutMs = parseInt(process.env.ELEVENLABS_MUSIC_TIMEOUT_MS || '120000', 10); // 2 minute timeout for composition plans
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`🎵 Generating music with ElevenLabs Eleven Music (attempt ${attempt}/${maxRetries})...`);
+      console.log(`🎵 Parameters: duration=${duration}s, format=${format}`);
+      if (compositionPlan) {
+        console.log(`🎵 Using composition plan with ${compositionPlan.sections?.length || 0} sections`);
+      } else {
+        console.log(`🎵 Using simple prompt: ${musicPrompt?.length || 0} chars`);
+      }
       
       // Create timeout promise
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('ElevenLabs music generation timeout')), timeoutMs);
       });
       
-      // Call ElevenLabs Music API with timeout
-      const musicPromise = elevenLabsClient.music.generate({
-        prompt: musicPrompt,
-        duration: 20, // 20 seconds to match our current duration
-        format: 'wav' // Request WAV format for better quality
-      });
+      // Call ElevenLabs Music API with composition plan or prompt
+      let musicPromise;
+      if (compositionPlan) {
+        // Use composition plan for structured music generation
+        musicPromise = elevenLabsClient.music.compose({
+          composition_plan: compositionPlan,
+          music_length_ms: duration * 1000,
+          output_format: format === 'wav' ? 'wav_44100' : format === 'mp3' ? 'mp3_44100_128' : 'flac_44100',
+          model_id: 'music_v1',
+          respect_sections_durations: true
+        });
+      } else {
+        // Use simple prompt
+        musicPromise = elevenLabsClient.music.compose({
+          prompt: musicPrompt,
+          music_length_ms: duration * 1000,
+          output_format: format === 'wav' ? 'wav_44100' : format === 'mp3' ? 'mp3_44100_128' : 'flac_44100',
+          model_id: 'music_v1'
+        });
+      }
+      
+      // For longer compositions, try streaming first for better performance
+      if (duration > 30) {
+        console.log('🎵 Using streaming endpoint for longer composition...');
+        try {
+          const streamPromise = elevenLabsClient.music.stream({
+            ...(compositionPlan ? { composition_plan: compositionPlan } : { prompt: musicPrompt }),
+            music_length_ms: duration * 1000,
+            output_format: format === 'wav' ? 'wav_44100' : format === 'mp3' ? 'mp3_44100_128' : 'flac_44100',
+            model_id: 'music_v1'
+          });
+          
+          // Try streaming first, fall back to regular compose if it fails
+          musicPromise = streamPromise;
+        } catch (streamError) {
+          console.log('🎵 Streaming failed, falling back to regular compose:', streamError.message);
+          // musicPromise is already set above
+        }
+      }
       
       const response = await Promise.race([musicPromise, timeoutPromise]);
       

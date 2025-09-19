@@ -1,19 +1,19 @@
 FROM node:20-slim
 
-WORKDIR /app
+# Work inside the service directory
+WORKDIR /app/backend/stripe-service
 
 # Copy package files
-COPY package*.json ./
+COPY backend/stripe-service/package*.json ./
 
 # Install dependencies
 RUN npm install --omit=dev
 
 # Copy application code
-COPY . .
+COPY backend/stripe-service/. .
 
 # Create non-root user
-RUN groupadd -g 1001 nodejs
-RUN useradd -r -u 1001 -g nodejs nodejs
+RUN groupadd -g 1001 nodejs && useradd -r -u 1001 -g nodejs nodejs
 
 # Change ownership of the app directory
 RUN chown -R nodejs:nodejs /app

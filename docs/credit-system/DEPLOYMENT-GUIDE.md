@@ -265,13 +265,13 @@ firebase hosting:sites:create reelbanana-production
 
 ```bash
 # Check all services
-curl https://reel-banana-narrate-423229273041.us-central1.run.app/health
-curl https://reel-banana-render-423229273041.us-central1.run.app/health
-curl https://reel-banana-compose-music-423229273041.us-central1.run.app/health
-curl https://reel-banana-polish-423229273041.us-central1.run.app/health
-curl https://reel-banana-align-captions-423229273041.us-central1.run.app/health
-curl https://reel-banana-upload-assets-423229273041.us-central1.run.app/health
-curl https://reel-banana-stripe-service-423229273041.us-central1.run.app/health
+curl https://reel-banana-narrate-223097908182.us-central1.run.app/health
+curl https://reel-banana-render-223097908182.us-central1.run.app/health
+curl https://reel-banana-compose-music-223097908182.us-central1.run.app/health
+curl https://reel-banana-polish-223097908182.us-central1.run.app/health
+curl https://reel-banana-align-captions-223097908182.us-central1.run.app/health
+curl https://reel-banana-upload-assets-223097908182.us-central1.run.app/health
+curl https://reel-banana-stripe-service-223097908182.us-central1.run.app/health
 ```
 
 ### 2. Test Credit System

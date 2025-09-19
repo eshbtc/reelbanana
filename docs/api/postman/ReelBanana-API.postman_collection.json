@@ -18,32 +18,32 @@
   "variable": [
     {
       "key": "base_url_upload",
-      "value": "https://reel-banana-upload-assets-423229273041.us-central1.run.app",
+      "value": "https://reel-banana-upload-assets-223097908182.us-central1.run.app",
       "type": "string"
     },
     {
       "key": "base_url_narrate",
-      "value": "https://reel-banana-narrate-423229273041.us-central1.run.app",
+      "value": "https://reel-banana-narrate-223097908182.us-central1.run.app",
       "type": "string"
     },
     {
       "key": "base_url_align",
-      "value": "https://reel-banana-align-captions-423229273041.us-central1.run.app",
+      "value": "https://reel-banana-align-captions-223097908182.us-central1.run.app",
       "type": "string"
     },
     {
       "key": "base_url_compose",
-      "value": "https://reel-banana-compose-music-423229273041.us-central1.run.app",
+      "value": "https://reel-banana-compose-music-223097908182.us-central1.run.app",
       "type": "string"
     },
     {
       "key": "base_url_render",
-      "value": "https://reel-banana-render-423229273041.us-central1.run.app",
+      "value": "https://reel-banana-render-223097908182.us-central1.run.app",
       "type": "string"
     },
     {
       "key": "base_url_api_key",
-      "value": "https://reel-banana-api-key-service-423229273041.us-central1.run.app",
+      "value": "https://reel-banana-api-key-service-223097908182.us-central1.run.app",
       "type": "string"
     },
     {

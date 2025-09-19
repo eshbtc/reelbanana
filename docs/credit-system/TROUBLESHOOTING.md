@@ -6,9 +6,9 @@
 
 ```bash
 # Check all services
-curl -s https://reel-banana-narrate-423229273041.us-central1.run.app/health | jq
-curl -s https://reel-banana-render-423229273041.us-central1.run.app/health | jq
-curl -s https://reel-banana-stripe-service-423229273041.us-central1.run.app/health | jq
+curl -s https://reel-banana-narrate-223097908182.us-central1.run.app/health | jq
+curl -s https://reel-banana-render-223097908182.us-central1.run.app/health | jq
+curl -s https://reel-banana-stripe-service-223097908182.us-central1.run.app/health | jq
 
 # Check user credits
 firebase firestore:get users/USER_ID

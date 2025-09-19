@@ -3,7 +3,7 @@ info:
   title: ReelBanana Render API
   version: 1.0.0
 servers:
-  - url: https://reel-banana-render-423229273041.us-central1.run.app
+  - url: https://reel-banana-render-223097908182.us-central1.run.app
   - url: http://localhost:8082
 components:
   securitySchemes:
@@ -31,7 +31,12 @@ components:
 paths:
   /render:
     post:
-      summary: Render final video (returns signed URL)
+      summary: Render final video with tier-based model selection
+      description: |
+        Renders video using appropriate AI model based on user tier:
+        - Free/Basic: LTX Video ($0.04 per 8s - 96% cost savings)
+        - Pro/Premium with quality=premium: Veo3 ($1.20 per 8s - highest quality)
+        - Mobile Reel mode: Optimized 720p 9:16 max 15s for quick social media content
       security:
         - AppCheck: []
       requestBody:
@@ -50,6 +55,13 @@ paths:
                 gsAudioPath: { type: string }
                 srtPath: { type: string }
                 gsMusicPath: { type: string, nullable: true }
+                useFal: { type: boolean, description: 'Force FAL engine for video generation' }
+                mobileReel: { type: boolean, description: 'Enable mobile reel fast path (720p, 9:16, max 15s)' }
+                jobId: { type: string, description: 'Optional job ID for SSE progress tracking' }
+                quality: { type: string, enum: [standard, premium], description: 'Quality tier for model selection' }
+                aspectRatio: { type: string, enum: ['16:9', '9:16', '1:1', '4:5'], description: 'Video aspect ratio' }
+                targetW: { type: integer, description: 'Target video width' }
+                targetH: { type: integer, description: 'Target video height' }
       responses:
         '200':
           description: OK
@@ -59,7 +71,91 @@ paths:
                 type: object
                 properties:
                   videoUrl: { type: string }
+                  cached: { type: boolean, description: 'Whether result was from cache' }
+                  engine: { type: string, description: 'Rendering engine used' }
+                  skipPolish: { type: boolean, description: 'Whether to skip polish step' }
         '400': { description: Invalid args, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '401': { description: App Check invalid, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '429': { description: Rate limit exceeded, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '500': { description: Internal or ffmpeg failure, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
+  /progress-stream:
+    get:
+      summary: Server-Sent Events endpoint for real-time render progress
+      description: |
+        Stream real-time progress updates during video rendering.
+        Cloud Run optimized with proper buffering and heartbeat.
+      parameters:
+        - name: jobId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Job ID from render request
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  Server-sent events with JSON data:
+                  - progress: 0-100 percentage
+                  - stage: Current processing stage
+                  - message: Human-readable status
+                  - done: Boolean completion flag
+                  - error: Error message if failed
+        '400': { description: Missing jobId }
+
+  /transform-video:
+    post:
+      summary: Transform existing video with AI-powered enhancements
+      description: |
+        Apply video-to-video transformations using FAL's FFmpeg APIs:
+        - Upscale: Enhance resolution to HD or 4K
+        - Interpolate: Increase frame rate for smoother motion
+        - Stylize: Apply cinematic color grading
+        - Enhance: Denoise, sharpen, and stabilize
+      security:
+        - AppCheck: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [projectId, transformation]
+              properties:
+                projectId: { type: string }
+                sourceVideoUrl: { type: string, description: 'URL to source video' }
+                gsSourcePath: { type: string, description: 'GCS path to source video' }
+                transformation:
+                  type: string
+                  enum: [upscale, interpolate, stylize, enhance]
+                  description: 'Type of transformation to apply'
+                style:
+                  type: string
+                  enum: [cinematic, vintage, noir, vibrant]
+                  description: 'Style preset for stylize transformation'
+                targetFps: { type: integer, description: 'Target FPS for interpolation (default: 60)' }
+                targetResolution:
+                  type: string
+                  enum: [HD, 4K]
+                  description: 'Target resolution for upscaling'
+      responses:
+        '200':
+          description: Transformation complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  videoUrl: { type: string, description: 'Public URL to transformed video' }
+                  gsPath: { type: string, description: 'GCS path to transformed video' }
+                  transformation: { type: string }
+                  metadata: { type: object }
+        '400': { description: Invalid args, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { description: App Check invalid, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '500': { description: Transformation failed, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

@@ -7,19 +7,20 @@ const admin = require('firebase-admin');
 const { createHash } = require('crypto');
 const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
 const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
-const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('./shared/creditService');
+const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('../shared/creditService');
 
 const app = express();
 
-// Trust proxy for Cloud Run (fixes X-Forwarded-For header issue for IP rate limiting)
-app.set('trust proxy', true);
+// Trust the first proxy (Cloud Run/GFE) for correct IPs without being permissive
+app.set('trust proxy', 1);
 
 app.use(express.json());
 const defaultOrigins = [
   'https://reelbanana.ai',
   'https://reel-banana-35a54.web.app',
   'http://localhost:5173',
-  'http://localhost:3000'
+  'http://localhost:3000',
+  'http://localhost:8080'
 ];
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || defaultOrigins.join(',')).split(',').map(s => s.trim()).filter(Boolean);
 app.use((req, res, next) => {
@@ -64,6 +65,27 @@ const appCheckVerification = async (req, res, next) => {
   } catch (err) {
     console.error('App Check verification failed:', err);
     return sendError(req, res, 401, 'APP_CHECK_INVALID', 'Invalid App Check token');
+  }
+};
+
+// Verify Firebase ID token and attach req.user
+const verifyToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    if (!authHeader.startsWith('Bearer ')) {
+      console.warn('[ALIGN] Missing/invalid Authorization header; headers received:', {
+        hasAuth: !!req.headers.authorization,
+        authPrefix: String(req.headers.authorization || '').slice(0, 10)
+      });
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    const idToken = authHeader.split('Bearer ')[1];
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    console.error('[ALIGN] ID token verification failed:', error?.message || error);
+    return res.status(401).json({ error: 'Authentication required' });
   }
 };
 
@@ -230,10 +252,14 @@ const convertToSrt = (words) => {
  * }
  */
 app.post('/align', 
+  // Security first: App Check then ID token
+  appCheckVerification,
+  verifyToken,
+  // Credits require authenticated user
   requireCredits('alignCaptions'),
   deductCreditsAfter('alignCaptions'),
+  // Then additional rate limiting/quota controls
   ...createExpensiveOperationLimiter('align'), 
-  appCheckVerification, 
   async (req, res) => {
     const { projectId, gsAudioPath, jobId: providedJobId } = req.body;
     const jobId = (providedJobId && String(providedJobId)) || `align-${projectId}-${Date.now()}`;

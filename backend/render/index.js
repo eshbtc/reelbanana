@@ -12,7 +12,7 @@ const admin = require('firebase-admin');
 const { createExpensiveOperationLimiter } = require('./shared/rateLimiter');
 const { createHealthEndpoints, commonDependencyChecks } = require('./shared/healthCheck');
 const { createSLIMiddleware, SLIMonitor } = require('./shared/sliMonitor');
-const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('./shared/creditService');
+const { requireCredits, deductCreditsAfter, completeCreditOperation } = require('../shared/creditService');
 const { mapPlanIdToTier, getPlanConfig } = require('./shared/planMapper');
 
 const app = express();
@@ -20,8 +20,8 @@ const app = express();
 // Helper function to extract video URL from FAL response
 const pickUrl = (j) => j?.output_url || j?.result?.url || j?.data?.url || j?.output?.url || j?.video?.url || null;
 
-// Trust proxy for Cloud Run (fixes X-Forwarded-For header issue for IP rate limiting)
-app.set('trust proxy', true);
+// Trust the first proxy (Cloud Run/GFE) for correct IPs without being permissive
+app.set('trust proxy', 1);
 
 app.use(express.json());
 
@@ -30,7 +30,8 @@ const defaultOrigins = [
   'https://reelbanana.ai',
   'https://reel-banana-35a54.web.app',
   'http://localhost:5173',
-  'http://localhost:3000'
+  'http://localhost:3000',
+  'http://localhost:8080'
 ];
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || defaultOrigins.join(',')).split(',').map(s => s.trim()).filter(Boolean);
 
@@ -65,6 +66,24 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
+// App Check verification middleware
+const appCheckVerification = async (req, res, next) => {
+  const appCheckToken = req.header('X-Firebase-AppCheck');
+
+  if (!appCheckToken) {
+    return sendError(req, res, 401, 'APP_CHECK_REQUIRED', 'App Check token required');
+  }
+
+  try {
+    const appCheckClaims = await admin.appCheck().verifyToken(appCheckToken);
+    req.appCheckClaims = appCheckClaims;
+    return next();
+  } catch (err) {
+    console.error('App Check verification failed:', err);
+    return sendError(req, res, 401, 'APP_CHECK_INVALID', 'Invalid App Check token');
+  }
+};
+
 // In-memory progress store and SSE client registry (best-effort; Cloud Run instances are ephemeral)
 const progressStore = new Map(); // jobId -> { progress, stage, message, etaSeconds, done, error, ts }
 const sseClients = new Map();    // jobId -> Set(res)
@@ -93,8 +112,14 @@ async function pushProgress(jobId, update) {
   const clients = sseClients.get(jobId);
   if (clients && clients.size) {
     const payload = `data: ${JSON.stringify({ jobId, ...next })}\n\n`;
+    console.log(`[SSE] Broadcasting to ${clients.size} clients for job ${jobId}: ${next.stage} (${next.progress}%)`);
     for (const res of clients) {
-      try { res.write(payload); } catch (_) {}
+      try {
+        res.write(payload);
+        if (res.flush) res.flush(); // Force flush for immediate delivery
+      } catch (e) {
+        console.error(`[SSE] Failed to write to client:`, e.message);
+      }
     }
   }
   // Persist to Firestore (throttled)
@@ -123,15 +148,39 @@ async function pushProgress(jobId, update) {
 }
 
 // SSE endpoint for job progress
-app.get('/progress-stream', appCheckVerification, (req, res) => {
+app.get('/progress-stream', (req, res) => {
+  // App Check verification - but don't block SSE
+  const appCheckToken = req.headers['x-firebase-appcheck'];
+  if (!DEV_MODE && !appCheckToken) {
+    console.warn('[SSE] Missing App Check token');
+  }
+
   const jobId = (req.query.jobId || '').toString();
   if (!jobId) {
     return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing jobId');
   }
+
+  // CORS headers for SSE
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  // SSE headers - Cloud Run compatible
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders && res.flushHeaders();
+  res.setHeader('X-Accel-Buffering', 'no'); // Disable Nginx buffering
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+
+  // Write initial connection message and flush immediately
+  res.write(': SSE connection established\n\n');
+  if (res.flushHeaders) res.flushHeaders();
+  if (res.flush) res.flush();
+
+  console.log(`[SSE] Client connected for job ${jobId}`);
+
   // Send initial snapshot if present
   const snap = progressStore.get(jobId);
   if (snap) {
@@ -153,10 +202,24 @@ app.get('/progress-stream', appCheckVerification, (req, res) => {
   // Register client
   if (!sseClients.has(jobId)) sseClients.set(jobId, new Set());
   sseClients.get(jobId).add(res);
+
+  // Send heartbeat to keep connection alive
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(':heartbeat\n\n');
+    } catch (e) {
+      clearInterval(heartbeat);
+    }
+  }, 30000); // Every 30 seconds
+
   // Clean up on close
   req.on('close', () => {
+    clearInterval(heartbeat);
     const set = sseClients.get(jobId);
-    if (set) set.delete(res);
+    if (set) {
+      set.delete(res);
+      console.log(`[SSE] Client disconnected for job ${jobId}. Remaining clients: ${set.size}`);
+    }
   });
 });
 
@@ -190,24 +253,6 @@ function sendError(req, res, httpStatus, code, message, details) {
   payload.requestId = req.requestId || res.getHeader('X-Request-Id');
   res.status(httpStatus).json(payload);
 }
-
-// App Check verification middleware
-const appCheckVerification = async (req, res, next) => {
-  const appCheckToken = req.header('X-Firebase-AppCheck');
-
-  if (!appCheckToken) {
-    return sendError(req, res, 401, 'APP_CHECK_REQUIRED', 'App Check token required');
-  }
-
-  try {
-    const appCheckClaims = await admin.appCheck().verifyToken(appCheckToken);
-    req.appCheckClaims = appCheckClaims;
-    return next();
-  } catch (err) {
-    console.error('App Check verification failed:', err);
-    return sendError(req, res, 401, 'APP_CHECK_INVALID', 'Invalid App Check token');
-  }
-};
 
 // Verify Firebase ID token and attach req.user
 const verifyToken = async (req, res, next) => {
@@ -248,7 +293,10 @@ const inputBucketName = process.env.INPUT_BUCKET_NAME || 'reel-banana-35a54.fire
 const outputBucketName = process.env.OUTPUT_BUCKET_NAME || 'reel-banana-35a54.firebasestorage.app';
 const renderEngineEnv = (process.env.RENDER_ENGINE || '').toLowerCase();
 const falApiKey = process.env.FAL_RENDER_API_KEY || process.env.FAL_API_KEY || process.env.FAL_KEY || null;
-const falRenderModel = process.env.FAL_RENDER_MODEL || '';
+// Default to LTX Video for cost savings (96% cheaper than Veo3)
+const falRenderModel = process.env.FAL_RENDER_MODEL || 'fal-ai/ltx-video-13b-distilled/image-to-video';
+// Premium model for high-quality requests
+const falPremiumModel = process.env.FAL_PREMIUM_MODEL || 'fal-ai/veo3/fast/image-to-video';
 // Cache metrics
 const cacheMetrics = { hits: 0, writes: 0 };
 
@@ -256,7 +304,7 @@ const cacheMetrics = { hits: 0, writes: 0 };
 async function retryWithBackoff(operation, maxRetries = null, baseDelay = null) {
   const retries = maxRetries || parseInt(process.env.RETRY_MAX || '3', 10);
   const delay = baseDelay || parseInt(process.env.RETRY_BASE_DELAY_MS || '1000', 10);
-  
+
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       return await operation();
@@ -264,12 +312,238 @@ async function retryWithBackoff(operation, maxRetries = null, baseDelay = null) 
       if (attempt === retries) {
         throw error;
       }
-      
+
       const backoffDelay = delay * Math.pow(2, attempt - 1);
       console.log(`Attempt ${attempt} failed, retrying in ${backoffDelay}ms:`, error.message);
       await new Promise(resolve => setTimeout(resolve, backoffDelay));
     }
   }
+}
+
+// Get user tier from Firebase token
+async function getUserTierFromToken(uid) {
+  if (!uid) return 'free';
+
+  try {
+    const userDoc = await admin.firestore().collection('users').doc(uid).get();
+    if (userDoc.exists) {
+      const userData = userDoc.data();
+      const planId = userData.subscription?.planId || userData.plan || 'free';
+
+      // Map common plan names to tiers
+      if (planId.includes('pro') || planId.includes('premium') || planId.includes('studio')) {
+        return 'premium';
+      } else if (planId.includes('plus') || planId.includes('basic')) {
+        return 'basic';
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching user tier:', error);
+  }
+
+  return 'free';
+}
+
+// Apple-style automatic configuration based on tier
+function getAutomaticConfig(tier, scenes, hasAudio) {
+  const configs = {
+    free: {
+      aspectRatio: '9:16', // Mobile-first for free users
+      resolution: { width: 720, height: 1280 },
+      maxDuration: 30,
+      maxScenes: 3,
+      captions: true,
+      useFal: true,
+      model: 'ltx-video', // Fast & cheap
+      mobileOptimized: true,
+      quality: 'standard'
+    },
+    basic: {
+      aspectRatio: '9:16', // Still mobile-first
+      resolution: { width: 1080, height: 1920 },
+      maxDuration: 60,
+      maxScenes: 5,
+      captions: true,
+      useFal: true,
+      model: 'ltx-video',
+      mobileOptimized: true,
+      quality: 'standard'
+    },
+    premium: {
+      aspectRatio: '16:9', // Cinema-first for premium
+      resolution: { width: 1920, height: 1080 },
+      maxDuration: 120,
+      maxScenes: 10,
+      captions: true,
+      useFal: true,
+      model: 'veo3', // High quality for premium
+      mobileOptimized: false,
+      quality: 'premium'
+    }
+  };
+
+  const config = configs[tier] || configs.free;
+
+  // Smart aspect ratio detection from first scene
+  if (scenes && scenes.length > 0 && scenes[0].aspectRatio) {
+    config.aspectRatio = scenes[0].aspectRatio;
+  }
+
+  // Auto-detect mobile intent
+  if (hasAudio && hasAudio.includes('tiktok') || hasAudio.includes('instagram')) {
+    config.mobileOptimized = true;
+    config.aspectRatio = '9:16';
+  }
+
+  return config;
+}
+
+// Get audio duration using ffprobe
+async function getAudioDuration(audioPath) {
+  const ffprobe = require('fluent-ffmpeg').ffprobe;
+
+  return new Promise((resolve, reject) => {
+    ffprobe(audioPath, (err, metadata) => {
+      if (err) {
+        console.error('Error getting audio duration:', err);
+        reject(err);
+      } else {
+        const duration = metadata?.format?.duration || 0;
+        console.log(`Audio duration detected: ${duration} seconds`);
+        resolve(duration);
+      }
+    });
+  });
+}
+
+// Synchronize scene durations with audio
+async function synchronizeScenesToAudio(scenes, gsAudioPath, tier) {
+  if (!scenes || !Array.isArray(scenes) || scenes.length === 0) return [];
+
+  let audioDuration = 0;
+
+  // Get actual audio duration if available
+  if (gsAudioPath) {
+    try {
+      // Download audio temporarily to check duration
+      const parseGs = (gs) => {
+        if (!gs || !gs.startsWith('gs://')) return null;
+        const rest = gs.substring('gs://'.length);
+        const idx = rest.indexOf('/');
+        return { bucket: rest.substring(0, idx), name: rest.substring(idx + 1) };
+      };
+
+      const parsed = parseGs(gsAudioPath);
+      if (parsed) {
+        const tempPath = `/tmp/temp_audio_${Date.now()}.mp3`;
+        const bucket = storage.bucket(parsed.bucket);
+        await bucket.file(parsed.name).download({ destination: tempPath });
+        audioDuration = await getAudioDuration(tempPath);
+
+        // Clean up temp file
+        try { await fs.unlink(tempPath); } catch {}
+      }
+    } catch (error) {
+      console.error('Error getting audio duration, using fallback:', error);
+    }
+  }
+
+  // If no audio duration found, estimate based on scenes
+  if (!audioDuration) {
+    audioDuration = scenes.reduce((sum, s) => sum + (s.duration || 5), 0);
+  }
+
+  // Distribute duration evenly across scenes with a small buffer
+  const bufferTime = 2; // 2 second buffer to ensure audio doesn't cut off
+  const totalVideoDuration = audioDuration + bufferTime;
+  const durationPerScene = totalVideoDuration / scenes.length;
+
+  console.log(`Synchronizing ${scenes.length} scenes to ${audioDuration}s audio (${totalVideoDuration}s with buffer)`);
+
+  // Apply tier limits while respecting audio duration
+  const limits = {
+    free: { maxScenes: 3, maxSceneDuration: 15, maxTotalDuration: 45 },
+    basic: { maxScenes: 5, maxSceneDuration: 20, maxTotalDuration: 90 },
+    premium: { maxScenes: 10, maxSceneDuration: 30, maxTotalDuration: 180 }
+  };
+
+  const limit = limits[tier] || limits.free;
+
+  // Ensure we don't exceed tier limits
+  const maxAllowedDuration = Math.min(totalVideoDuration, limit.maxTotalDuration);
+  const finalDurationPerScene = Math.min(durationPerScene, limit.maxSceneDuration);
+
+  // Optimize scenes with synchronized durations
+  let optimized = scenes.slice(0, limit.maxScenes);
+
+  optimized = optimized.map((scene, i) => {
+    // For the last scene, add any remaining duration to ensure full audio coverage
+    const isLastScene = i === optimized.length - 1;
+    const sceneDuration = isLastScene
+      ? Math.max(finalDurationPerScene, maxAllowedDuration - (finalDurationPerScene * (optimized.length - 1)))
+      : finalDurationPerScene;
+
+    return {
+      ...scene,
+      duration: Math.max(3, Math.round(sceneDuration)) // Minimum 3 seconds per scene
+    };
+  });
+
+  // Log the final durations
+  const finalTotalDuration = optimized.reduce((sum, s) => sum + s.duration, 0);
+  console.log(`Final video duration: ${finalTotalDuration}s for ${audioDuration}s audio`);
+
+  return optimized;
+}
+
+// Optimize scenes based on tier limits (fallback when no audio sync needed)
+function optimizeScenes(scenes, tier) {
+  if (!scenes || !Array.isArray(scenes)) return [];
+
+  const limits = {
+    free: { maxScenes: 3, maxSceneDuration: 15, maxTotalDuration: 45 },
+    basic: { maxScenes: 5, maxSceneDuration: 20, maxTotalDuration: 90 },
+    premium: { maxScenes: 10, maxSceneDuration: 30, maxTotalDuration: 180 }
+  };
+
+  const limit = limits[tier] || limits.free;
+
+  // Limit number of scenes
+  let optimized = scenes.slice(0, limit.maxScenes);
+
+  // Optimize durations
+  let totalDuration = 0;
+  optimized = optimized.map(scene => {
+    const duration = Math.min(scene.duration || 5, limit.maxSceneDuration);
+    totalDuration += duration;
+
+    // If we're over total limit, reduce this scene
+    if (totalDuration > limit.maxTotalDuration) {
+      const excess = totalDuration - limit.maxTotalDuration;
+      return { ...scene, duration: Math.max(3, duration - excess) };
+    }
+
+    return { ...scene, duration };
+  });
+
+  // Add smart transitions based on content
+  optimized = optimized.map((scene, i) => {
+    if (!scene.transition) {
+      // Smart transition selection
+      if (i === 0) {
+        scene.transition = 'fade'; // Always fade in
+      } else if (i === optimized.length - 1) {
+        scene.transition = 'fade'; // Always fade out
+      } else {
+        // Alternate between subtle transitions
+        scene.transition = i % 2 === 0 ? 'dissolve' : 'fade';
+      }
+    }
+    return scene;
+  });
+
+  console.log(`Optimized ${scenes.length} scenes to ${optimized.length} for ${tier} tier`);
+  return optimized;
 }
 
 /**
@@ -284,7 +558,26 @@ app.post('/generate-clip', appCheckVerification, async (req, res) => {
     if (!projectId || typeof sceneIndex !== 'number' || sceneIndex < 0) {
       return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing projectId or invalid sceneIndex');
     }
-    const modelId = (modelOverride && String(modelOverride)) || falRenderModel;
+
+    // Smart model selection based on user tier
+    let modelId;
+    if (modelOverride) {
+      modelId = String(modelOverride);
+    } else {
+      // Get user tier from Firebase ID token if available
+      const userTier = req.user?.tier || req.user?.plan || 'free';
+      const requestQuality = req.body?.quality || 'standard';
+
+      // Premium users get Veo3 for high quality
+      if ((userTier === 'pro' || userTier === 'premium') && requestQuality === 'premium') {
+        modelId = falPremiumModel || 'fal-ai/veo3/fast/image-to-video';
+        console.log(`Using premium model (Veo3) for ${userTier} user - Cost: ~$1.20 per 8 seconds`);
+      } else {
+        // Default to LTX for cost savings (96% cheaper)
+        modelId = falRenderModel || 'fal-ai/ltx-video-13b-distilled/image-to-video';
+        console.log(`Using standard model (LTX) for ${userTier} user - Cost: ~$0.04 per 8 seconds`);
+      }
+    }
     if (!falApiKey) return sendError(req, res, 500, 'CONFIG', 'FAL_API_KEY is not configured');
     if (!modelId) return sendError(req, res, 500, 'CONFIG', 'FAL_RENDER_MODEL is not configured');
 
@@ -309,7 +602,7 @@ app.post('/generate-clip', appCheckVerification, async (req, res) => {
       modelId,
       falRenderModel || null,
       'fal-ai/veo3/fast/image-to-video',
-      'fal-ai/ltxv-13b-098-distilled/image-to-video'
+      'fal-ai/ltx-video-13b-distilled/image-to-video'
     ].filter(Boolean)));
 
     let outUrl = null; let lastError = null; let usedModel = null;
@@ -375,28 +668,81 @@ app.post('/generate-clip', appCheckVerification, async (req, res) => {
  *   "videoUrl": "https://storage.googleapis.com/..."
  * }
  */
-app.post('/render', 
+app.post('/render',
   verifyToken,
   requireCredits('videoRendering', (req) => ({ sceneCount: req.body.scenes?.length || 0 })),
   deductCreditsAfter('videoRendering', (req) => ({ sceneCount: req.body.scenes?.length || 0 })),
-  ...createExpensiveOperationLimiter('render'), 
-  appCheckOrAdmin, 
+  ...createExpensiveOperationLimiter('render'),
+  appCheckOrAdmin,
   async (req, res) => {
     const renderStartTime = Date.now();
-    const { projectId, scenes, gsAudioPath, srtPath, gsMusicPath, useFal, force, targetW, targetH, aspectRatio, exportPreset } = req.body;
+    let { projectId, scenes, gsAudioPath, srtPath, gsMusicPath, useFal, force, targetW, targetH, aspectRatio, exportPreset, noSubtitles, mobileReel } = req.body;
     const jobId = (req.body && req.body.jobId) ? String(req.body.jobId) : `render-${projectId}-${Date.now()}`;
 
     if (!projectId) {
         return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required field: projectId');
     }
 
-    console.log(`Received render request for projectId: ${projectId}`);
-    try { await pushProgress(jobId, { progress: 1, stage: 'initializing', message: 'Starting render…' }); } catch {}
-    
+    // Get user tier for automatic configuration
+    const userTier = await getUserTierFromToken(req.user?.uid);
+    console.log(`User tier detected: ${userTier}`);
+
+    // Apple-style automatic configuration based on tier
+    const autoConfig = getAutomaticConfig(userTier, scenes, gsAudioPath);
+
+    // Apply automatic settings (can be overridden by explicit params)
+    if (!aspectRatio) aspectRatio = autoConfig.aspectRatio;
+    if (!targetW) targetW = autoConfig.resolution.width;
+    if (!targetH) targetH = autoConfig.resolution.height;
+    if (noSubtitles === undefined) noSubtitles = !autoConfig.captions;
+    if (useFal === undefined) useFal = autoConfig.useFal;
+
+    // Auto-generate music if no audio provided (Apple-style: just works)
+    if (!gsAudioPath && !gsMusicPath) {
+      req.body.autoGenerateMusic = true;
+      console.log('No audio provided - will auto-generate music');
+    }
+
+    // Smart scene optimization with audio synchronization
+    if (gsAudioPath) {
+      // Synchronize scenes to audio duration
+      scenes = await synchronizeScenesToAudio(scenes, gsAudioPath, userTier);
+    } else {
+      // Use standard optimization when no audio
+      scenes = optimizeScenes(scenes, userTier);
+    }
+    req.body.scenes = scenes;
+
+    // Mobile detection and optimization
+    let isMobileFastPath = mobileReel || autoConfig.mobileOptimized;
+    if (isMobileFastPath) {
+      console.log('📱 Mobile optimization activated');
+      req.body.aspectRatio = '9:16';
+      req.body.targetW = 720;
+      req.body.targetH = 1280;
+      req.body.useFal = true;
+      req.body.noSubtitles = false; // Keep captions for mobile - they're essential
+    }
+
+    console.log(`Received render request for projectId: ${projectId}${isMobileFastPath ? ' [MOBILE FAST PATH]' : ''}`);
+    try {
+      const dbg = {
+        hasScenes: Array.isArray(scenes),
+        sceneCount: Array.isArray(scenes) ? scenes.length : 0,
+        hasAudioPath: typeof gsAudioPath === 'string' && gsAudioPath.startsWith('gs://'),
+        hasSrtPath: typeof srtPath === 'string' && srtPath.startsWith('gs://'),
+        noSubtitles: !!noSubtitles,
+        useFal,
+        mobileReel: isMobileFastPath,
+      };
+      console.log('Render debug:', dbg);
+    } catch (_) {}
+    try { await pushProgress(jobId, { progress: 1, stage: 'initializing', message: isMobileFastPath ? '📱 Starting mobile reel…' : 'Starting render…' }); } catch {}
+
     // Declare tempDir outside try block so it's accessible in finally
     let tempDir;
     console.log('🔧 Render service: tempDir scope fix applied');
-    
+
     try {
         // Smart engine selection: Use FAL only for specific use cases, default to FFmpeg for full videos
         // FAL is good for: image-to-video generation, experimental features
@@ -482,17 +828,24 @@ app.post('/render',
                     expires: Date.now() + 60*60*1000 
                 });
                 
+                // Select model based on tier
+                const clipModel = userTier === 'premium' && autoConfig.quality === 'premium'
+                    ? falPremiumModel
+                    : falRenderModel;
+
                 // Generate clip using FAL
                 const falInput = {
                     prompt: scenes[i].prompt || 'Cinematic parallax over UI; subtle camera motion; modern tech vibe.',
                     image_url: signedUrl,
-                    duration: 8, // 8 seconds per clip
-                    seconds: 8,
-                    video_length: 8
+                    duration: Math.min(8, scenes[i].duration || 8), // Use scene duration if specified
+                    seconds: Math.min(8, scenes[i].duration || 8),
+                    video_length: Math.min(8, scenes[i].duration || 8)
                 };
-                
+
+                console.log(`Generating clip ${i+1} with ${clipModel === falPremiumModel ? 'Veo3 (premium)' : 'LTX (standard)'}`);
+
                 try {
-                    const result = await fal.subscribe(falRenderModel, { input: falInput, logs: false });
+                    const result = await fal.subscribe(clipModel, { input: falInput, logs: false });
                     const clipUrl = pickUrl(result?.data);
                     if (!clipUrl) {
                         throw new Error('FAL did not return a video URL');
@@ -586,18 +939,37 @@ app.post('/render',
             
             // Concatenate video clips
             const silentVideoPath = path.join(tempDir, 'silent_video.mp4');
-            await new Promise((resolve, reject) => {
-                ffmpeg()
-                    .input(concatListPath)
-                    .inputOptions(['-f', 'concat', '-safe', '0'])
-                    .outputOptions(['-c', 'copy'])
-                    .on('end', resolve)
-                    .on('error', (err) => {
-                        console.error('FFmpeg concat error:', err.message);
-                        reject(new Error('FFMPEG_FAILURE'));
-                    })
-                    .save(silentVideoPath);
+            const attemptConcat = (copyMode) => new Promise((resolve, reject) => {
+                const cmd = ffmpeg()
+                  .input(concatListPath)
+                  .inputOptions(['-f', 'concat', '-safe', '0']);
+                if (copyMode) {
+                  cmd.outputOptions(['-c', 'copy']);
+                } else {
+                  cmd.outputOptions(['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-crf', '23']);
+                }
+                cmd
+                  .on('start', (cli) => console.log(`FFmpeg concat start (copyMode=${copyMode}):`, cli))
+                  .on('stderr', (line) => { try { if (process.env.FFMPEG_LOG_LEVEL !== 'quiet') console.log('ffmpeg:', line); } catch {} })
+                  .on('end', resolve)
+                  .on('error', (err) => {
+                    console.error(`FFmpeg concat error (copyMode=${copyMode}):`, err?.message || err);
+                    reject(err);
+                  })
+                  .save(silentVideoPath);
             });
+
+            try {
+              await attemptConcat(true);
+            } catch (e) {
+              console.warn('Concat with -c copy failed, retrying with transcode…');
+              try {
+                await attemptConcat(false);
+              } catch (e2) {
+                console.error('FFmpeg concat transcode fallback failed:', e2?.message || e2);
+                throw new Error('FFMPEG_FAILURE');
+              }
+            }
             
             // Add audio to the video with proper synchronization
             const finalVideoPath = path.join(tempDir, 'final_video.mp4');
@@ -621,21 +993,24 @@ app.post('/render',
             }
             
             if (audioFilters.length > 0) {
-                // Mix audio tracks
-                const mixFilter = audioFilters.length === 2 
-                    ? '[audio1][audio2]amix=inputs=2:duration=longest[audio]'
-                    : '[audio1]acopy[audio]';
-                audioFilters.push(mixFilter);
-                
+                // Mix or pass-through audio tracks
+                const haveNarr = audioFilters.some(f => /\[audio1\]$/.test(f));
+                const haveMusic = audioFilters.some(f => /\[audio2\]$/.test(f));
+                const finalLabel = (haveNarr && !haveMusic) ? 'audio1' : (!haveNarr && haveMusic) ? 'audio2' : 'audio';
+                if (haveNarr && haveMusic) {
+                  audioFilters.push('[audio1][audio2]amix=inputs=2:duration=first:dropout_transition=2[audio]');
+                }
                 await new Promise((resolve, reject) => {
                     const command = ffmpeg();
                     audioInputs.forEach(input => command.input(input));
                     command
                         .complexFilter(audioFilters)
-                        .outputOptions(['-map', '0:v', '-map', '[audio]', '-c:v', 'copy', '-c:a', 'aac', '-shortest'])
+                        .outputOptions(['-map', '0:v', '-map', `[${finalLabel}]`, '-c:v', 'copy', '-c:a', 'aac', '-shortest'])
+                        .on('start', (cli) => console.log('FFmpeg mux start:', cli))
+                        .on('stderr', (line) => { try { if (process.env.FFMPEG_LOG_LEVEL !== 'quiet') console.log('ffmpeg:', line); } catch {} })
                         .on('end', resolve)
                         .on('error', (err) => {
-                            console.error('FFmpeg audio mix error:', err.message);
+                            console.error('FFmpeg audio mux error:', err?.message || err);
                             reject(new Error('FFMPEG_FAILURE'));
                         })
                         .save(finalVideoPath);
@@ -727,8 +1102,20 @@ app.post('/render',
         }
 
         // Validate required fields for a fresh render only if no cached video exists
-        if (!scenes || !gsAudioPath || !srtPath) {
-            return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required fields for rendering.');
+        const missingScenes = !Array.isArray(scenes) || scenes.length === 0;
+        const missingAudio = !gsAudioPath || typeof gsAudioPath !== 'string' || !gsAudioPath.startsWith('gs://');
+        const missingSubs = (!srtPath || typeof srtPath !== 'string' || !srtPath.startsWith('gs://')) && !noSubtitles;
+        if (missingScenes || missingAudio || missingSubs) {
+            const details = {
+              missing: {
+                scenes: missingScenes,
+                gsAudioPath: missingAudio,
+                srtPath: missingSubs && !noSubtitles,
+              },
+              note: 'Set noSubtitles=true to bypass SRT when captions are unavailable.'
+            };
+            console.warn('Render validation failed:', details);
+            return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing required fields for rendering.', JSON.stringify(details));
         }
         
         tempDir = path.join('/tmp', projectId);
@@ -885,6 +1272,9 @@ app.post('/render',
         // 1. Setup: Create a temporary local directory for processing
         await fs.mkdir(tempDir, { recursive: true });
 
+        // Initialize storage bucket
+        const ffmpegInputBucket = storage.bucket(inputBucketName);
+
         // 2. Download all necessary assets from GCS
         console.log('Downloading assets...');
         const imageFiles = (await ffmpegInputBucket.getFiles({ prefix: `${projectId}/scene-` }))[0];
@@ -941,10 +1331,13 @@ app.post('/render',
           // Make this behavior default; allow callers to opt-out with autoGenerateClips:false
           let wantAutoClips = true;
           if (req.body && req.body.autoGenerateClips === false) wantAutoClips = false;
-          const modelForClips = (req.body && (req.body.clipModel || req.body.clipModelOverride)) || falRenderModel || 'fal-ai/veo3/fast/image-to-video';
+          // Use tier-based model selection for auto-clips
+          const modelForClips = (req.body && (req.body.clipModel || req.body.clipModelOverride)) ||
+            (userTier === 'premium' && autoConfig.quality === 'premium' ? falPremiumModel : falRenderModel);
           if (wantAutoClips && falApiKey && modelForClips.includes('image-to-video')) {
-            console.log(`Auto-generating missing motion clips via FAL (${modelForClips})...`);
+            console.log(`Auto-generating missing motion clips via FAL (${modelForClips === falPremiumModel ? 'Veo3 premium' : 'LTX standard'})...`);
             const autoInputBucket = storage.bucket(inputBucketName);
+            const outBucket = storage.bucket(outputBucketName);
             const forceClips = !!(req.body && req.body.forceClips);
             const maxConcurrency = Math.max(1, parseInt(String(req.body?.clipConcurrency || process.env.FAL_CLIP_CONCURRENCY || '2'), 10));
 
@@ -1028,7 +1421,6 @@ app.post('/render',
         const sceneOffsets = []; { let acc=0; for (const s of (scenes||[])) { sceneOffsets.push(acc); acc += (s?.duration||3); } }
 
         // Pre-fetch clips and ensure image fallbacks are local
-        const ffmpegInputBucket = storage.bucket(inputBucketName);
         const clipLocalPaths = await Promise.all((scenes || []).map(async (_, i) => { try { const clipFile=ffmpegInputBucket.file(`${projectId}/clips/scene-${i}.mp4`); const [ex]=await clipFile.exists(); if(!ex) return null; const local=path.join(tempDir,`clip_${i}.mp4`); await clipFile.download({ destination: local }); return local; } catch { return null; } }));
         const localFirstImages = await Promise.all((scenes || []).map(async (_, i) => { try { const c=imageFiles.filter(f=>path.basename(f.name).startsWith(`scene-${i}-`)); if(!c.length) return null; const first=c[0]; const local=path.join(tempDir, path.basename(first.name)); try { await fs.stat(local); } catch { await ffmpegInputBucket.file(first.name).download({ destination: local }); } return local; } catch { return null; } }));
 
@@ -1040,7 +1432,8 @@ app.post('/render',
           const segEntries = wantSubs ? fullEntries.filter(e=>e.end>offset && e.start<end).map(e=>({ start: Math.max(0,e.start-offset), end: Math.max(0.01, Math.min(duration, e.end-offset)), text: e.text })) : [];
           const segSrtPath = path.join(tempDir, `scene_${i}.srt`); if (wantSubs) { try { await fs.writeFile(segSrtPath, formatSrt(segEntries), 'utf8'); } catch {} }
           const inputClip = clipLocalPaths[i]; const inputImage = localFirstImages[i]; const partOut = path.join(tempDir, `part_${i}.mp4`);
-          await new Promise((resolve,reject)=>{
+
+          const buildPart = async (includeSubs) => new Promise((resolve,reject)=>{
             const cmd=ffmpeg(); let vf=`format=yuv420p,scale=${finalTargetW}:${finalTargetH}`;
             if (inputClip) { cmd.input(inputClip).inputOptions([`-t ${duration}`]); }
             else if (inputImage) {
@@ -1054,17 +1447,32 @@ app.post('/render',
               }
             } else { cmd.input(`color=black:s=${finalTargetW}x${finalTargetH}:r=30`).inputOptions(['-f lavfi', `-t ${duration}`]); vf='format=yuv420p'; }
             let fullVf = vf;
-            if (wantSubs && segEntries.length > 0) {
+            if (includeSubs && segEntries.length > 0) {
               const style = `force_style='Fontsize=18,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,BorderStyle=3,Outline=1,Shadow=1,MarginV=25'`;
               fullVf = `${vf},subtitles='${segSrtPath.replace(/'/g, "'\\''")}:${style}`;
             }
             if (plan==='free'){ fullVf+=",drawtext=text='ReelBanana':fontcolor=white@0.6:fontsize=24:box=1:boxcolor=black@0.4:boxborderw=5:x=w-tw-10:y=h-th-10"; }
+            console.log(`FFmpeg part ${i} filters:`, fullVf);
             cmd.videoFilters(fullVf)
               .outputOptions(['-an', ...videoEncodingOptions])
+              .on('start', (cli)=>console.log(`FFmpeg part ${i} start:`, cli))
+              .on('stderr', (line)=>{ try { if (process.env.FFMPEG_LOG_LEVEL!=='quiet') console.log(`ffmpeg part ${i}:`, line); } catch {} })
               .on('end', resolve)
-              .on('error', (err)=>{ console.error(`FFmpeg part ${i} error:`, err.message); reject(new Error('FFMPEG_FAILURE')); })
+              .on('error', (err)=>{ console.error(`FFmpeg part ${i} error:`, err?.message || err); reject(err); })
               .save(partOut);
           });
+
+          try {
+            await buildPart(true);
+          } catch (e1) {
+            console.warn(`Part ${i} with subtitles failed, retrying without subtitles…`);
+            try {
+              await buildPart(false);
+            } catch (e2) {
+              console.error(`Part ${i} fallback without subtitles failed:`, e2?.message || e2);
+              throw new Error('FFMPEG_FAILURE');
+            }
+          }
           partPaths.push(partOut);
         }
 
@@ -1087,9 +1495,9 @@ app.post('/render',
         await new Promise((resolve,reject)=>{
           const cmd=ffmpeg(); cmd.input(silentConcatPath); cmd.input(narrationLocalPath); if (musicLocalPath) cmd.input(musicLocalPath);
           const filterComplex = gsMusicPath
-            ? `[${musicLocalPath ? 2 : 1}:a][1:a]sidechaincompress=threshold=0.05:ratio=6:attack=5:release=300[ducked];[ducked][1:a]amix=inputs=2:duration=longest:dropout_transition=2,volume=1.0[final_audio]`
-            : `[1:a]volume=0.9,apad[final_audio]`;
-          cmd.outputOptions(['-map 0:v:0','-map [final_audio]','-filter_complex',filterComplex,'-c:a aac','-b:a 192k', ...videoEncodingOptions])
+            ? `[${musicLocalPath ? 2 : 1}:a][1:a]sidechaincompress=threshold=0.05:ratio=6:attack=5:release=300[ducked];[ducked][1:a]amix=inputs=2:duration=first:dropout_transition=2,volume=1.0[final_audio]`
+            : `[1:a]volume=0.9[final_audio]`;
+          cmd.outputOptions(['-map 0:v:0','-map [final_audio]','-filter_complex',filterComplex,'-c:a aac','-b:a 192k','-shortest', ...videoEncodingOptions])
             .on('end', resolve)
             .on('error',(err)=>{ console.error('FFmpeg mux error:', err.message); reject(new Error('FFMPEG_FAILURE')); })
                 .save(outputVideoPath);
@@ -1434,6 +1842,204 @@ app.get('/cache-status', appCheckVerification, async (req, res) => {
         });
     }
 });
+
+/**
+ * POST /transform-video
+ * Transform an existing video using FAL's video processing capabilities
+ * Body: {
+ *   projectId: string,
+ *   sourceVideoUrl?: string,  // URL to source video
+ *   gsSourcePath?: string,     // GCS path to source video
+ *   transformation: 'upscale' | 'interpolate' | 'stylize' | 'enhance',
+ *   style?: string,            // For stylize transformation
+ *   targetFps?: number,        // For interpolate transformation
+ *   targetResolution?: string  // For upscale transformation
+ * }
+ */
+app.post('/transform-video',
+  verifyToken,
+  requireCredits('videoRendering', () => ({ sceneCount: 1 })),
+  deductCreditsAfter('videoRendering', () => ({ sceneCount: 1 })),
+  appCheckOrAdmin,
+  async (req, res) => {
+    const { projectId, sourceVideoUrl, gsSourcePath, transformation, style, targetFps, targetResolution } = req.body;
+
+    if (!projectId) {
+      return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing projectId');
+    }
+
+    if (!sourceVideoUrl && !gsSourcePath) {
+      return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Must provide either sourceVideoUrl or gsSourcePath');
+    }
+
+    if (!transformation) {
+      return sendError(req, res, 400, 'INVALID_ARGUMENT', 'Missing transformation type');
+    }
+
+    console.log(`Starting video transformation: ${transformation} for project ${projectId}`);
+
+    try {
+      // Get source video URL
+      let videoUrl = sourceVideoUrl;
+      if (gsSourcePath) {
+        // Generate signed URL for GCS file
+        const bucket = storage.bucket(outputBucketName);
+        const file = bucket.file(gsSourcePath.replace(`gs://${outputBucketName}/`, ''));
+        const [signedUrl] = await file.getSignedUrl({
+          version: 'v4',
+          action: 'read',
+          expires: Date.now() + 60 * 60 * 1000, // 1 hour
+        });
+        videoUrl = signedUrl;
+      }
+
+      // Import FAL client
+      const { fal } = await import('@fal-ai/client');
+      fal.config({ credentials: falApiKey });
+
+      let result;
+      let outputPath;
+
+      switch (transformation) {
+        case 'upscale':
+          // Use FAL's upscaling model (could be polish service endpoint)
+          console.log(`Upscaling video to ${targetResolution || '4K'}`);
+          result = await fal.queue.submit('fal-ai/ffmpeg-api/compose', {
+            inputs: [{ url: videoUrl, type: 'video' }],
+            filters: [{
+              type: 'scale',
+              width: targetResolution === '4K' ? 3840 : 1920,
+              height: targetResolution === '4K' ? 2160 : 1080,
+              algorithm: 'lanczos'
+            }],
+            output_format: 'mp4'
+          });
+          outputPath = `${projectId}/transformed/upscaled-${Date.now()}.mp4`;
+          break;
+
+        case 'interpolate':
+          // Frame interpolation for smoother motion
+          const fps = targetFps || 60;
+          console.log(`Interpolating video to ${fps}fps`);
+          result = await fal.queue.submit('fal-ai/ffmpeg-api/compose', {
+            inputs: [{ url: videoUrl, type: 'video' }],
+            filters: [{
+              type: 'minterpolate',
+              fps: fps,
+              mi_mode: 'mci',
+              mc_mode: 'aobmc',
+              vsbmc: 1
+            }],
+            output_format: 'mp4'
+          });
+          outputPath = `${projectId}/transformed/interpolated-${Date.now()}.mp4`;
+          break;
+
+        case 'stylize':
+          // Apply artistic style transfer
+          console.log(`Applying style: ${style || 'cinematic'}`);
+          // This would use a style transfer model if available
+          // For now, we'll apply color grading filters
+          const styleFilters = {
+            'cinematic': { contrast: 1.2, saturation: 0.9, gamma: 1.1 },
+            'vintage': { sepia: 0.3, contrast: 1.1, brightness: 0.95 },
+            'noir': { saturation: 0, contrast: 1.5, gamma: 0.8 },
+            'vibrant': { saturation: 1.5, contrast: 1.1, vibrance: 1.3 }
+          };
+
+          const selectedStyle = styleFilters[style] || styleFilters['cinematic'];
+          result = await fal.queue.submit('fal-ai/ffmpeg-api/compose', {
+            inputs: [{ url: videoUrl, type: 'video' }],
+            filters: [
+              { type: 'eq', ...selectedStyle }
+            ],
+            output_format: 'mp4'
+          });
+          outputPath = `${projectId}/transformed/stylized-${Date.now()}.mp4`;
+          break;
+
+        case 'enhance':
+          // General enhancement: denoise, sharpen, stabilize
+          console.log('Applying video enhancement filters');
+          result = await fal.queue.submit('fal-ai/ffmpeg-api/compose', {
+            inputs: [{ url: videoUrl, type: 'video' }],
+            filters: [
+              { type: 'hqdn3d', strength: 4 }, // Denoise
+              { type: 'unsharp', amount: 0.5 }, // Sharpen
+              { type: 'deshake' } // Stabilize
+            ],
+            output_format: 'mp4'
+          });
+          outputPath = `${projectId}/transformed/enhanced-${Date.now()}.mp4`;
+          break;
+
+        default:
+          return sendError(req, res, 400, 'INVALID_ARGUMENT', `Unknown transformation: ${transformation}`);
+      }
+
+      // Wait for processing
+      const processedResult = await fal.queue.result(result.request_id);
+      const processedVideoUrl = processedResult.output_url || processedResult.video?.url;
+
+      if (!processedVideoUrl) {
+        throw new Error('No output URL from transformation');
+      }
+
+      // Download and upload to GCS
+      const response = await fetch(processedVideoUrl);
+      const buffer = await response.buffer();
+
+      const bucket = storage.bucket(outputBucketName);
+      const file = bucket.file(outputPath);
+      await file.save(buffer, {
+        metadata: {
+          contentType: 'video/mp4',
+          metadata: {
+            projectId,
+            transformation,
+            sourceVideo: gsSourcePath || sourceVideoUrl,
+            timestamp: new Date().toISOString()
+          }
+        }
+      });
+
+      // Make public for easy access
+      await file.makePublic();
+      const publicUrl = file.publicUrl();
+
+      console.log(`Video transformation complete: ${publicUrl}`);
+
+      // Complete credit operation
+      if (req.creditDeduction) {
+        await completeCreditOperation(req.creditDeduction.idempotencyKey, 'completed');
+      }
+
+      res.json({
+        success: true,
+        videoUrl: publicUrl,
+        gsPath: `gs://${outputBucketName}/${outputPath}`,
+        transformation,
+        metadata: {
+          projectId,
+          transformation,
+          ...(style && { style }),
+          ...(targetFps && { targetFps }),
+          ...(targetResolution && { targetResolution })
+        }
+      });
+
+    } catch (error) {
+      console.error('Video transformation error:', error);
+
+      // Refund credits on error
+      if (req.creditDeduction) {
+        await completeCreditOperation(req.creditDeduction.idempotencyKey, 'failed');
+      }
+
+      return sendError(req, res, 500, 'INTERNAL', `Transformation failed: ${error.message}`);
+    }
+  }
+);
 
 /**
  * GET /admin/stats
